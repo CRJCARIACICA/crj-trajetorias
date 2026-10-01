@@ -1,5 +1,5 @@
 import { CONFIG } from './config.js';
-import { initApi, apiMode, signIn, signUp, demoSignIn, signOut, getSession, dashboardStats, listYouth, getYouth, createYouth, updateYouth, listTimeline, saveFormSubmission, listFormSubmissions, createService, createFollowup, listWorkshops, createWorkshop, enrollYouth, workshopRoster, createWorkshopSession, saveAttendance, createAggregate, getIndicators, listIndicatorCatalog, listTeam, listTeamContributions, updateTeamMember, INDICATORS, resetDemo } from './api.js';
+import { initApi, apiMode, signIn, signUp, demoSignIn, signOut, getSession, dashboardStats, listYouth, getYouth, createYouth, updateYouth, listTimeline, saveFormSubmission, listFormSubmissions, createService, createFollowup, listWorkshops, createWorkshop, enrollYouth, workshopRoster, createWorkshopSession, saveAttendance, createAggregate, getIndicators, listIndicatorCatalog, listTeam, listTeamContributions, updateTeamMember, downloadFormSubmission, INDICATORS, resetDemo } from './api.js';
 import { FORMS, FORM_MAP, RATING_OPTIONS } from './forms.js';
 import { ROLES, can, roleLabel } from './permissions.js';
 
