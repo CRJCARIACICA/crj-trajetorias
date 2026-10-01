@@ -1,0 +1,82 @@
+ if(mode==='mock') return INDICATORS;
+  const {data,error}=await supabase.from('indicator_catalog').select('code,label,goal_stage,target,unit,target_mode,periodicity,active').eq('active',true).order('goal_stage',{ascending:true}).order('code',{ascending:true});
+  if(error) throw error;
+  return (data||[]).map(x=>({code:x.code,label:x.label,goalStage:x.goal_stage,target:x.target==null?null:Number(x.target),unit:x.unit,mode:x.target_mode,periodicity:x.periodicity||'mensal'}));
+}
+
+export const INDICATORS = [
+  {code:'M2.1_ATENDIMENTOS',label:'Atendimentos realizados no mês',target:380,unit:'atendimentos',mode:'minimum'},
+  {code:'M4.1_PTRAMPO_JOVENS',label:'Jovens no PTrampo / mês',target:15,unit:'jovens',mode:'minimum'},
+  {code:'M4.1_PTRAMPO_ATIVIDADES',label:'Atividades relacionadas ao PTrampo',target:8,unit:'atividades',mode:'minimum'},
+  {code:'M6.1_OFICINAS_HORAS',label:'Carga horária mensal de oficinas/cursos',target:160,unit:'horas',mode:'minimum'},
+  {code:'M6.1_CFDH_HORAS',label:'CFDH — carga horária semestral',target:120,unit:'horas/semestre',mode:'minimum'},
+  {code:'M6.1_PASSAGENS',label:'Passagens concedidas no mês',target:400,unit:'passagens',mode:'ceiling'},
+  {code:'M6.1_EVENTOS',label:'Eventos/programações no mês',target:1,unit:'evento',mode:'minimum'},
+  {code:'M6.2_PVIDA_JOVENS',label:'Jovens em PVida no mês',target:45,unit:'jovens',mode:'minimum'},
+  {code:'M6.2_PVIDA_HORAS',label:'Atividades relacionadas ao PVida',target:4,unit:'horas/mês',mode:'minimum'},
+  {code:'M6.4_PTRAMPO_JOVENS',label:'Jovens atendidos no PTrampo',target:15,unit:'jovens/mês',mode:'minimum'},
+  {code:'M6.4_PTRAMPO_ATIVIDADES',label:'Atividades relacionadas ao PTrampo',target:8,unit:'atividades',mode:'minimum'},
+  {code:'M4.6_CURSO_HORAS',label:'Horas de cursos/oficinas profissionalizantes',target:160,unit:'horas',mode:'minimum'},
+  {code:'M4.6_CURSO_JOVENS_MES',label:'Jovens únicos em cursos/oficinas profissionalizantes no mês',target:null,unit:'jovens',mode:'tracking'},
+  {code:'M6.4_CURSO_HORAS',label:'Cursos/oficinas profissionalizantes',target:160,unit:'horas/mês',mode:'minimum'},
+  {code:'M6.4_CURSO_JOVENS_MES',label:'Jovens únicos em cursos/oficinas profissionalizantes no mês',target:null,unit:'jovens',mode:'tracking'},
+  {code:'M6.5_SATISFACAO',label:'Satisfação Trampo Coletivo',target:85,unit:'%',mode:'minimum'},
+  {code:'M6.6_SATISFACAO',label:'Satisfação LABPoca',target:85,unit:'%',mode:'minimum'},
+  {code:'M7.3_ESCOLA_PERMANENCIA',label:'Acesso/permanência escolar',target:70,unit:'%',mode:'minimum'},
+  {code:'M9.3_SATISFACAO',label:'Pesquisa geral de satisfação',target:85,unit:'%',mode:'minimum'},
+  {code:'ACOMPANHAMENTOS',label:'Acompanhamentos técnicos',target:null,unit:'registros',mode:'tracking'},
+];
+
+export async function getIndicators(month){
+  const defs=await listIndicatorCatalog();
+  const windows=defs.map(d=>({...d,window:indicatorWindow(month,d.periodicity)}));
+  const starts=windows.map(x=>x.window.start).sort();
+  const ends=windows.map(x=>x.window.end).sort();
+  const minStart=starts[0]||`${month}-01`, maxEnd=ends[ends.length-1]||`${month}-31`;
+  let events=[];
+  if(mode==='mock') events=mock().indicatorEvents.filter(e=>e.event_date>=minStart&&e.event_date<maxEnd);
+  else { const {data,error}=await supabase.from('indicator_events').select('*').gte('event_date',minStart).lt('event_date',maxEnd); if(error) throw error; events=data||[]; }
+  return windows.map(ind=>{
+    const ev=events.filter(e=>e.indicator_code===ind.code&&e.event_date>=ind.window.start&&e.event_date<ind.window.end);
+    const identified=ev.filter(e=>e.source_mode!=='aggregate');
+    const aggregates=ev.filter(e=>e.source_mode==='aggregate');
+    const uniqueYouth=new Set(identified.filter(e=>e.youth_id).map(e=>e.youth_id)).size;
+    const identifiedValue=ind.unit.includes('jovens') ? uniqueYouth : identified.reduce((a,e)=>a+Number(e.quantity||0),0);
+    const aggregateValue=aggregates.reduce((a,e)=>a+Number(e.quantity||0),0);
+    return {...ind,identifiedValue,aggregateValue,uniqueYouth,eventCount:ev.length,dataQuality:aggregateValue>0?(identifiedValue>0?'mixed':'aggregate'):'identified',windowStart:ind.window.start,windowEnd:ind.window.end};
+  });
+}
+
+export async function listTeamContributions(month=monthKey()){
+  const [y,m]=String(month).split('-').map(Number);
+  const start=`${y}-${String(m).padStart(2,'0')}-01`;
+  const endDate=new Date(Date.UTC(y,m,1));
+  const end=endDate.toISOString().slice(0,10);
+  if(mode==='mock'){
+    const st=mock(), rows=[];
+    const add=(user_id,event_type,quantity=1,event_date=new Date().toISOString().slice(0,10))=>rows.push({user_id,event_type,quantity,event_date});
+    for(const x of st.services) if(monthKey(x.date)===month) add(x.created_by,'atendimento');
+    for(const x of st.followups) if(monthKey(x.date)===month) add(x.created_by,'acompanhamento');
+    for(const x of st.forms) if(monthKey(x.submitted_at)===month) add(x.created_by,'formulario');
+    for(const x of st.sessions) if(monthKey(x.session_date)===month) add(x.created_by,'aula',Number(x.duration_hours||1));
+    for(const x of st.attendance) if(monthKey(x.date)===month) add(x.created_by||st.currentUser.id,'presenca');
+    for(const x of st.aggregate) if(monthKey(x.date)===month) add(x.created_by,'lancamento_agregado');
+    return rows;
+  }
+  const {data,error}=await supabase.from('staff_contribution_events').select('user_id,event_date,event_type,quantity').gte('event_date',start).lt('event_date',end).order('event_date',{ascending:false});
+  if(error) throw error;
+  return data||[];
+}
+
+export async function listTeam(){
+  if(mode==='mock') return mock().team;
+  const {data,error}=await supabase.from('profiles').select('id,display_name,role,team,active').order('display_name'); if(error) throw error; return data||[];
+}
+export async function updateTeamMember(id,patch){
+  if(mode==='mock'){
+    const s=mock(),member=s.team.find(x=>x.id===id); if(!member) throw new Error('Colaborador não encontrado'); Object.assign(member,patch); save(s); return member;
+  }
+  const allowed={}; for(const k of ['display_name','role','team','active']) if(patch[k]!==undefined) allowed[k]=patch[k];
+  const {data,error}=await supabase.from('profiles').update(allowed).eq('id',id).select('id,display_name,role,team,active').single(); if(error) throw error; return data;
+}
+export function resetDemo(){ localStorage.removeItem(LS); return load(); }
