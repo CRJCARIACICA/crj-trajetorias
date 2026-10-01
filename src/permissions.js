@@ -12,17 +12,17 @@ export const ROLES = {
   pendente: 'Acesso pendente',
 };
 
-const ALL = ['dashboard','jovens','jovem_core','forms_operacionais','oficinas','presencas','metas'];
+const ALL = ['dashboard','jovens','jovem_core','forms_operacionais','oficinas','presencas','metas','agenda'];
 export const PERMISSIONS = {
   coordenacao_geral: [...ALL,'editar_cadastro','jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','beneficios','articulacao','equipe','validar','lancamento_geral','relatorios'],
   coordenacao_articulacao: [...ALL,'editar_cadastro','atendimentos','articulacao','encaminhamentos','beneficios','lancamento_geral','relatorios'],
-  articulador: ['dashboard','jovens','jovem_core','forms_operacionais','articulacao','presencas','oficinas','lancamento_geral'],
+  articulador: ['dashboard','jovens','jovem_core','forms_operacionais','articulacao','presencas','oficinas','lancamento_geral','agenda'],
   educador: [...ALL,'editar_cadastro','atendimentos','encaminhamentos','beneficios','lancamento_geral','relatorios'],
   assistente_social: [...ALL,'editar_cadastro','jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','beneficios','lancamento_geral','relatorios'],
   psicologo: [...ALL,'editar_cadastro','jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','lancamento_geral','relatorios'],
   terapeuta_ocupacional: [...ALL,'editar_cadastro','jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','beneficios','lancamento_geral','relatorios'],
-  administrativo: ['dashboard','jovens','jovem_core','editar_cadastro','forms_operacionais','oficinas','presencas','beneficios','metas','equipe','lancamento_geral','relatorios'],
-  oficineiro: ['dashboard','oficinas','presencas','forms_operacionais'],
+  administrativo: ['dashboard','jovens','jovem_core','editar_cadastro','forms_operacionais','oficinas','presencas','beneficios','metas','equipe','lancamento_geral','relatorios','agenda'],
+  oficineiro: ['dashboard','oficinas','presencas','forms_operacionais','agenda'],
   monitoramento: [...ALL,'jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','beneficios','articulacao','equipe','validar','lancamento_geral','relatorios'],
   pendente: [],
 };
