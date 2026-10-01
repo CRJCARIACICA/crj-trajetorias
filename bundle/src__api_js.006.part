@@ -1,0 +1,69 @@
+
+export async function getProvisionalPerson(id){
+  if(mode==='mock'){const st=mock();return (st.provisionalPeople||[]).find(x=>x.id===id)||null;}
+  const {data,error}=await supabase.from('provisional_people').select('*').eq('id',id).maybeSingle();
+  if(error)throw error;return data||null;
+}
+
+export async function listProvisionalParticipationStats(){
+  if(mode==='mock'){
+    const st=mock(),map={};
+    for(const p of (st.provisionalPeople||[]))map[p.id]={provisional_person_id:p.id,total:0,by_workshop:{}};
+    for(const x of (st.guestParticipations||[])){map[x.provisional_person_id]||={provisional_person_id:x.provisional_person_id,total:0,by_workshop:{}};map[x.provisional_person_id].total++;map[x.provisional_person_id].by_workshop[x.workshop_id]=(map[x.provisional_person_id].by_workshop[x.workshop_id]||0)+1;}
+    for(const x of (st.educatorRecords||[]))if(x.provisional_person_id){map[x.provisional_person_id]||={provisional_person_id:x.provisional_person_id,total:0,by_workshop:{}};map[x.provisional_person_id].total++;}
+    return Object.values(map);
+  }
+  const [g,e]=await Promise.all([
+    supabase.from('workshop_guest_participations').select('provisional_person_id,workshop_id'),
+    supabase.from('educator_records').select('provisional_person_id').not('provisional_person_id','is',null)
+  ]);
+  if(g.error)throw g.error;if(e.error)throw e.error;
+  const map={};
+  for(const x of (g.data||[])){map[x.provisional_person_id]||={provisional_person_id:x.provisional_person_id,total:0,by_workshop:{}};map[x.provisional_person_id].total++;map[x.provisional_person_id].by_workshop[x.workshop_id]=(map[x.provisional_person_id].by_workshop[x.workshop_id]||0)+1;}
+  for(const x of (e.data||[])){map[x.provisional_person_id]||={provisional_person_id:x.provisional_person_id,total:0,by_workshop:{}};map[x.provisional_person_id].total++;}
+  return Object.values(map);
+}
+
+export async function addWorkshopAttendanceParticipant({session_id,workshop_id,youth_id,attendance_date,notes=''}) {
+  if(mode==='mock'){
+    const st=mock();st.attendance||=[];
+    let rec=st.attendance.find(x=>x.session_id===session_id&&x.youth_id===youth_id);
+    if(!rec){rec={id:uid('pre'),session_id,workshop_id,youth_id,date:attendance_date,attendance_date,present:true,notes,created_by:st.currentUser.id};st.attendance.push(rec);}
+    save(st);return rec;
+  }
+  const {data,error}=await supabase.from('attendance').upsert({
+    session_id,workshop_id,youth_id,attendance_date,present:true,notes:notes||null
+  },{onConflict:'session_id,youth_id'}).select('*').single();
+  if(error)throw error;return data;
+}
+
+export async function generateWorkshopAttendanceSubmission(sessionId){
+  if(mode==='mock')throw new Error('Geração automática da lista requer banco conectado.');
+  const {data:s,error:se}=await supabase.from('workshop_sessions').select('*').eq('id',sessionId).single();if(se)throw se;
+  const {data:w,error:we}=await supabase.from('workshops').select('*').eq('id',s.workshop_id).single();if(we)throw we;
+  const [{data:att,error:ae},{data:profiles,error:pe}]=await Promise.all([
+    supabase.from('attendance').select('*, young_people(full_name,preferred_name,birth_date,cpf,phone,email,neighborhood)').eq('session_id',sessionId).eq('present',true).order('created_at'),
+    supabase.from('profiles').select('id,display_name')
+  ]);
+  if(ae)throw ae;if(pe)throw pe;
+  const pm=new Map((profiles||[]).map(x=>[x.id,x.display_name]));
+  const participants=(att||[]).map(x=>({
+    name:x.young_people?.preferred_name||x.young_people?.full_name||'',
+    full_name:x.young_people?.full_name||'',
+    birth_date:x.young_people?.birth_date||'',
+    cpf:x.young_people?.cpf||'',
+    contact:[x.young_people?.phone,x.young_people?.email].filter(Boolean).join(' / '),
+    neighborhood:x.young_people?.neighborhood||''
+  }));
+  const payload={
+    activity:w.name,
+    officineiro:pm.get(w.oficineiro_user_id)||'',
+    educator_reference:pm.get(w.educator_user_id)||'',
+    location:'',
+    date:s.session_date,
+    start_time:String(s.start_time||'').slice(0,5),
+    end_time:String(s.end_time||'').slice(0,5),
+    participants
+  };
+  return await saveFormSubmission('lista-presenca-contato',null,payload);
+}
