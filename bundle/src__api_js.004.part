@@ -1,0 +1,86 @@
+
+export async function listEducatorRecords(month=monthKey(),educatorUserId=null){
+  const [y,m]=String(month).split('-').map(Number);
+  const start=`${y}-${String(m).padStart(2,'0')}-01`;
+  const end=new Date(Date.UTC(y,m,1)).toISOString().slice(0,10);
+  if(mode==='mock'){
+    const s=mock(); const rows=(s.educatorRecords||[]);
+    return rows.filter(x=>x.record_date>=start&&x.record_date<end&&(!educatorUserId||x.educator_user_id===educatorUserId))
+      .sort((a,b)=>String(b.record_date).localeCompare(String(a.record_date)));
+  }
+  let q=supabase.from('educator_records').select('*').gte('record_date',start).lt('record_date',end).order('record_date',{ascending:false}).order('created_at',{ascending:false});
+  if(educatorUserId) q=q.eq('educator_user_id',educatorUserId);
+  const {data,error}=await q;if(error)throw error;return data||[];
+}
+
+export async function createEducatorRecord(row){
+  const payload={
+    record_date:row.record_date||new Date().toISOString().slice(0,10),
+    record_type:row.record_type,
+    youth_id:row.youth_id||null,
+    workshop_id:row.workshop_id||null,
+    title:row.title||null,
+    description:row.description||null,
+    duration_hours:Number(row.duration_hours||0),
+    participants_count:row.participants_count===''||row.participants_count==null?null:Number(row.participants_count),
+    referral_target:row.referral_target||null,
+    referral_status:row.referral_target?'encaminhado':'nao_se_aplica',
+    evidence_ref:row.evidence_ref||null,
+    notes:row.notes||null
+  };
+  if(mode==='mock'){
+    const st=mock(); st.educatorRecords ||= [];
+    const rec={id:uid('edu'),...payload,educator_user_id:st.currentUser.id,created_at:now(),updated_at:now()};
+    st.educatorRecords.push(rec);
+    st.indicatorEvents ||= []; st.journey ||= [];
+    if(rec.record_type==='acolhimento_educativo'&&rec.youth_id) st.indicatorEvents.push({id:uid('met'),indicator_code:'M2.1_ATENDIMENTOS',youth_id:rec.youth_id,event_date:rec.record_date,quantity:1,source_type:'educator_records',source_id:rec.id,source_mode:'identified'});
+    if(rec.record_type==='cfdh_estrutural'&&rec.duration_hours>0) st.indicatorEvents.push({id:uid('met'),indicator_code:'M6.1_CFDH_HORAS',youth_id:rec.youth_id||null,event_date:rec.record_date,quantity:rec.duration_hours,source_type:'educator_records',source_id:rec.id,source_mode:'identified'});
+    if(rec.record_type==='ficaadica_orientacao') st.indicatorEvents.push({id:uid('met'),indicator_code:'M6.3_CONSULTAS',youth_id:rec.youth_id||null,event_date:rec.record_date,quantity:1,source_type:'educator_records',source_id:rec.id,source_mode:'identified'});
+    if(rec.youth_id) st.journey.push({id:uid('ev'),youth_id:rec.youth_id,event_type:'registro_educador',title:'Registro do Educador',details:rec.title||rec.description||'',visibility:'team',event_date:new Date(rec.record_date+'T12:00:00').toISOString(),created_by:st.currentUser.id});
+    save(st);return rec;
+  }
+  const {data,error}=await supabase.from('educator_records').insert(payload).select('*').single();
+  if(error)throw error;return data;
+}
+
+export async function updateEducatorRecord(id,patch){
+  const allowed={updated_at:now()};
+  for(const k of ['record_date','record_type','youth_id','workshop_id','title','description','referral_target','evidence_ref','notes']){
+    if(patch[k]!==undefined) allowed[k]=patch[k]||null;
+  }
+  if(patch.duration_hours!==undefined) allowed.duration_hours=Number(patch.duration_hours||0);
+  if(patch.participants_count!==undefined) allowed.participants_count=patch.participants_count===''||patch.participants_count==null?null:Number(patch.participants_count);
+  if(patch.referral_target!==undefined) allowed.referral_status=patch.referral_target?'encaminhado':'nao_se_aplica';
+  if(mode==='mock'){
+    const st=mock(),rec=(st.educatorRecords||[]).find(x=>x.id===id);if(!rec)throw new Error('Registro não encontrado');
+    Object.assign(rec,allowed);save(st);return rec;
+  }
+  const {data,error}=await supabase.from('educator_records').update(allowed).eq('id',id).select('*').single();
+  if(error)throw error;return data;
+}
+
+export async function deleteEducatorRecord(id){
+  if(mode==='mock'){
+    const st=mock();st.educatorRecords=(st.educatorRecords||[]).filter(x=>x.id!==id);save(st);return;
+  }
+  const {error}=await supabase.from('educator_records').delete().eq('id',id);if(error)throw error;
+}
+
+export async function educatorContributionSummary(month=monthKey(),userId=null){
+  const [y,m]=String(month).split('-').map(Number);
+  const start=`${y}-${String(m).padStart(2,'0')}-01`;
+  const end=new Date(Date.UTC(y,m,1)).toISOString().slice(0,10);
+  if(mode==='mock'){
+    const st=mock(),uid0=userId||st.currentUser.id;
+    const rows=[];
+    const add=(event_type,quantity=1,event_date=start)=>rows.push({user_id:uid0,event_type,quantity,event_date});
+    for(const x of (st.sessions||[])) if(x.created_by===uid0&&monthKey(x.session_date)===month)add('aula',Number(x.duration_hours||0),x.session_date);
+    for(const x of (st.attendance||[])) if(monthKey(x.date)===month)add('presenca',1,x.date);
+    for(const x of (st.forms||[])) if(x.created_by===uid0&&monthKey(x.submitted_at)===month)add('formulario',1,x.submitted_at);
+    for(const x of (st.educatorRecords||[])) if(x.educator_user_id===uid0&&monthKey(x.record_date)===month)add(x.record_type,x.record_type==='cfdh_estrutural'?Number(x.duration_hours||0):1,x.record_date);
+    return rows;
+  }
+  let q=supabase.from('staff_contribution_events').select('event_date,event_type,quantity,user_id').gte('event_date',start).lt('event_date',end);
+  if(userId)q=q.eq('user_id',userId);
+  const {data,error}=await q;if(error)throw error;return data||[];
+}
