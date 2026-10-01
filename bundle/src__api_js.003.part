@@ -80,3 +80,35 @@ export async function updateTeamMember(id,patch){
   const {data,error}=await supabase.from('profiles').update(allowed).eq('id',id).select('id,display_name,role,team,active').single(); if(error) throw error; return data;
 }
 export function resetDemo(){ localStorage.removeItem(LS); return load(); }
+
+
+export async function downloadFormSubmission(submissionId,format='pdf'){
+  if(mode==='mock'){
+    throw new Error('Exportação de documentos requer o banco conectado.');
+  }
+  const {data:sessionData}=await supabase.auth.getSession();
+  const token=sessionData.session?.access_token;
+  if(!token) throw new Error('Sessão expirada. Entre novamente.');
+  const res=await fetch(`${CONFIG.supabaseUrl}/functions/v1/crj-export-document`,{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'Authorization':`Bearer ${token}`,
+      'apikey':CONFIG.supabasePublishableKey
+    },
+    body:JSON.stringify({submission_id:submissionId,format})
+  });
+  if(!res.ok){
+    const err=await res.json().catch(()=>({}));
+    throw new Error(err.error||'Não foi possível gerar o documento.');
+  }
+  const blob=await res.blob();
+  let filename=`documento-crj.${format==='docx'?'docx':'pdf'}`;
+  const cd=res.headers.get('content-disposition')||'';
+  const m=cd.match(/filename="?([^"]+)"?/i);
+  if(m?.[1]) filename=m[1];
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
