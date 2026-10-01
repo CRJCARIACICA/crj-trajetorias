@@ -36,4 +36,3 @@ async function bindRoute(){
   document.querySelectorAll('[data-team-name]').forEach(el=>el.addEventListener('change',async()=>{try{await updateTeamMember(el.dataset.teamName,{team:el.value.trim()});toast('Equipe atualizada');}catch(err){toast(err.message,'danger')}}));
   document.querySelectorAll('[data-team-active]').forEach(el=>el.addEventListener('change',async()=>{try{await updateTeamMember(el.dataset.teamActive,{active:el.checked});toast('Acesso atualizado');await render();}catch(err){toast(err.message,'danger')}}));
 
-
