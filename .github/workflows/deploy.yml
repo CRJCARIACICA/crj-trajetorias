@@ -38,7 +38,8 @@ jobs:
           node --check _site/src/app.js
           node --check _site/src/api.js
           node --check _site/src/forms.js
-          node --check _site/src/permissions.js\n          node --check _site/src/register.js
+          node --check _site/src/permissions.js
+          node --check _site/src/register.js
           test -s _site/index.html
           test -s _site/src/app.js
           test -s _site/src/api.js
