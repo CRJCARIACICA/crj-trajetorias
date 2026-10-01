@@ -308,3 +308,62 @@ async function bindPublicWorkshopCheckinV2(token){
   items.forEach(x=>x.addEventListener('click',()=>{form.querySelector('[name="enrollment_id"]').value=x.dataset.enrollment;form.querySelector('[data-public-selected]').innerHTML='<b>'+esc(x.dataset.name)+'</b><br>Confira o final do CPF acima e digite sua senha.';form.classList.remove('hidden');form.querySelector('[name="secret"]').focus()}));
   form?.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(form);try{await publicWorkshopCheckinMark(token,fd.get('enrollment_id'),fd.get('secret'));form.innerHTML='<div class="notice success"><b>Presença confirmada.</b><br>Obrigado!</div>'}catch(err){const old=form.querySelector('.notice.danger');old?.remove();form.insertAdjacentHTML('afterbegin','<div class="notice danger">'+esc(err.message)+'</div>')}});
 }
+
+
+function eduGoalInfo(key){
+  if(key==='cfdh_estrutural'){
+    const g={t:'CFDH estrutural',i:[
+      ['Meta 6 · Etapa 6.1','CONTABILIZA a carga horária de CFDH estrutural quando a execução é registrada.'],
+      ['Meta 4 · Etapa 4.2','Comprova atividade do Núcleo Socioafirmativo e de Acesso.']
+    ],n:'Planejamento sozinho não contabiliza horas; a execução precisa ser registrada.'};
+    return '<span class="goal-help" tabindex="0">ⓘ<span class="goal-tooltip"><b>'+esc(g.t)+'</b>'+g.i.map(x=>'<span><strong>'+esc(x[0])+'</strong><small>'+esc(x[1])+'</small></span>').join('')+'<em>'+esc(g.n)+'</em></span></span>';
+  }
+  if(key==='cfdh_transversal'){
+    const g={t:'CFDH transversal',i:[
+      ['Meta 6 · Etapa 6.1','Os minutos de CFDH lançados dentro da aula alimentam a carga semestral.'],
+      ['Meta 4 · Etapa 4.2','Comprova transversalidade de Direitos Humanos nas oficinas.']
+    ]};
+    return '<span class="goal-help" tabindex="0">ⓘ<span class="goal-tooltip"><b>'+esc(g.t)+'</b>'+g.i.map(x=>'<span><strong>'+esc(x[0])+'</strong><small>'+esc(x[1])+'</small></span>').join('')+'</span></span>';
+  }
+  return goalInfoV2(key);
+}
+function eduTabs(view,month,userId){
+  const base=new URLSearchParams();if(month)base.set('month',month);if(userId)base.set('user',userId);
+  const tabs=[['responsabilidades','Responsabilidades'],['planejamento','Planejamento'],['relatorios','Relatórios'],['oficinas','Oficinas e presenças'],['encaminhamentos','Encaminhamentos']];
+  return '<div class="educator-tabs">'+tabs.map(x=>{const p=new URLSearchParams(base);p.set('view',x[0]);return '<a class="'+(view===x[0]?'active':'')+'" href="#educador?'+p.toString()+'">'+x[1]+'</a>'}).join('')+'</div>';
+}
+function eduPlanLabel(t){return planLabelV2(t)}
+function eduTypeLabel(t){return educatorTypeLabelV2(t)}
+function eduPersonSearchHtml(){return personSearchMarkupV2()}
+function bindEduPersonSearch(root,youth,provisional){return bindPersonSearchV2(root,youth,provisional)}
+function decorateEduGoalForm(form,key){
+  if(!form)return;
+  form.querySelectorAll('[data-edu-goal-context]').forEach(x=>x.remove());
+  const info=eduGoalInfo(key);
+  if(info){
+    const box=document.createElement('div');
+    box.dataset.eduGoalContext='1';
+    box.className='goal-context-line notice';
+    box.innerHTML='<b>Como este preenchimento colabora:</b> '+info+' <span class="muted">Passe o mouse ou toque no ⓘ.</span>';
+    form.prepend(box);
+  }
+  form.querySelectorAll('label').forEach(label=>{
+    if(label.querySelector('.goal-help'))return;
+    label.insertAdjacentHTML('beforeend',' '+eduGoalInfo(key));
+  });
+}
+function decorateMethodologyFormGoals(form){
+  if(!form)return;
+  const slug=form.dataset.slug||'';
+  const map={
+    'formulario-inicial':'cadastro',
+    'lista-presenca-contato':'presenca',
+    'avaliacao-atividades':'acompanhamento_oficina',
+    'relatorio-mobilizacao':'mobilizacao',
+    'cfdh-planejamento':'planejamento_cfdh_estrutural',
+    'cfdh-avaliacao-jovens':'cfdh_estrutural',
+    'cfdh-avaliacao-equipe':'cfdh_estrutural'
+  };
+  const key=map[slug];
+  if(key)decorateEduGoalForm(form,key);
+}
