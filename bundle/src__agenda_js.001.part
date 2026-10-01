@@ -1,0 +1,119 @@
+
+function requestForm(data,prefill={}){
+  const technical=data.profiles.filter(x=>TECH_ROLES.includes(x.role));
+  return `<form id="agenda-request-form" class="stack">
+    <div class="field"><label>Jovem</label><select name="youth_id"><option value="">Sem jovem vinculado</option>${data.youth.map(y=>`<option value="${y.id}" ${prefill.youth===y.id?'selected':''}>${esc(yname(y))} — ${esc(y.neighborhood||'')}</option>`).join('')}</select></div>
+    <div class="form-grid"><div class="field"><label>Tipo</label><select name="request_type" required><option value="atendimento">Atendimento</option><option value="reuniao">Reunião</option><option value="estudo_caso">Estudo de caso</option><option value="acao">Outra ação</option><option value="outra">Outra</option></select></div><div class="field"><label>Profissional</label><select name="target_user_id"><option value="">Equipe Técnica — qualquer profissional</option>${technical.map(p=>`<option value="${p.id}" ${prefill.user===p.id?'selected':''}>${esc(p.display_name)} — ${esc(roleLabel(p.role))}</option>`).join('')}</select></div></div>
+    <div class="field"><label>Título / motivo</label><input class="input" name="title" required placeholder="Ex.: Atendimento inicial, reunião, estudo de caso"></div>
+    <div class="form-grid"><div class="field"><label>Início</label><input class="input" type="datetime-local" name="start" value="${esc(prefill.start||'')}" required></div><div class="field"><label>Fim</label><input class="input" type="datetime-local" name="end" value="${esc(prefill.end||'')}" required></div></div>
+    <div class="field"><label>Descrição opcional</label><textarea name="details" placeholder="Informação objetiva para organizar a agenda. Evite conteúdo técnico sensível."></textarea></div>
+    <button class="btn primary">Enviar solicitação</button>
+  </form>`;
+}
+function directForm(data,user){
+  const technical=data.profiles.filter(x=>TECH_ROLES.includes(x.role));
+  return `<form id="agenda-direct-form" class="stack">
+    <div class="field"><label>Jovem</label><select name="youth_id"><option value="">Sem jovem vinculado</option>${data.youth.map(y=>`<option value="${y.id}">${esc(yname(y))} — ${esc(y.neighborhood||'')}</option>`).join('')}</select></div>
+    <div class="form-grid"><div class="field"><label>Tipo</label><select name="event_type" required><option value="atendimento">Atendimento</option><option value="reuniao">Reunião</option><option value="estudo_caso">Estudo de caso</option><option value="acao_externa">Ação externa</option><option value="demanda">Demanda</option><option value="outra">Outra</option></select></div><div class="field"><label>Responsável</label>${user.role==='coordenacao_geral'?`<select name="assignee_user_id">${technical.map(p=>`<option value="${p.id}" ${p.id===user.id?'selected':''}>${esc(p.display_name)}</option>`).join('')}</select>`:`<input type="hidden" name="assignee_user_id" value="${user.id}"><input class="input" value="${esc(user.display_name)}" disabled>`}</div></div>
+    <div class="field"><label>Título</label><input class="input" name="title" required></div>
+    <div class="form-grid"><div class="field"><label>Início</label><input class="input" type="datetime-local" name="start" required></div><div class="field"><label>Fim</label><input class="input" type="datetime-local" name="end" required></div></div>
+    <div class="field"><label>Local</label><input class="input" name="location" placeholder="CRJ, sala, território..."></div>
+    <div class="field"><label>Descrição opcional</label><textarea name="description" placeholder="Informação objetiva para agenda."></textarea></div>
+    <button class="btn primary">Confirmar agendamento</button>
+  </form>`;
+}
+function responseForm(id,mode,currentStart,currentEnd){
+  const isReject=mode==='reject';
+  return `<form class="stack" data-response-form="${mode}" data-request-id="${id}">
+    ${isReject?'':`<div class="form-grid"><div class="field"><label>Novo início</label><input class="input" type="datetime-local" name="start" value="${esc(currentStart||'')}" required></div><div class="field"><label>Novo fim</label><input class="input" type="datetime-local" name="end" value="${esc(currentEnd||'')}" required></div></div>`}
+    <div class="field"><label>${isReject?'Justificativa da recusa':'Justificativa / observação opcional'}</label><textarea name="justification" ${isReject?'required':''}></textarea></div>
+    <button class="btn primary">${isReject?'Confirmar recusa':'Enviar contraproposta'}</button>
+  </form>`;
+}
+async function rpc(name,args){
+  const c=await db(),{data,error}=await c.rpc(name,args);
+  if(error)throw error;return data;
+}
+
+export async function bindAgendaPage(user,{toast,rerender}){
+  const data=window.__CRJ_AGENDA_DATA__;
+  if(!data)return;
+  const c=await db();
+
+  document.querySelector('#agenda-filter')?.addEventListener('submit',e=>{
+    e.preventDefault();const fd=new FormData(e.target),p=new URLSearchParams();
+    for(const k of ['team','user','type','from','to']){const v=fd.get(k);if(v)p.set(k,v)}
+    location.hash='agenda?'+p.toString();
+  });
+  document.querySelectorAll('[data-week]').forEach(b=>b.addEventListener('click',()=>{
+    const p=params();p.set('from',b.dataset.week);p.set('to',dateISO(addDays(new Date(b.dataset.week+'T12:00:00'),6)));location.hash='agenda?'+p.toString();
+  }));
+
+  const openRequest=(prefill={})=>{
+    modal('Solicitar atendimento / ação da Equipe Técnica',requestForm(data,prefill));
+    document.querySelector('#agenda-request-form')?.addEventListener('submit',async e=>{
+      e.preventDefault();const fd=new FormData(e.target);
+      try{
+        await rpc('agenda_create_request',{
+          p_youth_id:fd.get('youth_id')||null,p_request_type:fd.get('request_type'),
+          p_title:fd.get('title'),p_details:fd.get('details')||null,p_target_user_id:fd.get('target_user_id')||null,
+          p_start:saoIso(fd.get('start')),p_end:saoIso(fd.get('end'))
+        });
+        document.querySelector('#agenda-modal')?.remove();toast('Solicitação enviada à Equipe Técnica');await rerender();
+      }catch(err){toast(err.message,'danger')}
+    });
+  };
+  document.querySelector('[data-agenda-action="request"]')?.addEventListener('click',()=>openRequest());
+  document.querySelectorAll('[data-slot-user]').forEach(b=>b.addEventListener('click',()=>openRequest({user:b.dataset.slotUser,start:b.dataset.slotStart,end:b.dataset.slotEnd})));
+
+  document.querySelector('[data-agenda-action="direct"]')?.addEventListener('click',()=>{
+    modal('Agendamento direto da Equipe Técnica',directForm(data,user));
+    document.querySelector('#agenda-direct-form')?.addEventListener('submit',async e=>{
+      e.preventDefault();const fd=new FormData(e.target);
+      try{
+        await rpc('agenda_create_direct_event',{
+          p_youth_id:fd.get('youth_id')||null,p_event_type:fd.get('event_type'),p_title:fd.get('title'),
+          p_description:fd.get('description')||null,p_assignee_user_id:fd.get('assignee_user_id')||null,
+          p_start:saoIso(fd.get('start')),p_end:saoIso(fd.get('end')),p_location:fd.get('location')||null
+        });
+        document.querySelector('#agenda-modal')?.remove();toast('Agendamento confirmado');await rerender();
+      }catch(err){toast(err.message,'danger')}
+    });
+  });
+
+  document.querySelector('[data-agenda-action="availability"]')?.addEventListener('click',()=>{
+    modal('Definir disponibilidade fixa',`<form id="availability-form" class="stack"><div class="field"><label>Dia da semana</label><select name="weekday">${WEEKDAYS.map((d,i)=>`<option value="${i}">${d}</option>`).join('')}</select></div><div class="form-grid"><div class="field"><label>Início</label><input class="input" type="time" name="start_time" required></div><div class="field"><label>Fim</label><input class="input" type="time" name="end_time" required></div></div><div class="form-grid"><div class="field"><label>Duração padrão dos slots</label><select name="slot_minutes"><option value="30">30 min</option><option value="45">45 min</option><option value="60" selected>60 min</option><option value="90">90 min</option><option value="120">120 min</option></select></div><div class="field"><label>Local opcional</label><input class="input" name="location"></div></div><div class="form-grid"><div class="field"><label>Válido a partir de</label><input class="input" type="date" name="valid_from" value="${dateISO(new Date())}" required></div><div class="field"><label>Até (opcional)</label><input class="input" type="date" name="valid_until"></div></div><button class="btn primary">Salvar disponibilidade</button></form>`);
+    document.querySelector('#availability-form')?.addEventListener('submit',async e=>{
+      e.preventDefault();const fd=new FormData(e.target);
+      const {error}=await c.from('staff_availability').insert({user_id:user.id,weekday:Number(fd.get('weekday')),start_time:fd.get('start_time'),end_time:fd.get('end_time'),slot_minutes:Number(fd.get('slot_minutes')),location:fd.get('location')||null,valid_from:fd.get('valid_from'),valid_until:fd.get('valid_until')||null});
+      if(error){toast(error.message,'danger');return} document.querySelector('#agenda-modal')?.remove();toast('Disponibilidade salva');await rerender();
+    });
+  });
+
+  document.querySelector('[data-agenda-action="exception"]')?.addEventListener('click',()=>{
+    modal('Adicionar excepcionalidade',`<form id="exception-form" class="stack"><div class="form-grid"><div class="field"><label>Data</label><input class="input" type="date" name="exception_date" value="${dateISO(new Date())}" required></div><div class="field"><label>Tipo</label><select name="exception_type"><option value="ausencia">Ausência</option><option value="acao_externa">Ação externa</option><option value="demanda">Demanda</option><option value="outra">Outra</option></select></div></div><label class="check"><input type="checkbox" name="all_day" value="1"><span>Dia inteiro</span></label><div class="form-grid"><div class="field"><label>Início</label><input class="input" type="time" name="start_time"></div><div class="field"><label>Fim</label><input class="input" type="time" name="end_time"></div></div><div class="field"><label>Título opcional</label><input class="input" name="title"></div><div class="field"><label>Descrição opcional</label><textarea name="description"></textarea></div><label class="check"><input type="checkbox" name="blocks_schedule" value="1" checked><span>Bloquear este período para novos agendamentos</span></label><button class="btn primary">Salvar excepcionalidade</button></form>`);
+    document.querySelector('#exception-form')?.addEventListener('submit',async e=>{
+      e.preventDefault();const fd=new FormData(e.target),all=fd.get('all_day')==='1';
+      if(!all&&(!fd.get('start_time')||!fd.get('end_time'))){toast('Informe início e fim ou marque dia inteiro','danger');return}
+      const {error}=await c.from('schedule_exceptions').insert({user_id:user.id,exception_date:fd.get('exception_date'),exception_type:fd.get('exception_type'),all_day:all,start_time:all?null:fd.get('start_time'),end_time:all?null:fd.get('end_time'),title:fd.get('title')||null,description:fd.get('description')||null,blocks_schedule:fd.get('blocks_schedule')==='1'});
+      if(error){toast(error.message,'danger');return}document.querySelector('#agenda-modal')?.remove();toast('Excepcionalidade salva');await rerender();
+    });
+  });
+
+  document.querySelectorAll('[data-delete-availability]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('Remover este horário fixo?'))return;const {error}=await c.from('staff_availability').delete().eq('id',b.dataset.deleteAvailability);if(error)toast(error.message,'danger');else{toast('Horário removido');await rerender()}}));
+  document.querySelectorAll('[data-delete-exception]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('Remover esta excepcionalidade?'))return;const {error}=await c.from('schedule_exceptions').delete().eq('id',b.dataset.deleteException);if(error)toast(error.message,'danger');else{toast('Excepcionalidade removida');await rerender()}}));
+
+  document.querySelectorAll('[data-request-approve]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('Confirmar este horário na sua agenda?'))return;try{await rpc('agenda_technical_respond',{p_request_id:b.dataset.requestApprove,p_action:'approve',p_start:null,p_end:null,p_justification:null});toast('Solicitação aprovada');await rerender()}catch(err){toast(err.message,'danger')}}));
+  document.querySelectorAll('[data-request-reject]').forEach(b=>b.addEventListener('click',()=>{modal('Recusar solicitação',responseForm(b.dataset.requestReject,'reject'));bindResponseForm()}));
+  document.querySelectorAll('[data-request-counter]').forEach(b=>b.addEventListener('click',()=>{const r=data.requests.find(x=>x.id===b.dataset.requestCounter);modal('Sugerir outro horário',responseForm(r.id,'counter',localInput(r.current_start),localInput(r.current_end)));bindResponseForm()}));
+  function bindResponseForm(){
+    const f=document.querySelector('[data-response-form]');if(!f)return;
+    f.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(f),mode=f.dataset.responseForm;try{await rpc('agenda_technical_respond',{p_request_id:f.dataset.requestId,p_action:mode,p_start:mode==='counter'?saoIso(fd.get('start')):null,p_end:mode==='counter'?saoIso(fd.get('end')):null,p_justification:fd.get('justification')||null});document.querySelector('#agenda-modal')?.remove();toast(mode==='reject'?'Solicitação recusada':'Contraproposta enviada');await rerender()}catch(err){toast(err.message,'danger')}})
+  }
+
+  document.querySelectorAll('[data-request-accept]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('Aceitar o horário sugerido e confirmar o compromisso?'))return;try{await rpc('agenda_requester_reply',{p_request_id:b.dataset.requestAccept,p_action:'accept',p_start:null,p_end:null,p_justification:null});toast('Horário confirmado');await rerender()}catch(err){toast(err.message,'danger')}}));
+  document.querySelectorAll('[data-requester-counter]').forEach(b=>b.addEventListener('click',()=>{const r=data.requests.find(x=>x.id===b.dataset.requesterCounter);modal('Propor outro horário',responseForm(r.id,'requester-counter',localInput(r.current_start),localInput(r.current_end)));const f=document.querySelector('[data-response-form]');f?.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(f);try{await rpc('agenda_requester_reply',{p_request_id:r.id,p_action:'counter',p_start:saoIso(fd.get('start')),p_end:saoIso(fd.get('end')),p_justification:fd.get('justification')||null});document.querySelector('#agenda-modal')?.remove();toast('Nova contraproposta enviada');await rerender()}catch(err){toast(err.message,'danger')}})}));
+  document.querySelectorAll('[data-request-cancel]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('Cancelar esta solicitação?'))return;try{await rpc('agenda_requester_reply',{p_request_id:b.dataset.requestCancel,p_action:'cancel',p_start:null,p_end:null,p_justification:'Cancelada pelo solicitante'});toast('Solicitação cancelada');await rerender()}catch(err){toast(err.message,'danger')}}));
+
+  document.querySelector('[data-mark-notifications]')?.addEventListener('click',async()=>{const {error}=await c.from('staff_notifications').update({read_at:new Date().toISOString()}).is('read_at',null);if(error)toast(error.message,'danger');else{toast('Notificações marcadas como lidas');await rerender()}});
+}
