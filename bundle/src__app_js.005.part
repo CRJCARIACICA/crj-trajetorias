@@ -4,6 +4,7 @@ ait saveAttendance(p.session_id,b.dataset.workshop,p.date,ids);document.querySel
 async function render(){
   if(!state.user){const s=await getSession();state.user=s?.user||null;if(!state.user){renderLogin();return;}}
   if(state.user?.role==='pendente'){renderPending();return;}
+  try{state.agendaUnread=await agendaUnreadCount();}catch{state.agendaUnread=0;}
   const r=route(); let content=''; try{
     const [p1,p2,p3]=r.parts;
     if(!p1||p1==='dashboard') content=await pageDashboard();
@@ -14,11 +15,13 @@ async function render(){
     else if(p1==='formularios') content=await pageForms();
     else if(p1==='formulario') content=await pageForm(p2,p3||null);
     else if(p1==='oficinas') content=await pageWorkshops();
+    else if(p1==='agenda') content=await renderAgendaPage(state.user);
     else if(p1==='metas') content=await pageGoals();
     else if(p1==='lancamento-geral') content=await pageAggregate();
     else if(p1==='equipe') content=await pageTeam();
     else content='<div class="notice danger">Página não encontrada.</div>';
     app.innerHTML=layout(content); await bindRoute();
+    if(p1==='agenda') await bindAgendaPage(state.user,{toast,rerender:render,nav});
   }catch(err){console.error(err);app.innerHTML=layout(`<div class="notice danger"><strong>Erro ao carregar.</strong><br>${esc(err.message)}</div>`);await bindRoute();}
 }
 
