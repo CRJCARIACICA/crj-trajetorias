@@ -40,3 +40,25 @@ function decorateEduGoalForm(form,key){
     if(btn.type==='submit')btn.insertAdjacentHTML('beforeend',' '+eduGoalInfo(key));
   });
 }
+
+Object.assign(EDU_GOALS,{
+  avaliacao_atividade:{title:'Avaliação da atividade',items:[['Meta 9 - Etapa 9.1','Qualifica o monitoramento da execução e a leitura dos resultados.'],['Meta 4 - Etapas 4.2/4.3','Ajuda a avaliar as atividades realizadas nos núcleos/eixos.']],note:'A avaliação é evidência de qualidade; não soma carga horária.'},
+  relatorio_mobilizacao:{title:'Relatório de mobilização',items:[['Meta 2 - Etapas 2.2/2.3','Comprova estratégias de aproximação e acesso das juventudes.'],['Meta 9 - Etapa 9.1','Produz evidência descritiva para monitoramento.']]},
+  cfdh_avaliacao:{title:'Avaliação do CFDH',items:[['Meta 6 - Etapa 6.1','Comprova e qualifica a execução do Circuito Formativo.'],['Meta 9 - Etapa 9.1','Gera avaliação e insumo de melhoria das atividades.']],note:'A avaliação não soma horas; a carga vem das atividades/sessões executadas.'},
+  emprestimo:{title:'Empréstimo / uso de espaço',items:[['Meta 6 - Etapa 6.1','Comprova empréstimos e agendamentos de equipamentos/salas.'],['Meta 2 - Etapa 2.3','Demonstra acesso do jovem aos recursos do CRJ.']]}
+});
+const EDU_FORM_GOAL_KEY={
+  'formulario-inicial':'cadastro',
+  'lista-presenca-contato':'presenca',
+  'avaliacao-atividades':'avaliacao_atividade',
+  'relatorio-mobilizacao':'relatorio_mobilizacao',
+  'emprestimo':'emprestimo',
+  'emprestimo-canhoto':'emprestimo',
+  'cfdh-planejamento':'planejamento_cfdh_estrutural',
+  'cfdh-avaliacao-jovens':'cfdh_avaliacao',
+  'cfdh-avaliacao-equipe':'cfdh_avaliacao'
+};
+function decorateMethodologyFormGoals(form){
+  const key=EDU_FORM_GOAL_KEY[form?.dataset?.slug];
+  if(key) decorateEduGoalForm(form,key);
+}
