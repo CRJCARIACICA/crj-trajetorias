@@ -85,6 +85,15 @@ function auditChangesHtml(a){
 }
 
 
+function journeyEventTitle(e){
+  const raw=String(e?.title||'');
+  if(raw.startsWith('Formulário: ')){
+    const slug=raw.slice('Formulário: '.length).trim();
+    return FORM_MAP[slug]?.title||raw;
+  }
+  return raw;
+}
+
 function auditTooltipHtml(a){
   const changes=Object.entries(a.changed_fields||{}).map(([key,change])=>{
     const before=auditValue(change?.before), after=auditValue(change?.after);
@@ -110,7 +119,7 @@ async function pageYouthProfile(id){
   const journeyItems=[
     ...timeline.map(e=>({
       at:new Date(e.event_date).getTime(),
-      html:`<div class="timeline-item"><div class="timeline-date">${fmtDate(e.event_date)}</div><div class="timeline-body"><strong>${esc(e.title)}</strong><span class="muted">${esc(e.details||e.event_type||'')}</span></div></div>`
+      html:`<div class="timeline-item"><div class="timeline-date">${fmtDate(e.event_date)}</div><div class="timeline-body"><strong>${esc(journeyEventTitle(e))}</strong><span class="muted">${esc(e.details||e.event_type||'')}</span></div></div>`
     })),
     ...auditEdits.map(a=>({
       at:new Date(a.event_at).getTime(),
