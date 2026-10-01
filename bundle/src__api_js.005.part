@@ -1,0 +1,85 @@
+
+export async function listEducatorPlans(month=monthKey(),userId=null){
+  const [y,m]=String(month).split('-').map(Number);
+  const start=`${y}-${String(m).padStart(2,'0')}-01`;
+  const end=new Date(Date.UTC(y,m,1)).toISOString().slice(0,10);
+  if(mode==='mock'){
+    const st=mock();return (st.educatorPlans||[]).filter(x=>(!userId||x.educator_user_id===userId)&&(!x.planned_start||(x.planned_start>=start&&x.planned_start<end)));
+  }
+  let q=supabase.from('educator_plans').select('*').order('planned_start',{ascending:false}).order('created_at',{ascending:false});
+  if(userId)q=q.eq('educator_user_id',userId);
+  const {data,error}=await q;if(error)throw error;return data||[];
+}
+export async function createEducatorPlan(row){
+  const payload={...row,expected_participants:row.expected_participants===''?null:Number(row.expected_participants||0)||null,planned_duration_hours:row.planned_duration_hours===''?null:Number(row.planned_duration_hours||0)||null,workshop_id:row.workshop_id||null,planned_start:row.planned_start||null,planned_end:row.planned_end||null,start_time:row.start_time||null,end_time:row.end_time||null};
+  if(mode==='mock'){const st=mock();st.educatorPlans||=[];const rec={id:uid('plan'),...payload,educator_user_id:st.currentUser.id,status:'planejado',created_at:now(),updated_at:now()};st.educatorPlans.push(rec);save(st);return rec;}
+  const {data,error}=await supabase.from('educator_plans').insert(payload).select('*').single();if(error)throw error;return data;
+}
+export async function listEducatorReports(userId=null){
+  if(mode==='mock'){const st=mock();return (st.educatorReports||[]).filter(x=>!userId||x.educator_user_id===userId);}
+  let q=supabase.from('educator_reports').select('*').order('report_date',{ascending:false});
+  if(userId)q=q.eq('educator_user_id',userId);
+  const {data,error}=await q;if(error)throw error;return data||[];
+}
+export async function createEducatorReport(row){
+  const payload={...row,actual_participants:row.actual_participants===''?null:Number(row.actual_participants||0)||0,actual_duration_hours:row.actual_duration_hours===''?null:Number(row.actual_duration_hours||0)||0,actual_start:row.actual_start||null,actual_end:row.actual_end||null};
+  if(mode==='mock'){const st=mock();st.educatorReports||=[];const rec={id:uid('rpt'),...payload,educator_user_id:st.currentUser.id,created_at:now(),updated_at:now()};st.educatorReports.push(rec);save(st);return rec;}
+  const {data,error}=await supabase.from('educator_reports').upsert(payload,{onConflict:'plan_id'}).select('*').single();if(error)throw error;return data;
+}
+export async function listEducatorReferralReceipts(){
+  if(mode==='mock')return [];
+  const {data,error}=await supabase.from('educator_referral_receipts').select('*').order('created_at',{ascending:false}).limit(200);
+  if(error)throw error;return data||[];
+}
+
+export async function listProvisionalPeople(){
+  if(mode==='mock'){const st=mock();return st.provisionalPeople||[];}
+  const {data,error}=await supabase.from('provisional_people').select('*').is('linked_youth_id',null).order('full_name');
+  if(error)throw error;return data||[];
+}
+export async function createProvisionalPerson(row){
+  const payload={full_name:row.full_name,birth_date:row.birth_date||null,cpf:row.cpf||null,email:row.email||null,phone:row.phone||null,neighborhood:row.neighborhood||null};
+  if(mode==='mock'){const st=mock();st.provisionalPeople||=[];const rec={id:uid('prov'),...payload,linked_youth_id:null,created_at:now(),updated_at:now()};st.provisionalPeople.push(rec);save(st);return rec;}
+  const {data,error}=await supabase.from('provisional_people').insert(payload).select('*').single();if(error)throw error;return data;
+}
+export async function addWorkshopGuestParticipation(row){
+  if(mode==='mock'){const st=mock();st.guestParticipations||=[];const rec={id:uid('guest'),...row,created_at:now()};st.guestParticipations.push(rec);save(st);return rec;}
+  const {data,error}=await supabase.from('workshop_guest_participations').upsert({
+    workshop_id:row.workshop_id,session_id:row.session_id||null,provisional_person_id:row.provisional_person_id,
+    participation_date:row.participation_date,notes:row.notes||null
+  },{onConflict:row.session_id?'session_id,provisional_person_id':'workshop_id,participation_date,provisional_person_id',ignoreDuplicates:true}).select('*').maybeSingle();
+  if(error)throw error;return data;
+}
+export async function listGuestParticipations(workshopId=null){
+  if(mode==='mock'){const st=mock();return (st.guestParticipations||[]).filter(x=>!workshopId||x.workshop_id===workshopId);}
+  let q=supabase.from('workshop_guest_participations').select('*').order('participation_date',{ascending:false});
+  if(workshopId)q=q.eq('workshop_id',workshopId);
+  const {data,error}=await q;if(error)throw error;return data||[];
+}
+export async function listWorkshopSessions(workshopId,limit=30){
+  if(mode==='mock'){const st=mock();return (st.sessions||[]).filter(x=>x.workshop_id===workshopId).sort((a,b)=>String(b.session_date).localeCompare(String(a.session_date))).slice(0,limit);}
+  const {data,error}=await supabase.from('workshop_sessions').select('*').eq('workshop_id',workshopId).order('session_date',{ascending:false}).limit(limit);
+  if(error)throw error;return data||[];
+}
+export async function listWorkshopAttendance(workshopId){
+  if(mode==='mock'){const st=mock();return (st.attendance||[]).filter(x=>x.workshop_id===workshopId);}
+  const {data,error}=await supabase.from('attendance').select('*').eq('workshop_id',workshopId).order('attendance_date',{ascending:false});
+  if(error)throw error;return data||[];
+}
+export async function registerWorkshopEnrollment(row){
+  if(mode==='mock'){await enrollYouth(row.workshop_id,row.youth_id);return {id:'mock'};}
+  const {data,error}=await supabase.rpc('register_workshop_enrollment',{
+    p_workshop_id:row.workshop_id,p_youth_id:row.youth_id,p_cpf:row.cpf||null,p_email:row.email||null,
+    p_neighborhood:row.neighborhood||null,p_signature_data:row.signature_data,p_secret:row.secret
+  });
+  if(error)throw error;return {id:data};
+}
+export async function openWorkshopCheckin(sessionId){
+  if(mode==='mock')throw new Error('Lista virtual requer banco conectado.');
+  const {data,error}=await supabase.rpc('open_workshop_checkin',{p_session_id:sessionId,p_minutes_before:30,p_minutes_after:120});
+  if(error)throw error;return Array.isArray(data)?data[0]:data;
+}
+export async function linkProvisionalToYouth(provisionalId,youthId){
+  if(mode==='mock'){const st=mock(),p=(st.provisionalPeople||[]).find(x=>x.id===provisionalId);if(p)p.linked_youth_id=youthId;save(st);return;}
+  const {error}=await supabase.rpc('link_provisional_to_youth',{p_provisional_id:provisionalId,p_youth_id:youthId});if(error)throw error;
+}
