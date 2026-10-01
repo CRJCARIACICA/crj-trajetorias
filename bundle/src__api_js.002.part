@@ -1,0 +1,68 @@
+eturn data;
+}
+export async function createFollowup(row){
+  if(mode==='mock'){
+    const s=mock(), rec={id:uid('aco'),...row,date:row.date||new Date().toISOString().slice(0,10),created_by:s.currentUser.id}; s.followups.push(rec);
+    s.journey.push({id:uid('ev'),youth_id:row.youth_id,event_type:'acompanhamento',title:`Acompanhamento — ${row.followup_type||'Técnico'}`,details:row.summary||'',visibility:'technical',event_date:new Date(rec.date).toISOString(),created_by:s.currentUser.id});
+    s.indicatorEvents.push({id:uid('met'),indicator_code:'ACOMPANHAMENTOS',youth_id:row.youth_id,event_date:rec.date,quantity:Number(row.duration_hours||1),source_type:'followup',source_id:rec.id,source_mode:'identified'}); save(s); return rec;
+  }
+  const {data,error}=await supabase.from('followups').insert({youth_id:row.youth_id,followup_date:row.date,followup_type:row.followup_type,summary:row.summary,duration_hours:row.duration_hours||1,status:row.status||'ativo'}).select('*').single(); if(error) throw error;
+  await addJourney(row.youth_id,'acompanhamento',`Acompanhanhamento — ${row.followup_type||'Técnico'}`,row.summary||'','technical',new Date(row.date).toISOString()); return data;
+}
+
+export async function listWorkshops(){
+  if(mode==='mock') return mock().workshops;
+  const {data,error}=await supabase.from('workshops').select('*').order('name'); if(error) throw error; return data||[];
+}
+export async function createWorkshop(row){
+  if(mode==='mock'){ const s=mock(), rec={id:uid('ofi'),active:true,...row}; s.workshops.push(rec); save(s); return rec; }
+  const {data,error}=await supabase.from('workshops').insert(row).select('*').single(); if(error) throw error; return data;
+}
+export async function enrollYouth(workshopId,youthId){
+  if(mode==='mock'){ const s=mock(); if(!s.enrollments.some(x=>x.workshop_id===workshopId&&x.youth_id===youthId&&x.status==='ativo')) s.enrollments.push({id:uid('en'),workshop_id:workshopId,youth_id:youthId,status:'ativo',enrolled_at:now()}); s.journey.push({id:uid('ev'),youth_id:youthId,event_type:'oficina',title:'Inscrição em oficina',details:s.workshops.find(w=>w.id===workshopId)?.name||'',visibility:'general',event_date:now(),created_by:s.currentUser.id}); save(s); return; }
+  const {error}=await supabase.from('workshop_enrollments').insert({workshop_id:workshopId,youth_id:youthId}); if(error) throw error;
+  const w=(await supabase.from('workshops').select('name').eq('id',workshopId).single()).data; await addJourney(youthId,'oficina','Inscrição em oficina',w?.name||'','general');
+}
+export async function workshopRoster(workshopId){
+  if(mode==='mock'){ const s=mock(); return s.enrollments.filter(e=>e.workshop_id===workshopId&&e.status==='ativo').map(e=>({...e,youth:s.youth.find(y=>y.id===e.youth_id)})); }
+  const {data,error}=await supabase.from('workshop_enrollments').select('*, young_people(*)').eq('workshop_id',workshopId).eq('status','ativo'); if(error) throw error; return (data||[]).map(x=>({...x,youth:x.young_people}));
+}
+export async function createWorkshopSession(row){
+  const hrs=Number(row.duration_hours||durationHours(row.start_time,row.end_time));
+  if(mode==='mock'){ const s=mock(), rec={id:uid('sess'),...row,duration_hours:hrs,created_by:s.currentUser.id}; s.sessions.push(rec); s.indicatorEvents.push({id:uid('met'),indicator_code:'M6.1_OFICINAS_HORAS',event_date:rec.session_date,quantity:hrs,source_type:'workshop_session',source_id:rec.id,source_mode:'identified'}); save(s); return rec; }
+  const {data,error}=await supabase.from('workshop_sessions').insert({...row,duration_hours:hrs}).select('*').single(); if(error) throw error; return data;
+}
+export async function saveAttendance(sessionId,workshopId,date,youthIds){
+  if(mode==='mock'){
+    const s=mock(); s.attendance=s.attendance.filter(a=>a.session_id!==sessionId);
+    for(const y of youthIds){ const id=uid('pre'); s.attendance.push({id,session_id:sessionId,workshop_id:workshopId,youth_id:y,date,present:true}); s.indicatorEvents.push({id:uid('met'),indicator_code:'M2.1_ATENDIMENTOS',youth_id:y,event_date:date,quantity:1,source_type:'attendance',source_id:id,source_mode:'identified'}); s.journey.push({id:uid('ev'),youth_id:y,event_type:'presenca',title:'Presença em oficina',details:s.workshops.find(w=>w.id===workshopId)?.name||'',visibility:'general',event_date:new Date(date).toISOString(),created_by:s.currentUser.id}); } save(s); return;
+  }
+  const adHoc=String(sessionId||'').startsWith('manual_');
+  if(adHoc) await supabase.from('attendance').delete().eq('workshop_id',workshopId).eq('attendance_date',date).is('session_id',null);
+  else await supabase.from('attendance').delete().eq('session_id',sessionId);
+  if(youthIds.length){
+    const {error}=await supabase.from('attendance').insert(youthIds.map(youth_id=>({session_id:adHoc?null:sessionId,workshop_id:workshopId,youth_id,present:true,attendance_date:date}))); if(error) throw error;
+    const w=(await supabase.from('workshops').select('name').eq('id',workshopId).single()).data;
+    for(const youthId of youthIds) await addJourney(youthId,'presenca','Presença em oficina',w?.name||'','general',new Date(`${date}T12:00:00`).toISOString());
+  }
+}
+
+export async function createAggregate(row){
+  if(mode==='mock'){ const s=mock(), rec={id:uid('agg'),...row,created_at:now(),created_by:s.currentUser.id}; s.aggregate.push(rec); s.indicatorEvents.push({id:uid('met'),indicator_code:row.indicator_code,event_date:row.date,quantity:Number(row.quantity||0),source_type:'aggregate_record',source_id:rec.id,source_mode:'aggregate'}); save(s); return rec; }
+  const {data,error}=await supabase.from('aggregate_records').insert({record_date:row.date,indicator_code:row.indicator_code,quantity:row.quantity,description:row.description,evidence_ref:row.evidence_ref}).select('*').single(); if(error) throw error; return data;
+}
+
+
+function periodMonths(periodicity='mensal'){
+  return ({bimestral:2,trimestral:3,semestral:6,anual:12})[periodicity] || 1;
+}
+function indicatorWindow(month,periodicity='mensal'){
+  const [y,m]=String(month).split('-').map(Number);
+  const [cy,cm]=String(CONFIG.contractStart||'2025-10-01').slice(0,7).split('-').map(Number);
+  const n=periodMonths(periodicity), diff=(y-cy)*12+(m-cm), block=Math.floor(diff/n);
+  const start=new Date(Date.UTC(cy,cm-1+block*n,1));
+  const end=new Date(Date.UTC(cy,cm-1+(block+1)*n,1));
+  return {start:start.toISOString().slice(0,10),end:end.toISOString().slice(0,10),months:n};
+}
+export async function listIndicatorCatalog(){
+ 
