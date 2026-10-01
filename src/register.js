@@ -62,6 +62,11 @@ function enhanceRegistration(){
     nameInput.required=false;
   }
 
+  const oldNotice=form.nextElementSibling;
+  if(oldNotice?.classList?.contains('notice')){
+    oldNotice.innerHTML='Para criar uma conta, informe <b>nome completo</b>, <b>função</b>, e-mail, senha e a palavra-chave interna da equipe. Após a validação, o perfil já recebe as permissões correspondentes à função escolhida.';
+  }
+
   const actions=signup.closest('.actions');
   const extras=document.createElement('div');
   extras.className='registration-extra';
