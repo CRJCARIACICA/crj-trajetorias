@@ -112,3 +112,16 @@ export async function downloadFormSubmission(submissionId,format='pdf'){
   a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),2000);
 }
+
+
+export async function listYouthAudit(youthId,limit=100){
+  if(mode==='mock') return [];
+  const {data,error}=await supabase
+    .from('youth_audit_log')
+    .select('id,youth_id,actor_user_id,actor_name,actor_role,entity_type,entity_id,entity_label,action,visibility,changed_fields,event_at')
+    .eq('youth_id',youthId)
+    .order('event_at',{ascending:false})
+    .limit(limit);
+  if(error) throw error;
+  return data||[];
+}
