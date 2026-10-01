@@ -116,4 +116,18 @@ export async function bindAgendaPage(user,{toast,rerender}){
   document.querySelectorAll('[data-request-cancel]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('Cancelar esta solicitação?'))return;try{await rpc('agenda_requester_reply',{p_request_id:b.dataset.requestCancel,p_action:'cancel',p_start:null,p_end:null,p_justification:'Cancelada pelo solicitante'});toast('Solicitação cancelada');await rerender()}catch(err){toast(err.message,'danger')}}));
 
   document.querySelector('[data-mark-notifications]')?.addEventListener('click',async()=>{const {error}=await c.from('staff_notifications').update({read_at:new Date().toISOString()}).is('read_at',null);if(error)toast(error.message,'danger');else{toast('Notificações marcadas como lidas');await rerender()}});
+
+  const quick=params();
+  const quickMode=quick.get('new'),quickYouth=quick.get('youth');
+  if(quickMode==='request'){
+    openRequest({youth:quickYouth||''});
+  }else if(quickMode==='direct'&&isTech(user)){
+    document.querySelector('[data-agenda-action="direct"]')?.click();
+    const sel=document.querySelector('#agenda-direct-form [name="youth_id"]');
+    if(sel&&quickYouth)sel.value=quickYouth;
+  }
+  if(quickMode){
+    quick.delete('new');quick.delete('youth');
+    history.replaceState(null,'','#agenda'+(quick.toString()?'?'+quick.toString():''));
+  }
 }
