@@ -30,6 +30,7 @@ async function bindRoute(){
   document.querySelector('[data-action="logout"]')?.addEventListener('click',async e=>{e.preventDefault();await signOut();state.user=null;renderLogin()});
   document.querySelector('[data-back]')?.addEventListener('click',()=>history.back());
   document.querySelector('#search-youth')?.addEventListener('submit',e=>{e.preventDefault();nav(`jovens?q=${encodeURIComponent(new FormData(e.target).get('q'))}`)});
+  decorateMethodologyFormGoals(document.querySelector('#dynamic-form'));
   document.querySelector('#dynamic-form')?.addEventListener('submit',async e=>{
     e.preventDefault();
     const f=e.target,payload=parseForm(f),slug=f.dataset.slug,youthId=f.dataset.youth||null;
