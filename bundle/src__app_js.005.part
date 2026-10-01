@@ -1,0 +1,27 @@
+ait saveAttendance(p.session_id,b.dataset.workshop,p.date,ids);document.querySelector('#modal').remove();toast('Presenças registradas');render();});}));
+}
+
+async function render(){
+  if(!state.user){const s=await getSession();state.user=s?.user||null;if(!state.user){renderLogin();return;}}
+  if(state.user?.role==='pendente'){renderPending();return;}
+  const r=route(); let content=''; try{
+    const [p1,p2,p3]=r.parts;
+    if(!p1||p1==='dashboard') content=await pageDashboard();
+    else if(p1==='jovens') content=await pageYouth();
+    else if(p1==='novo-jovem') content=await pageNewYouth();
+    else if(p1==='jovem') content=await pageYouthProfile(p2);
+    else if(p1==='formularios') content=await pageForms();
+    else if(p1==='formulario') content=await pageForm(p2,p3||null);
+    else if(p1==='oficinas') content=await pageWorkshops();
+    else if(p1==='metas') content=await pageGoals();
+    else if(p1==='lancamento-geral') content=await pageAggregate();
+    else if(p1==='equipe') content=await pageTeam();
+    else content='<div class="notice danger">Página não encontrada.</div>';
+    app.innerHTML=layout(content); await bindRoute();
+  }catch(err){console.error(err);app.innerHTML=layout(`<div class="notice danger"><strong>Erro ao carregar.</strong><br>${esc(err.message)}</div>`);await bindRoute();}
+}
+
+window.addEventListener('hashchange',render);
+await initApi();
+window.__CRJ_RESET_DEMO__=()=>{resetDemo();location.reload()};
+await render();
