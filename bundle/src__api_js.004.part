@@ -18,6 +18,7 @@ export async function createEducatorRecord(row){
     record_date:row.record_date||new Date().toISOString().slice(0,10),
     record_type:row.record_type,
     youth_id:row.youth_id||null,
+    provisional_person_id:row.provisional_person_id||null,
     workshop_id:row.workshop_id||null,
     title:row.title||null,
     description:row.description||null,
@@ -45,7 +46,7 @@ export async function createEducatorRecord(row){
 
 export async function updateEducatorRecord(id,patch){
   const allowed={updated_at:now()};
-  for(const k of ['record_date','record_type','youth_id','workshop_id','title','description','referral_target','evidence_ref','notes']){
+  for(const k of ['record_date','record_type','youth_id','provisional_person_id','workshop_id','title','description','referral_target','evidence_ref','notes']){
     if(patch[k]!==undefined) allowed[k]=patch[k]||null;
   }
   if(patch.duration_hours!==undefined) allowed.duration_hours=Number(patch.duration_hours||0);
