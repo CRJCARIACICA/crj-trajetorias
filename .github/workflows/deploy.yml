@@ -43,6 +43,12 @@ jobs:
           node --check _site/src/register.js
           node --check _site/src/agenda.js
           node --check _site/src/checkin.js
+          # Validação real de ES Modules: detecta declarações duplicadas que
+          # o node --check em modo script pode deixar passar.
+          node --input-type=module --check < _site/src/app.js
+          node --input-type=module --check < _site/src/api.js
+          node --input-type=module --check < _site/src/forms.js
+          node --input-type=module --check < _site/src/agenda.js
           test -s _site/index.html
           test -s _site/src/app.js
           test -s _site/src/api.js
