@@ -41,13 +41,76 @@ async function pageForm(slug,youthId){
   return formPageHtml(f,youthId,false,values,false);
 }
 
+
+const AUDIT_FIELD_LABELS={
+  preferred_name:'Nome preferido',full_name:'Nome completo',birth_date:'Data de nascimento',cpf:'CPF',
+  reference_person:'Pessoa de referência',reference_phone:'Telefone da referência',street:'Rua / endereço',
+  address_extra:'Complemento / referência',neighborhood:'Bairro',municipality:'Município',housing:'Situação da moradia',
+  household_size:'Pessoas no domicílio',phone:'Telefone',email:'E-mail',status:'Situação do cadastro',
+  race:'Raça/cor',traditional_community:'Comunidade tradicional',traditional_community_which:'Qual comunidade tradicional',
+  gender_identity:'Identidade de gênero',sexual_orientation:'Orientação sexual',disability:'Pessoa com deficiência',
+  disability_which:'Deficiência informada',studies:'Estuda atualmente',last_grade:'Última série concluída',
+  school_name:'Escola',school_grade:'Série/ano',education_level:'Nível de ensino',
+  education_modality:'Modalidade de ensino',education_modality_other:'Outra modalidade',household_income:'Renda domiciliar',
+  interests:'Interesses no CRJ',heard_from:'Como conheceu o CRJ',heard_from_other:'Outra origem',
+  preferred_shifts:'Turnos de interesse',filled_by:'Responsável pelo preenchimento',
+  title:'Título',details:'Descrição',event_type:'Tipo de evento',event_date:'Data do evento',visibility:'Visibilidade',
+  form_slug:'Tipo de formulário',documento:'Documento',trajetoria:'Trajetória',cadastro:'Cadastro',perfil:'Perfil'
+};
+function auditFieldLabel(key){
+  return AUDIT_FIELD_LABELS[key]||String(key||'Campo').replace(/^_/,'').replace(/_/g,' ').replace(/^./,x=>x.toUpperCase());
+}
+function auditValue(v){
+  if(v===null||v===undefined||v==='')return 'vazio';
+  if(Array.isArray(v))return v.length?v.join(', '):'vazio';
+  if(typeof v==='object')return Object.entries(v).map(([k,x])=>`${auditFieldLabel(k)}: ${auditValue(x)}`).join(' · ');
+  if(typeof v==='boolean')return v?'Sim':'Não';
+  return String(v);
+}
+function auditEntityName(a){
+  if(a.entity_type==='methodology_form_submissions') return FORM_MAP[a.entity_label]?.title||a.entity_label||'Documento metodológico';
+  if(a.entity_type==='young_people') return 'Cadastro principal';
+  if(a.entity_type==='youth_demographics') return 'Perfil sociodemográfico e interesses';
+  if(a.entity_type==='journey_events') return a.entity_label||'Registro da trajetória';
+  return a.entity_label||a.entity_type;
+}
+function auditChangesHtml(a){
+  const entries=Object.entries(a.changed_fields||{});
+  if(!entries.length)return '<div class="muted" style="margin-top:7px">Sem campos detalhados.</div>';
+  return `<div style="display:grid;gap:7px;margin-top:10px">${entries.map(([key,change])=>{
+    const before=change?.before,after=change?.after;
+    if(a.action==='created') return `<div style="padding:8px 10px;background:#f7faf9;border:1px solid var(--line);border-radius:10px"><strong>${esc(auditFieldLabel(key))}</strong><span class="muted"> · ${esc(auditValue(after))}</span></div>`;
+    return `<div style="padding:8px 10px;background:#f7faf9;border:1px solid var(--line);border-radius:10px"><strong>${esc(auditFieldLabel(key))}</strong><div class="muted" style="margin-top:4px"><span style="text-decoration:line-through">${esc(auditValue(before))}</span> → <span style="color:var(--ink);font-weight:700">${esc(auditValue(after))}</span></div></div>`;
+  }).join('')}</div>`;
+}
+
 async function pageYouthProfile(id){
-  const [{core:y,demographics:d},timeline,forms,workshops]=await Promise.all([getYouth(id),listTimeline(id),listFormSubmissions(id),listWorkshops()]); if(!y)return `<div class="notice danger">Jovem não encontrado.</div>`;
+  const [{core:y,demographics:d},timeline,forms,workshops,audit]=await Promise.all([
+    getYouth(id),listTimeline(id),listFormSubmissions(id),listWorkshops(),listYouthAudit(id)
+  ]);
+  if(!y)return `<div class="notice danger">Jovem não encontrado.</div>`;
+
   const technicalActions=technicalWriter()?`<div class="card" style="margin-top:16px"><div class="page-head" style="margin-bottom:14px"><div><h3 style="margin:0">Aberturas técnicas</h3><p>Registros vinculados ao jovem conforme os formulários da metodologia.</p></div><span class="pill info">Equipe Técnica</span></div><div class="actions"><button class="btn secondary" data-nav="formulario/acompanhamento/${id}">Acompanhamento</button><button class="btn secondary" data-nav="formulario/pvida/${id}">PVida</button><button class="btn secondary" data-nav="formulario/ptrampo/${id}">PTrampo</button><button class="btn secondary" data-nav="formulario/outras-demandas/${id}">Outras Demandas</button></div></div>`:'';
+
+  const auditHtml=audit.map(a=>`<div style="padding:14px 0;border-bottom:1px solid var(--line)">
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
+      <div>
+        <strong>${esc(auditEntityName(a))}</strong>
+        <div class="muted" style="margin-top:3px">${esc(a.actor_name||'Sistema')} · ${esc(roleLabel(a.actor_role))}</div>
+      </div>
+      <div style="text-align:right">
+        <span class="pill ${a.action==='updated'?'warn':'info'}">${a.action==='updated'?'Alterado':'Criado'}</span>
+        <div class="muted" style="margin-top:5px;font-size:12px">${esc(fmtDateTime(a.event_at))}</div>
+      </div>
+    </div>
+    ${auditChangesHtml(a)}
+  </div>`).join('')||'<div class="empty">Ainda não há alterações registradas neste histórico.</div>';
+
   return `<div class="page-head"><div><h2>${esc(y.preferred_name||y.full_name)}</h2><p>${esc(y.full_name)} · ${age(y.birth_date)} anos · ${esc(y.neighborhood||'Bairro não informado')}</p></div><div class="actions">${permitted('editar_cadastro')?`<button class="btn" data-nav="editar-jovem/${id}">Editar cadastro</button>`:''}${permitted('atendimentos')?'<button class="btn secondary" data-action="new-service">+ Atendimento</button>':''}<button class="btn primary" data-action="new-youth-form">+ Formulário</button></div></div>
   <div class="grid three"><div class="card"><h3>Cadastro</h3><p><strong>Nascimento:</strong> ${fmtDate(y.birth_date)}</p><p><strong>CPF:</strong> ${esc(y.cpf||'—')}</p><p><strong>Bairro:</strong> ${esc(y.neighborhood||'—')}</p><p><strong>Município:</strong> ${esc(y.municipality||'—')}</p><p><strong>Contato:</strong> ${esc(y.phone||'—')}</p></div><div class="card"><h3>Perfil e interesses</h3>${d?`<p><strong>Raça/cor:</strong> ${esc(d.race||'—')}</p><p><strong>Escolaridade:</strong> ${esc(d.education_level||'—')}</p><p><strong>Interesses:</strong> ${esc((d.interests||[]).join(', ')||'—')}</p>`:`<p class="muted">Dados não preenchidos ou sem permissão de visualização.</p>`}</div><div class="card"><h3>Oficinas</h3><div class="stack">${workshops.map(w=>`<button class="btn" data-enroll="${w.id}">Inscrever em ${esc(w.name)}</button>`).join('')||'<span class="muted">Nenhuma oficina cadastrada.</span>'}</div></div></div>
   ${technicalActions}
-  <div class="grid two" style="margin-top:16px"><div class="card"><h3>Trajetória no CRJ</h3><div class="timeline">${timeline.map(e=>`<div class="timeline-item"><div class="timeline-date">${fmtDate(e.event_date)}</div><div class="timeline-body"><strong>${esc(e.title)}</strong><span class="muted">${esc(e.details||e.event_type||'')}</span></div></div>`).join('')||'<div class="empty">Ainda não há eventos.</div>'}</div></div><div class="card"><h3>Documentos metodológicos</h3>${forms.map(f=>{const exportable=isTechnicalForm(f.form_slug);return `<div style="padding:10px 0;border-bottom:1px solid var(--line)"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><strong>${esc(FORM_MAP[f.form_slug]?.title||f.form_slug)}</strong><br><span class="muted">${fmtDate(f.submitted_at)}</span></div>${exportable?`<div class="actions"><button class="btn" data-download-form="${f.id}" data-format="pdf">PDF</button><button class="btn" data-download-form="${f.id}" data-format="docx">DOCX</button></div>`:''}</div></div>`}).join('')||'<div class="empty">Nenhum formulário vinculado.</div>'}</div></div>`;
+  <div class="grid two" style="margin-top:16px"><div class="card"><h3>Trajetória no CRJ</h3><div class="timeline">${timeline.map(e=>`<div class="timeline-item"><div class="timeline-date">${fmtDate(e.event_date)}</div><div class="timeline-body"><strong>${esc(e.title)}</strong><span class="muted">${esc(e.details||e.event_type||'')}</span></div></div>`).join('')||'<div class="empty">Ainda não há eventos.</div>'}</div></div><div class="card"><h3>Documentos metodológicos</h3>${forms.map(f=>{const exportable=isTechnicalForm(f.form_slug);return `<div style="padding:10px 0;border-bottom:1px solid var(--line)"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><strong>${esc(FORM_MAP[f.form_slug]?.title||f.form_slug)}</strong><br><span class="muted">${fmtDate(f.submitted_at)}</span></div>${exportable?`<div class="actions"><button class="btn" data-download-form="${f.id}" data-format="pdf">PDF</button><button class="btn" data-download-form="${f.id}" data-format="docx">DOCX</button></div>`:''}</div></div>`}).join('')||'<div class="empty">Nenhum formulário vinculado.</div>'}</div></div>
+  <div class="card" style="margin-top:16px"><div class="page-head" style="margin-bottom:4px"><div><h3 style="margin:0">Histórico de alterações</h3><p>Auditoria do cadastro, documentos e registros da trajetória. Mostra quem alterou, quando e quais itens mudaram.</p></div><span class="pill">${audit.length} registro(s)</span></div>${auditHtml}</div>`;
 }
 
 async function pageForms(){
