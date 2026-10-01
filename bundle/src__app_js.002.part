@@ -28,12 +28,14 @@ function formPageHtml(form,youthId,isNew=false,values={},isEdit=false){
   return `<div class="page-head"><div><h2>${esc(form.title)}</h2><p>${esc(form.description)}</p></div><div class="actions"><button class="btn" data-back>Voltar</button></div></div><form id="dynamic-form" data-slug="${form.slug}" data-youth="${youthId||''}" data-new="${isNew?'1':'0'}" data-edit="${isEdit?'1':'0'}"><div class="card">${prefilled}${editInfo}${technicalSystemFields(form,youthId,values)}${form.sections.map(s=>`<div class="section"><div class="section-title">${esc(s.title)}</div><div class="form-grid">${s.fields.map(f=>fieldHtml(f,values[f.key])).join('')}</div></div>`).join('')}<div class="actions" style="margin-top:22px"><button class="btn primary">${isEdit?'Salvar alterações':'Salvar documento'}</button></div></div></form>`;
 }
 async function pageEditYouth(id){
+  if(!permitted('editar_cadastro')) return '<div class="notice danger">Seu perfil não possui permissão para editar o cadastro-base do jovem.</div>';
   const values=await youthPrefill(id);
   return formPageHtml(FORM_MAP['formulario-inicial'],id,false,values,true);
 }
 async function pageForm(slug,youthId){
   const f=FORM_MAP[slug];
   if(!f)return `<div class="notice danger">Formulário não encontrado.</div>`;
+  if(isTechnicalForm(slug)&&!technicalWriter()) return '<div class="notice danger">Este documento é restrito à Equipe Técnica e à Coordenação Geral.</div>';
   if(f.youthRequired&&!youthId)return `<div class="page-head"><div><h2>${esc(f.title)}</h2><p>Este documento precisa estar vinculado a um jovem.</p></div></div><div class="notice">Abra a ficha do jovem em <b>Jovens → Abrir trajetória</b> e utilize uma das ações disponíveis.</div><div class="actions" style="margin-top:16px"><button class="btn primary" data-nav="jovens">Selecionar jovem</button></div>`;
   const values=youthId?await youthPrefill(youthId):{};
   return formPageHtml(f,youthId,false,values,false);
