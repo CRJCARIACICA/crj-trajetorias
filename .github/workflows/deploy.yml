@@ -34,12 +34,14 @@ jobs:
           cat bundle/src__app_js.*.part > _site/src/app.js
           cat bundle/src__api_js.*.part > _site/src/api.js
           cat bundle/src__forms_js.*.part > _site/src/forms.js
+          cat bundle/src__agenda_js.*.part > _site/src/agenda.js
           cat bundle/assets__app_css.*.part > _site/assets/app.css
           node --check _site/src/app.js
           node --check _site/src/api.js
           node --check _site/src/forms.js
           node --check _site/src/permissions.js
           node --check _site/src/register.js
+          node --check _site/src/agenda.js
           test -s _site/index.html
           test -s _site/src/app.js
           test -s _site/src/api.js
