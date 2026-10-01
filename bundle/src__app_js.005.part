@@ -156,7 +156,16 @@ async function render(){
     await bindPublicWorkshopCheckinV2(publicRoute.parts[1]);
     return;
   }
-  if(!state.user){const s=await getSession();state.user=s?.user||null;if(!state.user){renderLogin();return;}}
+  if(!state.user){
+    try{
+      const s=await getSession();
+      state.user=s?.user||null;
+    }catch(err){
+      console.error('Falha ao restaurar sessão:',err);
+      state.user=null;
+    }
+    if(!state.user){renderLogin();return;}
+  }
   if(state.user?.role==='pendente'){renderPending();return;}
   try{state.agendaUnread=await agendaUnreadCount();}catch{state.agendaUnread=0;}
   const r=route(); let content=''; try{
