@@ -69,7 +69,7 @@ Metas e Etapas
 - Monitoramento / Gestão OSC
 - Acesso pendente
 
-O primeiro usuário confirmado no banco inicializa como Coordenação Geral. Contas seguintes entram como pendentes até receberem equipe e perfil.
+No cadastro, cada colaborador informa nome completo, função, e-mail e senha. A criação da conta exige uma palavra-chave interna validada exclusivamente no servidor. Cadastros feitos fora desse fluxo permanecem como acesso pendente e sem permissões operacionais.
 
 ## Dados identificados x agregados
 
@@ -119,5 +119,5 @@ Endereço planejado:
 - Nenhuma service role fica no navegador.
 - O frontend usa somente a publishable key do Supabase.
 - Permissões sensíveis são aplicadas também no PostgreSQL via RLS.
-- A ponte entre os dois bancos usa token guardado no Vault do Supabase.
+- A ponte entre os dois bancos usa token guardado no Vault do Supabase.\n- A palavra-chave de cadastro não fica armazenada no JavaScript público do site.
 - Conteúdo técnico individual não é replicado ao banco de metas.
