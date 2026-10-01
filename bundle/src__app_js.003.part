@@ -36,7 +36,8 @@ async function bindRoute(){
     try{
       if(f.dataset.new==='1'){
         const id=await createYouth(payload);
-        toast('Jovem cadastrado');
+        if(f.dataset.provisional) await linkProvisionalToYouth(f.dataset.provisional,id);
+        toast(f.dataset.provisional?'Jovem cadastrado e participações provisórias vinculadas':'Jovem cadastrado');
         nav(`jovem/${id}`);
         return;
       }
