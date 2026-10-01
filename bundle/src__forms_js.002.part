@@ -1,0 +1,79 @@
+ano de Possibilidades para a Vida. O sistema complementa o anexo com linha do tempo e metas de acompanhamento.',
+    sections:[{title:'PVida',fields:[
+      {key:'full_name',label:'1. Nome completo do(a) jovem',type:'text'},
+      {key:'birth_date',label:'2. Data de nascimento',type:'date'},
+      {key:'cpf',label:'3. CPF',type:'text'},
+      {key:'first_referrals',label:'4. Primeiros encaminhamentos à rede a partir do PVida',type:'multiselect',options:['Assistência Social','Educação','Saúde','Cultura','Sem encaminhamentos externos','Outro','Não houve encaminhamento']},
+      {key:'social_service',label:'4.1 Assistência Social — qual equipamento/serviço?',type:'text'},
+      {key:'education_service',label:'4.2 Educação — qual equipamento/serviço?',type:'text'},
+      {key:'health_service',label:'4.3 Saúde — qual equipamento/serviço?',type:'text'},
+      {key:'culture_service',label:'4.4 Cultura — qual equipamento/serviço?',type:'text'},
+      {key:'other_service',label:'4.5 Outro — qual equipamento/serviço?',type:'text'},
+      {key:'objectives',label:'Objetivos pactuados com o jovem',type:'textarea'},
+      {key:'actions',label:'Ações / encaminhamentos combinados',type:'textarea'},
+      {key:'review_date',label:'Data prevista para revisão',type:'date'}
+    ]}]
+  },
+  {
+    slug:'outras-demandas', title:'Outras Demandas — Acompanhamento', annex:'Anexo 5', sensitivity:'tecnico', youthRequired:true,
+    description:'Registro de acompanhamento de demandas que não estão organizadas prioritariamente como PVida ou PTrampo.',
+    sections:[{title:'Demanda e encaminhamentos',fields:[
+      {key:'full_name',label:'1. Nome completo do(a) jovem',type:'text'},
+      {key:'birth_date',label:'2. Data de nascimento',type:'date'},
+      {key:'cpf',label:'3. CPF',type:'text'},
+      {key:'demand',label:'Demanda apresentada',type:'textarea',required:true},
+      {key:'referrals',label:'4. Primeiros encaminhamentos à rede',type:'multiselect',options:['Assistência Social','Educação','Saúde','Cultura','Sem encaminhamentos externos','Outro','Não houve encaminhamento']},
+      {key:'social_service',label:'4.1 Assistência Social — qual equipamento/serviço?',type:'text'},
+      {key:'education_service',label:'4.2 Educação — qual equipamento/serviço?',type:'text'},
+      {key:'health_service',label:'4.3 Saúde — qual equipamento/serviço?',type:'text'},
+      {key:'culture_service',label:'4.4 Cultura — qual equipamento/serviço?',type:'text'},
+      {key:'other_service',label:'4.5 Outro — qual equipamento/serviço?',type:'text'},
+      {key:'result',label:'Resultado / retorno da rede',type:'textarea'}
+    ]}]
+  },
+  {
+    slug:'ptrampo', title:'Planejamento de Trabalho Individual ou Coletivo — PTrampo', annex:'Anexo 6', sensitivity:'tecnico', youthRequired:true,
+    description:'Planejamento de trabalho e geração de renda com monitoramento de metas, encaminhamentos e resultados.',
+    sections:[
+      {title:'Planejamento',fields:[
+        {key:'full_name',label:'1. Nome completo do(a) jovem',type:'text'},
+        {key:'birth_date',label:'2. Data de nascimento',type:'date'},
+        {key:'cpf',label:'3. CPF',type:'text'},
+        {key:'work_desire',label:'4. Qual é o seu desejo no mundo do trabalho?',type:'textarea'},
+        {key:'labor_activity',label:'5. Já realizou alguma atividade laboral?',type:'textarea'},
+        {key:'interest_areas',label:'6. Quais são suas áreas de interesse?',type:'textarea'},
+        {key:'strengths',label:'7. Quais são suas habilidades / pontos fortes?',type:'textarea'},
+        {key:'difficulties',label:'8. O que identifica como dificuldade / pontos fracos?',type:'textarea'},
+        {key:'paths',label:'9. Que caminhos foram traçados junto com o jovem?',type:'textarea'},
+        {key:'territorial_conflicts',label:'10. Existe alguma questão que dificulte ou impeça frequentar o CRJ ou outro espaço do território?',type:'textarea'},
+        {key:'short_goal',label:'11. Objetivos/prazos — curto prazo',type:'textarea'},
+        {key:'medium_goal',label:'11. Objetivos/prazos — médio prazo',type:'textarea'},
+        {key:'long_goal',label:'11. Objetivos/prazos — longo prazo',type:'textarea'},
+        {key:'partners',label:'12. Identificação de parceiros nas redes de serviços local/municipal/privados',type:'textarea'},
+        {key:'course_referrals',label:'13. Encaminhamento para cursos',type:'textarea'},
+        {key:'education_referrals',label:'14. Encaminhamentos para rede de ensino / Enem / Cursinhos Populares',type:'textarea'},
+        {key:'documents',label:'15. Encaminhamentos para emissão de documentos',type:'multiselect',options:['RG','CPF','CTPS','Histórico Escolar','Outro']},
+        {key:'technical_report',label:'Relato técnico',type:'textarea'},
+      ]},
+      {title:'Anexo para monitoramento',fields:[
+        {key:'monitor_short',label:'Prazos/metas combinadas — curto prazo',type:'textarea'},
+        {key:'monitor_medium',label:'Prazos/metas combinadas — médio prazo',type:'textarea'},
+        {key:'monitor_long',label:'Prazos/metas combinadas — longo prazo',type:'textarea'},
+        {key:'first_actions',label:'Primeiros encaminhamentos realizados',type:'multiselect',options:['Documentação','Cursos profissionalizantes','Rede de Ensino (Educação formal)','Outro']},
+        {key:'first_actions_other',label:'Se outro, qual?',type:'text'},
+        {key:'employment_status',label:'Situação atual de trabalho',type:'select',options:['Desempregado(a)','Empregado(a)','Trabalho informal','Empreendendo','Estudando / qualificação','Outro']},
+        {key:'labpoca_use',label:'Utiliza LABPoca regularmente?',type:'select',options:['Sim','Não']}
+      ]}
+    ]
+  },
+  {
+    slug:'avaliacao-atividades', title:'Avaliação das Atividades — Jovens', annex:'Anexo 7', sensitivity:'operacional', youthRequired:false,
+    description:'Avaliação de oficinas e outras atividades.',
+    sections:[{title:'Avaliação',fields:[
+      {key:'facilitator',label:'1. Responsável pela condução da atividade',type:'text'},
+      {key:'cfdh',label:'2. Participa do Circuito Formativo?',type:'select',options:['Sim','Não']},
+      {key:'activity_type',label:'3. Qual atividade está avaliando?',type:'select',options:['Oficina','Outra atividade']},
+      {key:'other_activity',label:'3.1 Se outra atividade, qual?',type:'text'},
+      {key:'class_name',label:'4. Nome da turma / oficina',type:'text'},
+      {key:'date',label:'5. Data da avaliação',type:'date'},
+      {key:'organization',label:'6.1 Organização',type:'ratin
