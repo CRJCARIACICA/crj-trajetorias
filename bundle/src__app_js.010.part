@@ -1,4 +1,4 @@
-await render();
+if(!window.__CRJ_BOOT_ERROR__) await render();
 setInterval(async()=>{
   if(!state.user||state.user?.role==='pendente')return;
   try{
