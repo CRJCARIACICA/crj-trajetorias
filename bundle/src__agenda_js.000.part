@@ -2,7 +2,7 @@ import { CONFIG } from './config.js';
 import { roleLabel } from './permissions.js';
 
 let supabase;
-const TECH_ROLES=['assistente_social','psicologo','terapeuta_ocupacional','coordenacao_geral'];
+const TECH_ROLES=['assistente_social','psicologo','terapeuta_ocupacional'];
 const WEEKDAYS=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
 const TYPE_LABELS={
   atendimento:'Atendimento',reuniao:'Reunião',estudo_caso:'Estudo de caso',
