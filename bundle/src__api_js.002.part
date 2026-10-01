@@ -7,7 +7,7 @@ export async function createFollowup(row){
     s.indicatorEvents.push({id:uid('met'),indicator_code:'ACOMPANHAMENTOS',youth_id:row.youth_id,event_date:rec.date,quantity:Number(row.duration_hours||1),source_type:'followup',source_id:rec.id,source_mode:'identified'}); save(s); return rec;
   }
   const {data,error}=await supabase.from('followups').insert({youth_id:row.youth_id,followup_date:row.date,followup_type:row.followup_type,summary:row.summary,duration_hours:row.duration_hours||1,status:row.status||'ativo'}).select('*').single(); if(error) throw error;
-  await addJourney(row.youth_id,'acompanhamento',`Acompanhanhamento — ${row.followup_type||'Técnico'}`,row.summary||'','technical',new Date(row.date).toISOString()); return data;
+  await addJourney(row.youth_id,'acompanhamento',`Acompanhamento — ${row.followup_type||'Técnico'}`,row.summary||'','technical',new Date(row.date).toISOString()); return data;
 }
 
 export async function listWorkshops(){
@@ -65,4 +65,3 @@ function indicatorWindow(month,periodicity='mensal'){
   return {start:start.toISOString().slice(0,10),end:end.toISOString().slice(0,10),months:n};
 }
 export async function listIndicatorCatalog(){
- 
