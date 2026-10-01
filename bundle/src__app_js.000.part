@@ -1,0 +1,43 @@
+import { CONFIG } from './config.js';
+import { initApi, apiMode, signIn, signUp, demoSignIn, signOut, getSession, dashboardStats, listYouth, getYouth, createYouth, listTimeline, saveFormSubmission, listFormSubmissions, createService, createFollowup, listWorkshops, createWorkshop, enrollYouth, workshopRoster, createWorkshopSession, saveAttendance, createAggregate, getIndicators, listIndicatorCatalog, listTeam, listTeamContributions, updateTeamMember, INDICATORS, resetDemo } from './api.js';
+import { FORMS, FORM_MAP, RATING_OPTIONS } from './forms.js';
+import { ROLES, can, roleLabel } from './permissions.js';
+
+const app=document.querySelector('#app');
+const state={session:null,user:null};
+const esc=(v='')=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+const fmtDate=v=>v?new Date(v.length===10?`${v}T12:00:00`:v).toLocaleDateString('pt-BR'):'—';
+const age=v=>{if(!v)return '—';let d=new Date(v),n=new Date(),a=n.getFullYear()-d.getFullYear();if(new Date(n.getFullYear(),d.getMonth(),d.getDate())>n)a--;return a;};
+const currentMonth=()=>new Date().toISOString().slice(0,7);
+const initials=n=>(n||'?').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
+function toast(msg,type='success'){const el=document.createElement('div');el.className=`pill ${type}`;el.textContent=msg;Object.assign(el.style,{position:'fixed',right:'20px',bottom:'20px',zIndex:100,padding:'12px 16px',boxShadow:'0 10px 35px rgba(0,0,0,.2)'});document.body.appendChild(el);setTimeout(()=>el.remove(),3000)}
+function nav(h){location.hash=h;}
+function route(){const raw=(location.hash||'#dashboard').slice(1);const [path,q='']=raw.split('?');return {parts:path.split('/').filter(Boolean),params:new URLSearchParams(q)}}
+function permitted(p){return can(state.user?.role,p)}
+
+function icon(name){const map={dashboard:'◫',jovens:'◎',forms:'▤',oficinas:'◇',metas:'▥',geral:'＋',equipe:'♙',logout:'↪'};return map[name]||'•'}
+function sidebarLink(hash,label,perm,key){if(perm&&!permitted(perm))return '';const active=location.hash.startsWith(`#${hash}`)||(!location.hash&&hash==='dashboard');return `<a class="${active?'active':''}" href="#${hash}"><span>${icon(key)}</span><span>${label}</span></a>`}
+function layout(content){
+  const u=state.user;
+  return `<div class="app-shell"><aside class="sidebar"><div class="brand"><div class="brand-mark">CRJ</div><div><h1>${esc(CONFIG.appName)}</h1><small>${esc(CONFIG.crjName)}</small></div></div><nav class="nav">
+    ${sidebarLink('dashboard','Painel','dashboard','dashboard')}
+    ${sidebarLink('jovens','Jovens','jovens','jovens')}
+    ${sidebarLink('formularios','Formulários','forms_operacionais','forms')}
+    ${sidebarLink('oficinas','Oficinas e presenças','oficinas','oficinas')}
+    ${sidebarLink('metas','Metas e indicadores','metas','metas')}
+    ${sidebarLink('lancamento-geral','Lançamento geral','lancamento_geral','geral')}
+    ${sidebarLink('equipe','Equipe e acessos','equipe','equipe')}
+    <div class="sep"></div><a href="#" data-action="logout"><span>${icon('logout')}</span><span>Sair</span></a>
+  </nav><div class="sidebar-footer"><div class="user-chip"><div class="avatar">${initials(u?.display_name)}</div><div><strong>${esc(u?.display_name)}</strong><br><small>${esc(roleLabel(u?.role))}</small></div></div></div></aside>
+  <main class="main"><header class="topbar"><div><strong>${esc(CONFIG.crjName)}</strong> <span class="pill ${apiMode()==='mock'?'warn':'success'}">${apiMode()==='mock'?'Modo demonstração':'Banco conectado'}</span></div><div class="muted">${new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'})}</div></header><section class="content">${content}</section></main></div>`;
+}
+
+function renderLogin(){
+  app.innerHTML=`<div class="login-page"><div class="login-card"><div class="brand-mark" style="margin-bottom:16px">CRJ</div><h1>CRJ Trajetórias</h1><p>Cadastro, trajetória dos jovens e alimentação automática das metas.</p>
+    ${apiMode()==='live'?`<form id="login-form" class="stack"><div class="field"><label>Nome do colaborador <span class="muted">(usado apenas ao criar a conta)</span></label><input class="input" name="display_name" autocomplete="name"></div><div class="field"><label>E-mail</label><input class="input" name="email" type="email" autocomplete="email" required></div><div class="field"><label>Senha</label><input class="input" name="password" type="password" autocomplete="current-password" minlength="6" required></div><div class="actions"><button class="btn primary" type="submit">Entrar</button><button class="btn secondary" type="button" id="signup-btn">Criar conta</button></div></form><div class="notice" style="margin-top:14px">O primeiro usuário confirmado assume a Coordenação Geral. Depois disso, novas contas entram como <b>acesso pendente</b> até a gestão atribuir equipe e perfil.</div>`:''}
+    ${apiMode()==='mock'?`<div class="notice warn">O Supabase ainda não foi conectado. O protótipo funciona em modo local para validar fluxos e permissões.</div><div class="divider">modo demonstração</div><form id="demo-login" class="stack"><div class="field"><label>Entrar simulando qual função?</label><select name="role">${Object.entries(ROLES).filter(([k])=>k!=='pendente').map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('')}</select></div><button class="btn primary">Entrar no protótipo</button></form>`:''}
+    <div id="login-message"></div>
+  </div></div>`;
+  const msg=(text,type='')=>{const el=document.querySelector('#login-message');if(el)el.innerHTML=`<div class="notice ${type}" style="margin-top:12px">${esc(text)}</div>`};
+  document.querySelector('#login-form')?.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(e.target);try{const user=await signIn(fd.get('email'),fd.get('password'));state.user=user;if(user?.role==='pendente'){renderPending();return;}nav('dashboard');await render();}catch(err){msg(err.message,'danger')}});
+  document.querySelector('#signup-btn')?.addEventListener('click',async()=>{const f=document.querySelector('#login-form'),fd=new FormData(f);if(!fd.get('email')||String(fd.get('password')||'').length<6){msg('Informe e-mail e uma senha com pelo menos 6 caracteres.','danger');return;}try{const result=await signUp(fd.get('email'),fd.get('password'),fd.get('display_name'));if(result.needsConfirmation){msg('Conta criada. Confirme o e-mail e depois entre.','success');}else{state.user=result.user;if(state.user?.role==='pendente'){r
