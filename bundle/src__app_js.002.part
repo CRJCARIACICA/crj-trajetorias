@@ -84,11 +84,39 @@ function auditChangesHtml(a){
   }).join('')}</div>`;
 }
 
+
+function auditTooltipHtml(a){
+  const changes=Object.entries(a.changed_fields||{}).map(([key,change])=>{
+    const before=auditValue(change?.before), after=auditValue(change?.after);
+    return `<div class="audit-tooltip-change"><b>${esc(auditFieldLabel(key))}</b><span>${esc(before)} → ${esc(after)}</span></div>`;
+  }).join('')||'<div class="muted">Sem detalhamento de campos.</div>';
+  return `<span class="audit-hover" tabindex="0">✎ Alteração
+    <span class="audit-tooltip" role="tooltip">
+      <span class="audit-tooltip-title">${esc(auditEntityName(a))}</span>
+      <span class="audit-tooltip-meta">${esc(a.actor_name||'Sistema')} · ${esc(roleLabel(a.actor_role))}</span>
+      <span class="audit-tooltip-meta">${esc(fmtDateTime(a.event_at))}</span>
+      <span class="audit-tooltip-list">${changes}</span>
+    </span>
+  </span>`;
+}
+
 async function pageYouthProfile(id){
   const [{core:y,demographics:d},timeline,forms,workshops,audit]=await Promise.all([
     getYouth(id),listTimeline(id),listFormSubmissions(id),listWorkshops(),listYouthAudit(id)
   ]);
   if(!y)return `<div class="notice danger">Jovem não encontrado.</div>`;
+
+  const auditEdits=audit.filter(a=>a.action==='updated');
+  const journeyItems=[
+    ...timeline.map(e=>({
+      at:new Date(e.event_date).getTime(),
+      html:`<div class="timeline-item"><div class="timeline-date">${fmtDate(e.event_date)}</div><div class="timeline-body"><strong>${esc(e.title)}</strong><span class="muted">${esc(e.details||e.event_type||'')}</span></div></div>`
+    })),
+    ...auditEdits.map(a=>({
+      at:new Date(a.event_at).getTime(),
+      html:`<div class="timeline-item timeline-edit"><div class="timeline-date">${fmtDate(a.event_at)}</div><div class="timeline-body"><strong>${esc(auditEntityName(a))}</strong><div style="margin-top:6px">${auditTooltipHtml(a)}</div></div></div>`
+    }))
+  ].sort((a,b)=>b.at-a.at).map(x=>x.html).join('');
 
   const technicalActions=technicalWriter()?`<div class="card" style="margin-top:16px"><div class="page-head" style="margin-bottom:14px"><div><h3 style="margin:0">Aberturas técnicas</h3><p>Registros vinculados ao jovem conforme os formulários da metodologia.</p></div><span class="pill info">Equipe Técnica</span></div><div class="actions"><button class="btn secondary" data-nav="formulario/acompanhamento/${id}">Acompanhamento</button><button class="btn secondary" data-nav="formulario/pvida/${id}">PVida</button><button class="btn secondary" data-nav="formulario/ptrampo/${id}">PTrampo</button><button class="btn secondary" data-nav="formulario/outras-demandas/${id}">Outras Demandas</button></div></div>`:'';
 
@@ -109,7 +137,7 @@ async function pageYouthProfile(id){
   return `<div class="page-head"><div><h2>${esc(y.preferred_name||y.full_name)}</h2><p>${esc(y.full_name)} · ${age(y.birth_date)} anos · ${esc(y.neighborhood||'Bairro não informado')}</p></div><div class="actions">${permitted('editar_cadastro')?`<button class="btn" data-nav="editar-jovem/${id}">Editar cadastro</button>`:''}${permitted('atendimentos')?'<button class="btn secondary" data-action="new-service">+ Atendimento</button>':''}<button class="btn primary" data-action="new-youth-form">+ Formulário</button></div></div>
   <div class="grid three"><div class="card"><h3>Cadastro</h3><p><strong>Nascimento:</strong> ${fmtDate(y.birth_date)}</p><p><strong>CPF:</strong> ${esc(y.cpf||'—')}</p><p><strong>Bairro:</strong> ${esc(y.neighborhood||'—')}</p><p><strong>Município:</strong> ${esc(y.municipality||'—')}</p><p><strong>Contato:</strong> ${esc(y.phone||'—')}</p></div><div class="card"><h3>Perfil e interesses</h3>${d?`<p><strong>Raça/cor:</strong> ${esc(d.race||'—')}</p><p><strong>Escolaridade:</strong> ${esc(d.education_level||'—')}</p><p><strong>Interesses:</strong> ${esc((d.interests||[]).join(', ')||'—')}</p>`:`<p class="muted">Dados não preenchidos ou sem permissão de visualização.</p>`}</div><div class="card"><h3>Oficinas</h3><div class="stack">${workshops.map(w=>`<button class="btn" data-enroll="${w.id}">Inscrever em ${esc(w.name)}</button>`).join('')||'<span class="muted">Nenhuma oficina cadastrada.</span>'}</div></div></div>
   ${technicalActions}
-  <div class="grid two" style="margin-top:16px"><div class="card"><h3>Trajetória no CRJ</h3><div class="timeline">${timeline.map(e=>`<div class="timeline-item"><div class="timeline-date">${fmtDate(e.event_date)}</div><div class="timeline-body"><strong>${esc(e.title)}</strong><span class="muted">${esc(e.details||e.event_type||'')}</span></div></div>`).join('')||'<div class="empty">Ainda não há eventos.</div>'}</div></div><div class="card"><h3>Documentos metodológicos</h3>${forms.map(f=>{const exportable=isTechnicalForm(f.form_slug);return `<div style="padding:10px 0;border-bottom:1px solid var(--line)"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><strong>${esc(FORM_MAP[f.form_slug]?.title||f.form_slug)}</strong><br><span class="muted">${fmtDate(f.submitted_at)}</span></div>${exportable?`<div class="actions"><button class="btn" data-download-form="${f.id}" data-format="pdf">PDF</button><button class="btn" data-download-form="${f.id}" data-format="docx">DOCX</button></div>`:''}</div></div>`}).join('')||'<div class="empty">Nenhum formulário vinculado.</div>'}</div></div>
+  <div class="grid two" style="margin-top:16px"><div class="card"><h3>Trajetória no CRJ</h3><div class="timeline">${journeyItems||'<div class="empty">Ainda não há eventos.</div>'}</div></div><div class="card"><h3>Documentos metodológicos</h3>${forms.map(f=>{const exportable=isTechnicalForm(f.form_slug);return `<div style="padding:10px 0;border-bottom:1px solid var(--line)"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><strong>${esc(FORM_MAP[f.form_slug]?.title||f.form_slug)}</strong><br><span class="muted">${fmtDate(f.submitted_at)}</span></div>${exportable?`<div class="actions"><button class="btn" data-download-form="${f.id}" data-format="pdf">PDF</button><button class="btn" data-download-form="${f.id}" data-format="docx">DOCX</button></div>`:''}</div></div>`}).join('')||'<div class="empty">Nenhum formulário vinculado.</div>'}</div></div>
   <div class="card" style="margin-top:16px"><div class="page-head" style="margin-bottom:4px"><div><h3 style="margin:0">Histórico de alterações</h3><p>Auditoria do cadastro, documentos e registros da trajetória. Mostra quem alterou, quando e quais itens mudaram.</p></div><span class="pill">${audit.length} registro(s)</span></div>${auditHtml}</div>`;
 }
 
