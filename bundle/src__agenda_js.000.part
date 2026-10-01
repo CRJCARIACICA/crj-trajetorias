@@ -55,18 +55,22 @@ function statusClass(s){return s==='approved'?'success':s==='rejected'||s==='can
 
 async function loadAgendaData(){
   const c=await db(),r=range();
-  const fromIso=`${r.from}T00:00:00-03:00`,toIso=`${nextDay(r.to)}T00:00:00-03:00`;
-  const [profiles,availability,exceptions,events,requests,notifications,youth]=await Promise.all([
+  const today=dateISO(new Date()),slotEnd=dateISO(addDays(new Date(today+'T12:00:00'),14));
+  const fetchFrom=r.from<today?r.from:today;
+  const fetchTo=r.to>slotEnd?r.to:slotEnd;
+  const fromIso=`${fetchFrom}T00:00:00-03:00`,toIso=`${nextDay(fetchTo)}T00:00:00-03:00`;
+  const [profiles,availability,exceptions,events,requests,requestHistory,notifications,youth]=await Promise.all([
     c.from('profiles').select('id,display_name,role,team,active').eq('active',true).order('display_name'),
     c.from('staff_availability').select('*').eq('active',true).order('weekday').order('start_time'),
-    c.from('schedule_exceptions').select('*').gte('exception_date',r.from).lte('exception_date',r.to).order('exception_date'),
+    c.from('schedule_exceptions').select('*').gte('exception_date',fetchFrom).lte('exception_date',fetchTo).order('exception_date'),
     c.from('calendar_events').select('*').lt('starts_at',toIso).gt('ends_at',fromIso).order('starts_at'),
     c.from('appointment_requests').select('*').order('updated_at',{ascending:false}).limit(100),
+    c.from('appointment_request_history').select('*').order('created_at',{ascending:false}).limit(300),
     c.from('staff_notifications').select('*').order('created_at',{ascending:false}).limit(50),
     c.from('young_people').select('id,preferred_name,full_name,neighborhood,status').eq('status','ativo').order('full_name')
   ]);
-  for(const x of [profiles,availability,exceptions,events,requests,notifications,youth]) if(x.error) throw x.error;
-  return {r,profiles:profiles.data||[],availability:availability.data||[],exceptions:exceptions.data||[],events:events.data||[],requests:requests.data||[],notifications:notifications.data||[],youth:youth.data||[]};
+  for(const x of [profiles,availability,exceptions,events,requests,requestHistory,notifications,youth]) if(x.error) throw x.error;
+  return {r,profiles:profiles.data||[],availability:availability.data||[],exceptions:exceptions.data||[],events:events.data||[],requests:requests.data||[],requestHistory:requestHistory.data||[],notifications:notifications.data||[],youth:youth.data||[]};
 }
 
 export async function agendaUnreadCount(){
@@ -148,7 +152,10 @@ function requestsPanel(data,user){
     const target=pm.get(r.target_user_id||r.proposed_assignee_user_id),y=ym.get(r.youth_id);
     const actions=r.status==='pending_technical'&&isTech(user)?`<div class="actions"><button class="btn primary" data-request-approve="${r.id}">Aprovar</button><button class="btn secondary" data-request-counter="${r.id}">Sugerir outro horário</button><button class="btn danger" data-request-reject="${r.id}">Recusar</button></div>`:
       r.status==='pending_requester'&&r.requested_by===user.id?`<div class="actions"><button class="btn primary" data-request-accept="${r.id}">Aceitar sugestão</button><button class="btn secondary" data-requester-counter="${r.id}">Propor outro horário</button><button class="btn danger" data-request-cancel="${r.id}">Cancelar</button></div>`:'';
-    return `<div class="request-card"><div class="request-top"><div><b>${esc(r.title)}</b><span>${esc(y?yname(y):'Sem jovem vinculado')} · ${esc(eventTypeLabel(r.request_type))}</span></div><span class="pill ${statusClass(r.status)}">${esc(STATUS_LABELS[r.status]||r.status)}</span></div><div class="request-time">${fmtDateTime(r.current_start)} → ${fmtTime(r.current_end)}${target?` · ${esc(target.display_name)}`:''}</div>${r.last_justification?`<div class="notice" style="margin:8px 0">${esc(r.last_justification)}</div>`:''}${actions}</div>`;
+    const hist=(data.requestHistory||[]).filter(h=>h.request_id===r.id).slice(0,4);
+    const actionLabels={created:'Solicitado',approved:'Aprovado',rejected:'Recusado',counter_proposed:'Equipe Técnica sugeriu horário',counter_accepted:'Solicitante aceitou',requester_counter:'Solicitante sugeriu horário',cancelled:'Cancelado'};
+    const historyHtml=hist.length?`<details class="request-history"><summary>Histórico da negociação (${hist.length})</summary>${hist.map(h=>`<div><b>${esc(actionLabels[h.action]||h.action)}</b><span>${h.proposed_start?`${fmtDateTime(h.proposed_start)} → ${fmtTime(h.proposed_end)}`:''}${h.justification?` · ${esc(h.justification)}`:''}</span></div>`).join('')}</details>`:'';
+    return `<div class="request-card"><div class="request-top"><div><b>${esc(r.title)}</b><span>${esc(y?yname(y):'Sem jovem vinculado')} · ${esc(eventTypeLabel(r.request_type))}</span></div><span class="pill ${statusClass(r.status)}">${esc(STATUS_LABELS[r.status]||r.status)}</span></div><div class="request-time">${fmtDateTime(r.current_start)} → ${fmtTime(r.current_end)}${target?` · ${esc(target.display_name)}`:''}</div>${r.last_justification?`<div class="notice" style="margin:8px 0">${esc(r.last_justification)}</div>`:''}${historyHtml}${actions}</div>`;
   };
   return `<div class="grid two" style="margin-top:16px">${isTech(user)?`<div class="card"><h3>Caixa da Equipe Técnica</h3><p class="muted">Solicitações aguardando decisão técnica.</p>${techPending.map(card).join('')||'<div class="empty">Nenhuma solicitação pendente.</div>'}</div>`:''}<div class="card"><h3>Minhas solicitações</h3><p class="muted">Acompanhe aprovações, recusas e contrapropostas.</p>${mine.map(card).join('')||'<div class="empty">Você ainda não fez solicitações.</div>'}</div></div>`;
 }
