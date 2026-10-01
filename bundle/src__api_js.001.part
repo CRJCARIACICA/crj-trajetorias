@@ -1,0 +1,69 @@
+tor_code','M2.1_ATENDIMENTOS').gte('event_date',iso).lt('event_date',nextIso),
+    supabase.from('followups').select('youth_id').gte('followup_date',iso).lt('followup_date',nextIso),
+    supabase.from('workshops').select('id',{count:'exact',head:true}).eq('active',true),
+    supabase.from('methodology_form_submissions').select('id',{count:'exact',head:true})
+  ]);
+  return {youthActive:y.count||0,served:new Set((sv.data||[]).filter(x=>x.youth_id).map(x=>x.youth_id)).size,followups:new Set((fo.data||[]).map(x=>x.youth_id)).size,workshops:w.count||0,forms:f.count||0};
+}
+
+export async function listYouth(query=''){
+  if(mode==='mock') return mock().youth.filter(y=>!query || `${y.full_name} ${y.preferred_name} ${y.neighborhood}`.toLowerCase().includes(query.toLowerCase()));
+  let q=supabase.from('young_people').select('*').order('full_name');
+  if(query) q=q.or(`full_name.ilike.%${query}%,preferred_name.ilike.%${query}%,neighborhood.ilike.%${query}%`);
+  const {data,error}=await q; if(error) throw error; return data||[];
+}
+export async function getYouth(id){
+  if(mode==='mock'){
+    const s=mock(); return {core:s.youth.find(x=>x.id===id),demographics:s.demographics.find(x=>x.youth_id===id)||null};
+  }
+  const {data:core,error}=await supabase.from('young_people').select('*').eq('id',id).single(); if(error) throw error;
+  let demographics=null; try{ const r=await supabase.from('youth_demographics').select('*').eq('youth_id',id).maybeSingle(); demographics=r.data; }catch{}
+  return {core,demographics};
+}
+export async function createYouth(payload){
+  const coreKeys=['preferred_name','full_name','birth_date','cpf','reference_person','reference_phone','street','address_extra','neighborhood','municipality','housing','household_size','phone','email','status'];
+  const core=Object.fromEntries(coreKeys.filter(k=>payload[k]!==undefined).map(k=>[k,payload[k]])); core.status=core.status||'ativo';
+  const demoKeys=['race','traditional_community','traditional_community_which','gender_identity','sexual_orientation','disability','disability_which','studies','last_grade','school_name','school_grade','education_level','education_modality','education_modality_other','household_income','interests','heard_from','heard_from_other','preferred_shifts','filled_by'];
+  const demographics=Object.fromEntries(demoKeys.filter(k=>payload[k]!==undefined).map(k=>[k,payload[k]]));
+  if(mode==='mock'){
+    const s=mock(), id=uid('jovem'); s.youth.push({...core,id,created_at:now()}); s.demographics.push({...demographics,youth_id:id});
+    s.forms.push({id:uid('form'),youth_id:id,form_slug:'formulario-inicial',payload,submitted_at:now(),created_by:s.currentUser.id});
+    s.journey.push({id:uid('ev'),youth_id:id,event_type:'cadastro',title:'Cadastro inicial no CRJ',event_date:now(),visibility:'general',created_by:s.currentUser.id}); save(s); return id;
+  }
+  const {data,error}=await supabase.from('young_people').insert(core).select('id').single(); if(error) throw error;
+  if(Object.keys(demographics).length) await supabase.from('youth_demographics').insert({...demographics,youth_id:data.id});
+  await saveFormSubmission('formulario-inicial',data.id,payload); return data.id;
+}
+
+export async function listTimeline(youthId){
+  if(mode==='mock') return mock().journey.filter(x=>x.youth_id===youthId).sort((a,b)=>new Date(b.event_date)-new Date(a.event_date));
+  const {data,error}=await supabase.from('journey_events').select('*').eq('youth_id',youthId).order('event_date',{ascending:false}); if(error) throw error; return data||[];
+}
+export async function addJourney(youthId,eventType,title,details='',visibility='team',eventDate=now()){
+  if(!youthId) return;
+  if(mode==='mock'){ const s=mock(); s.journey.push({id:uid('ev'),youth_id:youthId,event_type:eventType,title,details,visibility,event_date:eventDate,created_by:s.currentUser.id}); save(s); return; }
+  const {error}=await supabase.from('journey_events').insert({youth_id:youthId,event_type:eventType,title,details,visibility,event_date:eventDate}); if(error) throw error;
+}
+
+export async function saveFormSubmission(formSlug,youthId,payload){
+  if(mode==='mock'){
+    const s=mock(); const row={id:uid('form'),form_slug:formSlug,youth_id:youthId||null,payload,submitted_at:now(),created_by:s.currentUser.id}; s.forms.push(row);
+    if(youthId) s.journey.push({id:uid('ev'),youth_id:youthId,event_type:'formulario',title:`Formulário: ${formSlug}`,details:'Registro metodológico preenchido',visibility:['acompanhamento','pvida','ptrampo','outras-demandas'].includes(formSlug)?'technical':'team',event_date:now(),created_by:s.currentUser.id}); save(s); return row;
+  }
+  const {data,error}=await supabase.from('methodology_form_submissions').insert({form_slug:formSlug,youth_id:youthId||null,payload}).select('*').single(); if(error) throw error;
+  if(youthId) await addJourney(youthId,'formulario',`Formulário: ${formSlug}`,'Registro metodológico preenchido',['acompanhamento','pvida','ptrampo','outras-demandas'].includes(formSlug)?'technical':'team');
+  return data;
+}
+export async function listFormSubmissions(youthId){
+  if(mode==='mock') return mock().forms.filter(x=>x.youth_id===youthId).sort((a,b)=>new Date(b.submitted_at)-new Date(a.submitted_at));
+  const {data,error}=await supabase.from('methodology_form_submissions').select('*').eq('youth_id',youthId).order('submitted_at',{ascending:false}); if(error) throw error; return data||[];
+}
+
+export async function createService(row){
+  if(mode==='mock'){
+    const s=mock(), rec={id:uid('at'),...row,date:row.date||new Date().toISOString().slice(0,10),created_by:s.currentUser.id}; s.services.push(rec);
+    s.journey.push({id:uid('ev'),youth_id:row.youth_id,event_type:'atendimento',title:`Atendimento — ${row.category||'geral'}`,details:row.description||'',visibility:'team',event_date:new Date(rec.date).toISOString(),created_by:s.currentUser.id});
+    s.indicatorEvents.push({id:uid('met'),indicator_code:'M2.1_ATENDIMENTOS',youth_id:row.youth_id,event_date:rec.date,quantity:1,source_type:'service_record',source_id:rec.id,source_mode:'identified'}); save(s); return rec;
+  }
+  const {data,error}=await supabase.from('service_records').insert({youth_id:row.youth_id,service_date:row.date,category:row.category,description:row.description,status:row.status||'realizado'}).select('*').single(); if(error) throw error;
+  await addJourney(row.youth_id,'atendimento',`Atendimento — ${row.category||'geral'}`,row.description||'','team',new Date(row.date).toISOString()); r
