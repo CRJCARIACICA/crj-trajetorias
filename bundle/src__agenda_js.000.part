@@ -9,26 +9,40 @@ const TYPE_LABELS={
   acao:'Ação',acao_externa:'Ação externa',demanda:'Demanda',outra:'Outra'
 };
 const STATUS_LABELS={
-  pending_technical:'Aguardando Equipe Técnica',pending_requester:'Aguardando solicitante',
-  approved:'Confirmado',rejected:'Recusado',cancelled:'Cancelado'
+  pending_technical:'Aguardando Equipe Técnica',
+  pending_requester:'Aguardando solicitante',
+  partial:'Parcialmente confirmado',
+  approved:'Confirmado',
+  rejected:'Recusado',
+  cancelled:'Cancelado'
 };
+const TARGET_STATUS_LABELS={
+  pending:'Aguardando resposta',
+  accepted:'Confirmado',
+  rejected:'Recusado',
+  counter_proposed:'Novo horário sugerido',
+  cancelled:'Encerrado'
+};
+const LOCATION_LABELS={crj:'CRJ',visita_domiciliar:'Visita domiciliar',outro:'Outro'};
 const esc=(v='')=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const isTech=u=>TECH_ROLES.includes(u?.role);
 const pad=n=>String(n).padStart(2,'0');
 const dateISO=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
 const monday=d=>{const x=new Date(d);const n=(x.getDay()+6)%7;x.setHours(12,0,0,0);x.setDate(x.getDate()-n);return x};
-const saoIso=s=>s?new Date(`${s}:00-03:00`).toISOString():null;
-const localInput=v=>{
-  if(!v)return '';
+const nextDay=date=>dateISO(addDays(new Date(date+'T12:00:00'),1));
+const toIso=(date,time)=>date&&time?new Date(`${date}T${time}:00-03:00`).toISOString():null;
+const localParts=v=>{
+  if(!v)return {date:'',time:''};
   const p=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(v));
   const o=Object.fromEntries(p.map(x=>[x.type,x.value]));
-  return `${o.year}-${o.month}-${o.day}T${o.hour}:${o.minute}`;
+  return {date:`${o.year}-${o.month}-${o.day}`,time:`${o.hour}:${o.minute}`};
 };
 const fmtDate=v=>new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',weekday:'short',day:'2-digit',month:'2-digit'}).format(new Date(v));
-const fmtDateLong=v=>new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',weekday:'long',day:'2-digit',month:'long'}).format(new Date(v));
+const fmtDateLong=v=>new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',weekday:'long',day:'2-digit',month:'long',year:'numeric'}).format(new Date(v));
 const fmtTime=v=>new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}).format(new Date(v));
 const fmtDateTime=v=>new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(v));
+const locationLabel=(type,details)=>type==='outro'?(details||'Outro'):(LOCATION_LABELS[type]||'—');
 
 async function db(){
   if(supabase)return supabase;
@@ -46,12 +60,17 @@ function range(){
   const to=p.get('to')||dateISO(addDays(new Date(from+'T12:00:00'),6));
   return {from,to,user:p.get('user')||'',type:p.get('type')||'',team:p.get('team')||''};
 }
-function nextDay(date){return dateISO(addDays(new Date(date+'T12:00:00'),1))}
 function yname(y){return y?.preferred_name||y?.full_name||'Jovem vinculado'}
 function profileMap(rows){return new Map(rows.map(x=>[x.id,x]))}
 function youthMap(rows){return new Map(rows.map(x=>[x.id,x]))}
 function eventTypeLabel(v){return TYPE_LABELS[v]||v||'Atividade'}
-function statusClass(s){return s==='approved'?'success':s==='rejected'||s==='cancelled'?'danger':s==='pending_requester'?'warn':'info'}
+function statusClass(s){return s==='approved'||s==='accepted'?'success':s==='rejected'||s==='cancelled'?'danger':s==='pending_requester'||s==='counter_proposed'||s==='partial'?'warn':'info'}
+function eventTechIds(data,eventId){return data.eventTechnicians.filter(x=>x.event_id===eventId).map(x=>x.technician_user_id)}
+function eventTechNames(data,eventId){
+  const pm=profileMap(data.profiles);
+  return eventTechIds(data,eventId).map(id=>pm.get(id)?.display_name).filter(Boolean);
+}
+function targetFor(data,requestId,techId){return data.requestTargets.find(x=>x.request_id===requestId&&x.technician_user_id===techId)}
 
 async function loadAgendaData(){
   const c=await db(),r=range();
@@ -59,18 +78,34 @@ async function loadAgendaData(){
   const fetchFrom=r.from<today?r.from:today;
   const fetchTo=r.to>slotEnd?r.to:slotEnd;
   const fromIso=`${fetchFrom}T00:00:00-03:00`,toIso=`${nextDay(fetchTo)}T00:00:00-03:00`;
-  const [profiles,availability,exceptions,events,requests,requestHistory,notifications,youth]=await Promise.all([
+  const [profiles,availability,exceptions,events,eventTechnicians,eventHistory,requests,requestTargets,requestHistory,notifications,youth]=await Promise.all([
     c.from('profiles').select('id,display_name,role,team,active').eq('active',true).order('display_name'),
     c.from('staff_availability').select('*').eq('active',true).order('weekday').order('start_time'),
     c.from('schedule_exceptions').select('*').gte('exception_date',fetchFrom).lte('exception_date',fetchTo).order('exception_date'),
     c.from('calendar_events').select('*').lt('starts_at',toIso).gt('ends_at',fromIso).order('starts_at'),
+    c.from('calendar_event_technicians').select('*'),
+    c.from('calendar_event_history').select('*').order('created_at',{ascending:false}).limit(400),
     c.from('appointment_requests').select('*').order('updated_at',{ascending:false}).limit(100),
-    c.from('appointment_request_history').select('*').order('created_at',{ascending:false}).limit(300),
-    c.from('staff_notifications').select('*').order('created_at',{ascending:false}).limit(50),
+    c.from('appointment_request_targets').select('*').order('updated_at',{ascending:false}).limit(300),
+    c.from('appointment_request_history').select('*').order('created_at',{ascending:false}).limit(400),
+    c.from('staff_notifications').select('*').order('created_at',{ascending:false}).limit(80),
     c.from('young_people').select('id,preferred_name,full_name,neighborhood,status').eq('status','ativo').order('full_name')
   ]);
-  for(const x of [profiles,availability,exceptions,events,requests,requestHistory,notifications,youth]) if(x.error) throw x.error;
-  return {r,profiles:profiles.data||[],availability:availability.data||[],exceptions:exceptions.data||[],events:events.data||[],requests:requests.data||[],requestHistory:requestHistory.data||[],notifications:notifications.data||[],youth:youth.data||[]};
+  for(const x of [profiles,availability,exceptions,events,eventTechnicians,eventHistory,requests,requestTargets,requestHistory,notifications,youth]) if(x.error) throw x.error;
+  return {
+    r,
+    profiles:profiles.data||[],
+    availability:availability.data||[],
+    exceptions:exceptions.data||[],
+    events:events.data||[],
+    eventTechnicians:eventTechnicians.data||[],
+    eventHistory:eventHistory.data||[],
+    requests:requests.data||[],
+    requestTargets:requestTargets.data||[],
+    requestHistory:requestHistory.data||[],
+    notifications:notifications.data||[],
+    youth:youth.data||[]
+  };
 }
 
 export async function agendaUnreadCount(){
@@ -95,37 +130,40 @@ function openSlots(data,days=14){
       let m=timeMinutes(a.start_time),end=timeMinutes(a.end_time),step=Number(a.slot_minutes||60);
       for(;m+step<=end;m+=step){
         const st=`${ds}T${minTime(m)}`,et=`${ds}T${minTime(m+step)}`;
-        const stIso=saoIso(st),etIso=saoIso(et);
+        const stIso=toIso(ds,minTime(m)),etIso=toIso(ds,minTime(m+step));
         const blocked=data.exceptions.some(x=>x.user_id===a.user_id&&x.exception_date===ds&&x.blocks_schedule&&(x.all_day||overlaps(m,m+step,timeMinutes(x.start_time),timeMinutes(x.end_time))));
-        const busy=data.events.some(e=>e.assignee_user_id===a.user_id&&e.status==='confirmed'&&overlaps(new Date(stIso),new Date(etIso),new Date(e.starts_at),new Date(e.ends_at)));
-        if(!blocked&&!busy&&new Date(stIso)>new Date()) out.push({user:a.user_id,name:person.display_name,start:st,end:et,startIso:stIso,endIso:etIso});
+        const busy=data.events.some(e=>e.status==='confirmed'&&eventTechIds(data,e.id).includes(a.user_id)&&overlaps(new Date(stIso),new Date(etIso),new Date(e.starts_at),new Date(e.ends_at)));
+        if(!blocked&&!busy&&new Date(stIso)>new Date()) out.push({user:a.user_id,name:person.display_name,date:ds,start:minTime(m),end:minTime(m+step),startIso:stIso,endIso:etIso});
       }
     }
   }
-  return out.sort((a,b)=>new Date(a.startIso)-new Date(b.startIso)).slice(0,30);
+  return out.sort((a,b)=>new Date(a.startIso)-new Date(b.startIso)).slice(0,40);
 }
 
 function calendarGrid(data){
   const pm=profileMap(data.profiles),ym=youthMap(data.youth),r=data.r,days=[];
   let d=new Date(r.from+'T12:00:00'),last=new Date(r.to+'T12:00:00');
   while(d<=last){days.push(new Date(d));d=addDays(d,1)}
-  const filteredEvents=data.events.filter(e=>(!r.user||e.assignee_user_id===r.user)&&(!r.type||e.event_type===r.type)&&(!r.team||e.team===r.team));
+  const filteredEvents=data.events.filter(e=>{
+    const techIds=eventTechIds(data,e.id);
+    return (!r.user||techIds.includes(r.user))&&(!r.type||e.event_type===r.type)&&(!r.team||e.team===r.team);
+  });
   const filteredExceptions=data.exceptions.filter(x=>(!r.user||x.user_id===r.user)&&(!r.team||pm.get(x.user_id)?.team===r.team));
   return `<div class="agenda-week">${days.map(day=>{
     const ds=dateISO(day);
-    const ev=filteredEvents.filter(e=>localInput(e.starts_at).slice(0,10)===ds);
+    const ev=filteredEvents.filter(e=>localParts(e.starts_at).date===ds);
     const ex=filteredExceptions.filter(x=>x.exception_date===ds);
     return `<div class="agenda-day"><div class="agenda-day-head"><b>${WEEKDAYS[day.getDay()]}</b><span>${pad(day.getDate())}/${pad(day.getMonth()+1)}</span></div>
       ${[...ex.map(x=>({kind:'exception',x})),...ev.map(x=>({kind:'event',x}))].sort((a,b)=>{
-        const ta=a.kind==='event'?localInput(a.x.starts_at).slice(11):a.x.all_day?'00:00':a.x.start_time;
-        const tb=b.kind==='event'?localInput(b.x.starts_at).slice(11):b.x.all_day?'00:00':b.x.start_time;return ta.localeCompare(tb)
+        const ta=a.kind==='event'?localParts(a.x.starts_at).time:a.x.all_day?'00:00':a.x.start_time;
+        const tb=b.kind==='event'?localParts(b.x.starts_at).time:b.x.all_day?'00:00':b.x.start_time;return ta.localeCompare(tb)
       }).map(item=>{
         if(item.kind==='exception'){
           const x=item.x,p=pm.get(x.user_id);
           return `<div class="agenda-block exception"><small>${x.all_day?'Dia inteiro':`${String(x.start_time).slice(0,5)}–${String(x.end_time).slice(0,5)}`}</small><b>${esc(x.title||({ausencia:'Ausência',acao_externa:'Ação externa',demanda:'Demanda',outra:'Outra'}[x.exception_type]||x.exception_type))}</b><span>${esc(p?.display_name||'')}</span></div>`;
         }
-        const e=item.x,p=pm.get(e.assignee_user_id),y=ym.get(e.youth_id);
-        return `<div class="agenda-block event"><small>${fmtTime(e.starts_at)}–${fmtTime(e.ends_at)}</small><b>${esc(e.title)}</b><span>${esc(eventTypeLabel(e.event_type))} · ${esc(p?.display_name||'Equipe Técnica')}</span>${e.youth_id?`<span>${esc(yname(y))}</span>`:''}</div>`;
+        const e=item.x,y=ym.get(e.youth_id),names=eventTechNames(data,e.id);
+        return `<button class="agenda-block event agenda-event-open" data-open-event="${e.id}"><small>${fmtTime(e.starts_at)}–${fmtTime(e.ends_at)}</small><b>${esc(e.title)}</b><span>${esc(eventTypeLabel(e.event_type))} · ${esc(names.join(' + ')||'Equipe Técnica')}</span><span>${esc(locationLabel(e.location_type,e.location_details))}</span>${e.youth_id?`<span>${esc(yname(y))}</span>`:''}</button>`;
       }).join('')||'<div class="agenda-empty">Livre</div>'}</div>`
   }).join('')}</div>`;
 }
@@ -135,51 +173,78 @@ function availabilityPanel(data,user){
   const mine=data.availability.filter(x=>x.user_id===user.id);
   const ex=data.exceptions.filter(x=>x.user_id===user.id);
   return `<div class="grid two" style="margin-top:16px">
-    <div class="card"><div class="page-head" style="margin-bottom:12px"><div><h3 style="margin:0">Minha disponibilidade fixa</h3><p>Horários semanais recorrentes para atendimento.</p></div><button class="btn primary" data-agenda-action="availability">+ Horário</button></div>
+    <div class="card"><div class="page-head" style="margin-bottom:12px"><div><h3 style="margin:0">Minha disponibilidade fixa</h3><p>Dias e horários semanais recorrentes para atendimento.</p></div><button class="btn primary" data-agenda-action="availability">+ Horário</button></div>
       ${mine.map(a=>`<div class="agenda-row"><div><b>${WEEKDAYS[a.weekday]}</b><span>${String(a.start_time).slice(0,5)}–${String(a.end_time).slice(0,5)} · slots de ${a.slot_minutes} min</span></div><button class="btn ghost" data-delete-availability="${a.id}">Remover</button></div>`).join('')||'<div class="empty">Nenhum horário fixo definido.</div>'}
     </div>
     <div class="card"><div class="page-head" style="margin-bottom:12px"><div><h3 style="margin:0">Excepcionalidades</h3><p>Ausência, ação externa, demanda ou outro bloqueio.</p></div><button class="btn primary" data-agenda-action="exception">+ Exceção</button></div>
-      ${ex.slice(0,12).map(x=>`<div class="agenda-row"><div><b>${esc(x.title||({ausencia:'Ausência',acao_externa:'Ação externa',demanda:'Demanda',outra:'Outra'}[x.exception_type]||x.exception_type))}</b><span>${x.exception_date} · ${x.all_day?'dia inteiro':`${String(x.start_time).slice(0,5)}–${String(x.end_time).slice(0,5)}`}</span></div><button class="btn ghost" data-delete-exception="${x.id}">Remover</button></div>`).join('')||'<div class="empty">Nenhuma excepcionalidade neste período.</div>'}
+      ${ex.slice(0,20).map(x=>`<div class="agenda-row"><div><b>${esc(x.title||({ausencia:'Ausência',acao_externa:'Ação externa',demanda:'Demanda',outra:'Outra'}[x.exception_type]||x.exception_type))}</b><span>${x.exception_date} · ${x.all_day?'dia inteiro':`${String(x.start_time).slice(0,5)}–${String(x.end_time).slice(0,5)}`}</span></div><button class="btn ghost" data-delete-exception="${x.id}">Remover</button></div>`).join('')||'<div class="empty">Nenhuma excepcionalidade neste período.</div>'}
     </div>
   </div>`;
 }
 
+function targetStatusHtml(data,t,user,request){
+  const pm=profileMap(data.profiles),tech=pm.get(t.technician_user_id);
+  const time=t.proposed_start?`${fmtDateTime(t.proposed_start)} → ${fmtTime(t.proposed_end)}`:`${fmtDateTime(request.current_start)} → ${fmtTime(request.current_end)}`;
+  let actions='';
+  if(request.requested_by===user.id){
+    if(t.status==='counter_proposed'){
+      actions=`<div class="actions"><button class="btn primary" data-target-accept="${request.id}" data-tech="${t.technician_user_id}">Aceitar horário</button><button class="btn secondary" data-target-counter="${request.id}" data-tech="${t.technician_user_id}">Propor outro</button><button class="btn danger" data-target-cancel="${request.id}" data-tech="${t.technician_user_id}">Encerrar este técnico</button></div>`;
+    }else if(t.status==='pending'||t.status==='rejected'){
+      actions=`<div class="actions">${t.status==='rejected'?`<button class="btn secondary" data-target-counter="${request.id}" data-tech="${t.technician_user_id}">Propor outro horário</button>`:''}<button class="btn danger" data-target-cancel="${request.id}" data-tech="${t.technician_user_id}">Encerrar este técnico</button></div>`;
+    }else if(t.status==='accepted'&&t.event_id){
+      actions=`<div class="actions"><button class="btn" data-open-event="${t.event_id}">Abrir agendamento</button></div>`;
+    }
+  }else if(t.technician_user_id===user.id&&t.status==='pending'){
+    actions=`<div class="actions"><button class="btn primary" data-tech-approve="${request.id}">Confirmar</button><button class="btn secondary" data-tech-counter="${request.id}">Sugerir outro horário</button><button class="btn danger" data-tech-reject="${request.id}">Recusar</button></div>`;
+  }
+  return `<div class="request-target"><div><b>${esc(tech?.display_name||'Profissional')}</b><span>${esc(roleLabel(tech?.role))}</span><span>${esc(time)}</span>${t.justification?`<span class="request-justification">${esc(t.justification)}</span>`:''}</div><div><span class="pill ${statusClass(t.status)}">${esc(TARGET_STATUS_LABELS[t.status]||t.status)}</span>${actions}</div></div>`;
+}
+
 function requestsPanel(data,user){
-  const pm=profileMap(data.profiles),ym=youthMap(data.youth);
-  const techPending=isTech(user)?data.requests.filter(r=>r.status==='pending_technical'&&(r.target_user_id===null||r.target_user_id===user.id||user.role==='coordenacao_geral')):[];
+  const ym=youthMap(data.youth);
+  const techRequests=isTech(user)
+    ? data.requests.filter(r=>data.requestTargets.some(t=>t.request_id===r.id&&t.technician_user_id===user.id))
+    : [];
   const mine=data.requests.filter(r=>r.requested_by===user.id);
   const card=r=>{
-    const target=pm.get(r.target_user_id||r.proposed_assignee_user_id),y=ym.get(r.youth_id);
-    const actions=r.status==='pending_technical'&&isTech(user)?`<div class="actions"><button class="btn primary" data-request-approve="${r.id}">Aprovar</button><button class="btn secondary" data-request-counter="${r.id}">Sugerir outro horário</button><button class="btn danger" data-request-reject="${r.id}">Recusar</button></div>`:
-      r.status==='pending_requester'&&r.requested_by===user.id?`<div class="actions"><button class="btn primary" data-request-accept="${r.id}">Aceitar sugestão</button><button class="btn secondary" data-requester-counter="${r.id}">Propor outro horário</button><button class="btn danger" data-request-cancel="${r.id}">Cancelar</button></div>`:'';
-    const hist=(data.requestHistory||[]).filter(h=>h.request_id===r.id).slice(0,4);
-    const actionLabels={created:'Solicitado',approved:'Aprovado',rejected:'Recusado',counter_proposed:'Equipe Técnica sugeriu horário',counter_accepted:'Solicitante aceitou',requester_counter:'Solicitante sugeriu horário',cancelled:'Cancelado'};
-    const historyHtml=hist.length?`<details class="request-history"><summary>Histórico da negociação (${hist.length})</summary>${hist.map(h=>`<div><b>${esc(actionLabels[h.action]||h.action)}</b><span>${h.proposed_start?`${fmtDateTime(h.proposed_start)} → ${fmtTime(h.proposed_end)}`:''}${h.justification?` · ${esc(h.justification)}`:''}</span></div>`).join('')}</details>`:'';
-    return `<div class="request-card"><div class="request-top"><div><b>${esc(r.title)}</b><span>${esc(y?yname(y):'Sem jovem vinculado')} · ${esc(eventTypeLabel(r.request_type))}</span></div><span class="pill ${statusClass(r.status)}">${esc(STATUS_LABELS[r.status]||r.status)}</span></div><div class="request-time">${fmtDateTime(r.current_start)} → ${fmtTime(r.current_end)}${target?` · ${esc(target.display_name)}`:''}</div>${r.last_justification?`<div class="notice" style="margin:8px 0">${esc(r.last_justification)}</div>`:''}${historyHtml}${actions}</div>`;
+    const y=ym.get(r.youth_id);
+    const targets=data.requestTargets.filter(t=>t.request_id===r.id);
+    const history=(data.requestHistory||[]).filter(h=>h.request_id===r.id).slice(0,8);
+    const actionLabels={created:'Solicitado',approved:'Confirmado',rejected:'Recusado',counter_proposed:'Técnico sugeriu outro horário',counter_accepted:'Solicitante aceitou',requester_counter:'Solicitante propôs outro horário',cancelled:'Solicitação encerrada'};
+    const historyHtml=history.length?`<details class="request-history"><summary>Histórico da negociação (${history.length})</summary>${history.map(h=>`<div><b>${esc(actionLabels[h.action]||h.action)}</b><span>${h.proposed_start?`${fmtDateTime(h.proposed_start)} → ${fmtTime(h.proposed_end)}`:''}${h.justification?` · ${esc(h.justification)}`:''}</span></div>`).join('')}</details>`:'';
+    return `<div class="request-card"><div class="request-top"><div><b>${esc(r.title)}</b><span>${esc(y?yname(y):'Sem jovem vinculado')} · ${esc(eventTypeLabel(r.request_type))}</span><span>${esc(locationLabel(r.location_type,r.location_details))}</span></div><span class="pill ${statusClass(r.status)}">${esc(STATUS_LABELS[r.status]||r.status)}</span></div><div class="request-time">Solicitado para ${fmtDateTime(r.current_start)} → ${fmtTime(r.current_end)}</div><div class="request-targets">${targets.map(t=>targetStatusHtml(data,t,user,r)).join('')}</div>${historyHtml}</div>`;
   };
-  return `<div class="grid two" style="margin-top:16px">${isTech(user)?`<div class="card"><h3>Caixa da Equipe Técnica</h3><p class="muted">Solicitações aguardando decisão técnica.</p>${techPending.map(card).join('')||'<div class="empty">Nenhuma solicitação pendente.</div>'}</div>`:''}<div class="card"><h3>Minhas solicitações</h3><p class="muted">Acompanhe aprovações, recusas e contrapropostas.</p>${mine.map(card).join('')||'<div class="empty">Você ainda não fez solicitações.</div>'}</div></div>`;
+  return `<div class="grid two" style="margin-top:16px">${isTech(user)?`<div class="card"><h3>Minha caixa técnica</h3><p class="muted">Somente solicitações destinadas a você ou enviadas para toda a Equipe Técnica.</p>${techRequests.map(card).join('')||'<div class="empty">Nenhuma solicitação destinada a você.</div>'}</div>`:''}<div class="card"><h3>Minhas solicitações</h3><p class="muted">Cada profissional técnico responde individualmente. Você pode manter os aceites e encerrar apenas quem não participará.</p>${mine.map(card).join('')||'<div class="empty">Você ainda não fez solicitações.</div>'}</div></div>`;
 }
 
 function notificationsPanel(data){
   const unread=data.notifications.filter(n=>!n.read_at);
-  return `<div class="card" style="margin-top:16px"><div class="page-head" style="margin-bottom:8px"><div><h3 style="margin:0">Notificações</h3><p>${unread.length} não lida(s).</p></div>${unread.length?'<button class="btn" data-mark-notifications>Marcar como lidas</button>':''}</div><div class="notification-list">${data.notifications.slice(0,12).map(n=>`<div class="notification-item ${n.read_at?'':'unread'}"><b>${esc(n.title)}</b><span>${esc(n.message||'')}</span><small>${fmtDateTime(n.created_at)}</small></div>`).join('')||'<div class="empty">Nenhuma notificação.</div>'}</div></div>`;
+  return `<div class="card" style="margin-top:16px"><div class="page-head" style="margin-bottom:8px"><div><h3 style="margin:0">Notificações</h3><p>${unread.length} não lida(s).</p></div>${unread.length?'<button class="btn" data-mark-notifications>Marcar como lidas</button>':''}</div><div class="notification-list">${data.notifications.slice(0,18).map(n=>`<div class="notification-item ${n.read_at?'':'unread'}"><b>${esc(n.title)}</b><span>${esc(n.message||'')}</span><small>${fmtDateTime(n.created_at)}</small></div>`).join('')||'<div class="empty">Nenhuma notificação.</div>'}</div></div>`;
+}
+
+function eventDetailHtml(data,event,user){
+  const ym=youthMap(data.youth),pm=profileMap(data.profiles),y=ym.get(event.youth_id);
+  const techIds=eventTechIds(data,event.id),names=techIds.map(id=>pm.get(id)?.display_name).filter(Boolean);
+  const canEdit=isTech(user)&&(techIds.includes(user.id)||event.organizer_user_id===user.id);
+  const hist=data.eventHistory.filter(h=>h.event_id===event.id);
+  const actionLabel={created:'Criado',edited:'Editado',postponed:'Adiado',cancelled:'Cancelado',technician_added:'Técnico adicionado',technician_removed:'Técnico removido'};
+  return `<div class="stack"><div class="event-detail-grid"><div><small>Dia</small><b>${fmtDateLong(event.starts_at)}</b></div><div><small>Horário reservado</small><b>${fmtTime(event.starts_at)}–${fmtTime(event.ends_at)}</b></div><div><small>Local</small><b>${esc(locationLabel(event.location_type,event.location_details))}</b></div><div><small>Jovem</small><b>${esc(y?yname(y):'Sem jovem vinculado')}</b></div></div><div class="field"><label>Responsável(is)</label><div class="tech-chip-list">${names.map(n=>`<span class="pill info">${esc(n)}</span>`).join('')||'<span class="muted">Equipe Técnica</span>'}</div></div>${event.description?`<div class="notice">${esc(event.description)}</div>`:''}<div><h4>Histórico do agendamento</h4><div class="event-history">${hist.map(h=>`<div><b>${esc(actionLabel[h.action]||h.action)}</b><span>${fmtDateTime(h.created_at)}${h.note?` · ${esc(h.note)}`:''}</span></div>`).join('')||'<div class="muted">Sem alterações registradas.</div>'}</div></div>${canEdit&&event.status==='confirmed'?`<div class="actions"><button class="btn primary" data-edit-event="${event.id}">Editar / adiar</button><button class="btn danger" data-cancel-event="${event.id}">Cancelar agendamento</button></div>`:''}</div>`;
 }
 
 export async function renderAgendaPage(user){
-  const data=await loadAgendaData(),pm=profileMap(data.profiles),slots=openSlots(data),r=data.r;
+  const data=await loadAgendaData(),slots=openSlots(data),r=data.r;
   window.__CRJ_AGENDA_DATA__=data;
   window.__CRJ_AGENDA_SLOTS__=slots;
-  const technical=data.profiles.filter(x=>TECH_ROLES.includes(x.role));
   const teams=[...new Set(data.profiles.map(x=>x.team).filter(Boolean))].sort();
   const prev=dateISO(addDays(new Date(r.from+'T12:00:00'),-7)),next=dateISO(addDays(new Date(r.from+'T12:00:00'),7));
-  return `<div class="page-head"><div><h2>Agenda e Calendário</h2><p>Disponibilidade, solicitações, contrapropostas e compromissos confirmados da Equipe Técnica.</p></div><div class="actions"><button class="btn primary" data-agenda-action="request">+ Solicitar atendimento/ação</button>${isTech(user)?'<button class="btn secondary" data-agenda-action="direct">+ Agendamento direto</button>':''}</div></div>
-  <div class="grid cards"><div class="card kpi"><div class="label">Pendentes da Equipe Técnica</div><div class="value">${data.requests.filter(x=>x.status==='pending_technical').length}</div></div><div class="card kpi"><div class="label">Aguardando solicitante</div><div class="value">${data.requests.filter(x=>x.status==='pending_requester'&&x.requested_by===user.id).length}</div></div><div class="card kpi"><div class="label">Notificações não lidas</div><div class="value">${data.notifications.filter(x=>!x.read_at).length}</div></div><div class="card kpi"><div class="label">Horários livres próximos</div><div class="value">${slots.length}</div></div></div>
+  return `<div class="page-head"><div><h2>Agenda e Calendário</h2><p>Disponibilidade, solicitações individuais por técnico e compromissos confirmados da Equipe Técnica.</p></div><div class="actions"><button class="btn primary" data-agenda-action="request">+ Solicitar atendimento/ação</button>${isTech(user)?'<button class="btn secondary" data-agenda-action="direct">+ Agendamento direto</button>':''}</div></div>
+  <div class="grid cards"><div class="card kpi"><div class="label">Solicitações visíveis</div><div class="value">${data.requests.length}</div></div><div class="card kpi"><div class="label">Aguardando minha decisão</div><div class="value">${isTech(user)?data.requestTargets.filter(x=>x.technician_user_id===user.id&&x.status==='pending').length:data.requestTargets.filter(x=>x.status==='counter_proposed').length}</div></div><div class="card kpi"><div class="label">Notificações não lidas</div><div class="value">${data.notifications.filter(x=>!x.read_at).length}</div></div><div class="card kpi"><div class="label">Horários livres próximos</div><div class="value">${slots.length}</div></div></div>
 
   <form id="agenda-filter" class="card agenda-filter" style="margin-top:16px"><div class="field"><label>Equipe</label><select name="team"><option value="">Todas</option>${teams.map(x=>`<option value="${esc(x)}" ${r.team===x?'selected':''}>${esc(x)}</option>`).join('')}</select></div><div class="field"><label>Colaborador</label><select name="user"><option value="">Todos</option>${data.profiles.map(x=>`<option value="${x.id}" ${r.user===x.id?'selected':''}>${esc(x.display_name)} — ${esc(roleLabel(x.role))}</option>`).join('')}</select></div><div class="field"><label>Tipo</label><select name="type"><option value="">Todos</option>${Object.entries(TYPE_LABELS).map(([k,v])=>`<option value="${k}" ${r.type===k?'selected':''}>${v}</option>`).join('')}</select></div><div class="field"><label>De</label><input class="input" type="date" name="from" value="${r.from}"></div><div class="field"><label>Até</label><input class="input" type="date" name="to" value="${r.to}"></div><div class="actions"><button class="btn primary">Filtrar</button></div></form>
 
-  <div class="card" style="margin-top:16px"><div class="page-head" style="margin-bottom:12px"><div><h3 style="margin:0">Calendário</h3><p>Compromissos confirmados e bloqueios/excepcionalidades.</p></div><div class="actions"><button class="btn" data-week="${prev}">← Semana anterior</button><button class="btn" data-week="${next}">Próxima semana →</button></div></div>${calendarGrid(data)}</div>
+  <div class="card" style="margin-top:16px"><div class="page-head" style="margin-bottom:12px"><div><h3 style="margin:0">Calendário</h3><p>Clique em um compromisso para abrir, consultar histórico, editar, adiar ou cancelar quando permitido.</p></div><div class="actions"><button class="btn" data-week="${prev}">← Semana anterior</button><button class="btn" data-week="${next}">Próxima semana →</button></div></div>${calendarGrid(data)}</div>
 
-  <div class="card" style="margin-top:16px"><h3>Próximos horários disponíveis</h3><p class="muted">Clique em um horário para iniciar uma solicitação já direcionada ao profissional.</p><div class="slot-list">${slots.map(s=>`<button class="slot-chip" data-slot-user="${s.user}" data-slot-start="${s.start}" data-slot-end="${s.end}"><b>${esc(s.name)}</b><span>${fmtDateLong(s.startIso)} · ${s.start.slice(11)}–${s.end.slice(11)}</span></button>`).join('')||'<div class="empty">Nenhum horário livre encontrado nos próximos dias.</div>'}</div></div>
+  <div class="card" style="margin-top:16px"><h3>Próximos horários disponíveis</h3><p class="muted">Clique em um horário para solicitar diretamente ao profissional disponível.</p><div class="slot-list">${slots.map(s=>`<button class="slot-chip" data-slot-user="${s.user}" data-slot-date="${s.date}" data-slot-start="${s.start}" data-slot-end="${s.end}"><b>${esc(s.name)}</b><span>${fmtDateLong(s.startIso)} · ${s.start}–${s.end}</span></button>`).join('')||'<div class="empty">Nenhum horário livre encontrado nos próximos dias.</div>'}</div></div>
 
   ${requestsPanel(data,user)}
   ${availabilityPanel(data,user)}
