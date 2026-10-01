@@ -54,9 +54,13 @@ export const FORMS = [
     description:'Registro de participação. No sistema, a lista pode ser preenchida nominalmente ou como lançamento geral.',
     sections:[{title:'Atividade',fields:[
       {key:'activity',label:'1. Atividade',type:'text',required:true},
-      {key:'location',label:'2. Local de realização da atividade',type:'text'},
+      {key:'officineiro',label:'Oficineiro(a)',type:'text'},
+      {key:'educator_reference',label:'Educador(a) referência',type:'text'},
+      {key:'location',label:'2. Local de realização da atividade',type:'select',options:['Recepção/Quadra','LABPoca','Sala de computadores','Sala de dança','Trampo Coletivo','Outro']},
       {key:'date',label:'3. Data',type:'date',required:true},
-      {key:'participants',label:'Participantes / contatos',type:'textarea',help:'Quando possível, use a lista nominal de presença do módulo Oficinas para vincular cada jovem.'}
+      {key:'start_time',label:'Horário início',type:'time'},
+      {key:'end_time',label:'Horário final',type:'time'},
+      {key:'participants',label:'Participantes / contatos',type:'textarea',help:'Quando possível, gere esta lista diretamente pela aula da oficina para preencher automaticamente os dados nominais.'}
     ]}]
   },
   {
