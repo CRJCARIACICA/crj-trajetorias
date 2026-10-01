@@ -1,0 +1,39 @@
+ão trata a soma como deduplicada</b>. Nos indicadores de “até X”, o valor é limite/referência, e não obrigação de atingir o teto.</div><div class="card" style="margin-top:16px">${inds.map(indicatorRow).join('')}</div>`}
+
+async function pageAggregate(){const defs=await listIndicatorCatalog();return `<div class="page-head"><div><h2>Lançamento geral</h2><p>Use apenas quando não for possível identificar nominalmente os jovens. O dado ficará marcado como agregado.</p></div></div><form id="aggregate-form"><div class="card"><div class="form-grid"><div class="field"><label>Indicador</label><select name="indicator_code" required>${defs.map(i=>`<option value="${i.code}">${esc(i.code)} — ${esc(i.label)}${i.goalStage?` · Etapa ${esc(i.goalStage)}`:''}</option>`).join('')}</select></div><div class="field"><label>Data</label><input class="input" type="date" name="date" value="${new Date().toISOString().slice(0,10)}" required></div><div class="field"><label>Quantidade</label><input class="input" type="number" step="0.01" name="quantity" required></div><div class="field"><label>Referência de evidência</label><input class="input" name="evidence_ref" placeholder="Lista, relatório, pasta, link..."></div><div class="field full"><label>Descrição / justificativa</label><textarea name="description"></textarea></div></div><div class="notice warn" style="margin-top:14px">Um lançamento agregado não cria trajetória individual e, quando coexistir com registros nominais, será marcado como potencialmente não deduplicável.</div><div class="actions" style="margin-top:16px"><button class="btn primary">Salvar lançamento</button></div></div></form>`}
+
+async function pageTeam(){
+  const month=currentMonth();
+  const [team,contrib]=await Promise.all([listTeam(),listTeamContributions(month)]),editable=permitted('validar');
+  const roleOpts=t=>Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${t.role===k?'selected':''}>${esc(v)}</option>`).join('');
+  const summary=new Map();
+  for(const e of contrib){
+    const row=summary.get(e.user_id)||{};
+    row[e.event_type]=(row[e.event_type]||0)+Number(e.quantity||0);
+    summary.set(e.user_id,row);
+  }
+  const metric=(t,k)=>Number(summary.get(t.id)?.[k]||0);
+  const activity=t=>{
+    const bits=[];
+    const defs=[['atendimento','atend.'],['acompanhamento','acomp.'],['formulario','form.'],['aula','h aula'],['presenca','pres.'],['inscricao_oficina','inscr.'],['beneficio','benef.'],['encaminhamento','encam.'],['parceria','parc.'],['lancamento_agregado','agreg.']];
+    for(const [k,l] of defs){const v=metric(t,k);if(v)bits.push(`${v} ${l}`)}
+    return bits.length?bits.join(' · '):'Sem registros no mês';
+  };
+  return `<div class="page-head"><div><h2>Equipe e permissões</h2><p>Gestão de acessos e rastreabilidade do que cada equipe alimentou no mês ${month.split('-').reverse().join('/')}.</p></div></div>${editable?'<div class="notice">Coordenação Geral e Monitoramento podem atribuir perfil, equipe e ativar/desativar acessos. Novas contas aparecem como <b>Acesso pendente</b>.</div>':''}<div class="table-wrap" style="margin-top:14px"><table class="table"><thead><tr><th>Colaborador</th><th>Equipe</th><th>Perfil</th><th>Contribuição do mês</th><th>Status</th></tr></thead><tbody>${team.map(t=>`<tr><td class="name">${esc(t.display_name)}</td><td>${editable?`<input class="input" data-team-name="${t.id}" value="${esc(t.team||'')}">`:esc(t.team||'—')}</td><td>${editable?`<select data-team-role="${t.id}">${roleOpts(t)}</select>`:esc(roleLabel(t.role))}</td><td><small>${esc(activity(t))}</small></td><td>${editable?`<label class="check"><input type="checkbox" data-team-active="${t.id}" ${t.active?'checked':''}><span>${t.active?'Ativo':'Inativo'}</span></label>`:`<span class="pill ${t.active?'success':'danger'}">${t.active?'Ativo':'Inativo'}</span>`}</td></tr>`).join('')}</tbody></table></div>`
+}
+
+function modal(title,body){document.body.insertAdjacentHTML('beforeend',`<div class="modal-backdrop" id="modal"><div class="modal"><div class="modal-head"><h3>${esc(title)}</h3><button class="btn ghost" data-close>✕</button></div>${body}</div></div>`);document.querySelector('[data-close]')?.addEventListener('click',()=>document.querySelector('#modal')?.remove())}
+function youthSelect(rows,name='youth_id'){return `<select name="${name}" required><option value="">Selecione o jovem</option>${rows.map(y=>`<option value="${y.id}">${esc(y.preferred_name||y.full_name)} — ${esc(y.neighborhood||'')}</option>`).join('')}</select>`}
+
+async function bindRoute(){
+  document.querySelectorAll('[data-nav]').forEach(b=>b.addEventListener('click',()=>nav(b.dataset.nav)));
+  document.querySelector('[data-action="logout"]')?.addEventListener('click',async e=>{e.preventDefault();await signOut();state.user=null;renderLogin()});
+  document.querySelector('[data-back]')?.addEventListener('click',()=>history.back());
+  document.querySelector('#search-youth')?.addEventListener('submit',e=>{e.preventDefault();nav(`jovens?q=${encodeURIComponent(new FormData(e.target).get('q'))}`)});
+  document.querySelector('#dynamic-form')?.addEventListener('submit',async e=>{e.preventDefault();const f=e.target,payload=parseForm(f),slug=f.dataset.slug,youthId=f.dataset.youth||null;try{if(f.dataset.new==='1'){const id=await createYouth(payload);toast('Jovem cadastrado');nav(`jovem/${id}`)}else{await saveFormSubmission(slug,youthId,payload);toast('Formulário salvo');if(youthId)nav(`jovem/${youthId}`);else nav('formularios')}}catch(err){toast(err.message,'danger')}});
+  document.querySelector('#aggregate-form')?.addEventListener('submit',async e=>{e.preventDefault();try{await createAggregate(parseForm(e.target));toast('Lançamento geral salvo');nav('metas')}catch(err){toast(err.message,'danger')}});
+  document.querySelectorAll('[data-team-role]').forEach(el=>el.addEventListener('change',async()=>{try{await updateTeamMember(el.dataset.teamRole,{role:el.value});toast('Perfil atualizado');await render();}catch(err){toast(err.message,'danger')}}));
+  document.querySelectorAll('[data-team-name]').forEach(el=>el.addEventListener('change',async()=>{try{await updateTeamMember(el.dataset.teamName,{team:el.value.trim()});toast('Equipe atualizada');}catch(err){toast(err.message,'danger')}}));
+  document.querySelectorAll('[data-team-active]').forEach(el=>el.addEventListener('change',async()=>{try{await updateTeamMember(el.dataset.teamActive,{active:el.checked});toast('Acesso atualizado');await render();}catch(err){toast(err.message,'danger')}}));
+
+
