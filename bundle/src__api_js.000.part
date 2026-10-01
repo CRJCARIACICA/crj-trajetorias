@@ -50,8 +50,20 @@ function mock(){ return load(); }
 
 export async function initApi(){
   if(!CONFIG.mockMode && CONFIG.supabaseUrl && CONFIG.supabasePublishableKey){
-    const mod = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm');
-    supabase = mod.createClient(CONFIG.supabaseUrl, CONFIG.supabasePublishableKey, {auth:{persistSession:true,autoRefreshToken:true}});
+    let mod=null,firstError=null;
+    try{
+      mod=await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm');
+    }catch(err){
+      firstError=err;
+      try{
+        mod=await import('https://esm.sh/@supabase/supabase-js@2.117.2');
+      }catch(secondError){
+        const e=new Error('Não foi possível carregar a conexão com o banco de dados. Verifique sua internet e recarregue a página.');
+        e.cause=secondError||firstError;
+        throw e;
+      }
+    }
+    supabase=mod.createClient(CONFIG.supabaseUrl,CONFIG.supabasePublishableKey,{auth:{persistSession:true,autoRefreshToken:true}});
     mode='live';
   }
   return mode;
