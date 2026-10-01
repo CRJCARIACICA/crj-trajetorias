@@ -48,7 +48,16 @@ async function pageYouthProfile(id){
   <div class="grid two" style="margin-top:16px"><div class="card"><h3>Trajetória no CRJ</h3><div class="timeline">${timeline.map(e=>`<div class="timeline-item"><div class="timeline-date">${fmtDate(e.event_date)}</div><div class="timeline-body"><strong>${esc(e.title)}</strong><span class="muted">${esc(e.details||e.event_type||'')}</span></div></div>`).join('')||'<div class="empty">Ainda não há eventos.</div>'}</div></div><div class="card"><h3>Documentos metodológicos</h3>${forms.map(f=>`<div style="padding:10px 0;border-bottom:1px solid var(--line)"><strong>${esc(FORM_MAP[f.form_slug]?.title||f.form_slug)}</strong><br><span class="muted">${fmtDate(f.submitted_at)}</span></div>`).join('')||'<div class="empty">Nenhum formulário vinculado.</div>'}</div></div>`;
 }
 
-async function pageForms(){return `<div class="page-head"><div><h2>Formulários da Metodologia</h2><p>Os 13 anexos foram convertidos em formulários digitais, preservando o documento original e permitindo cruzamento com o cadastro individual.</p></div></div><div class="grid three">${FORMS.map(f=>`<div class="card"><span class="pill">${esc(f.annex)}</span><h3 style="margin-top:12px">${esc(f.title)}</h3><p class="muted">${esc(f.description)}</p><button class="btn primary" data-nav="formulario/${f.slug}">Preencher</button></div>`).join('')}</div>`}
+async function pageForms(){
+  return `<div class="page-head"><div><h2>Formulários da Metodologia</h2><p>Os 13 anexos foram convertidos em formulários digitais. Documentos individuais devem ser abertos pela trajetória do jovem para reaproveitar o cadastro e manter o vínculo correto.</p></div></div><div class="grid three">${FORMS.map(f=>{
+    const technical=isTechnicalForm(f.slug), allowed=!technical||technicalWriter();
+    let action='';
+    if(f.slug==='formulario-inicial') action='<button class="btn primary" data-nav="novo-jovem">Cadastrar jovem</button>';
+    else if(f.youthRequired) action=allowed?'<button class="btn primary" data-nav="jovens">Abrir pela trajetória</button>':'<button class="btn" disabled>Restrito à Equipe Técnica</button>';
+    else action=`<button class="btn primary" data-nav="formulario/${f.slug}">Preencher</button>`;
+    return `<div class="card"><div class="actions"><span class="pill">${esc(f.annex)}</span>${technical?'<span class="pill info">Equipe Técnica</span>':''}</div><h3 style="margin-top:12px">${esc(f.title)}</h3><p class="muted">${esc(f.description)}</p>${action}</div>`;
+  }).join('')}</div>`;
+}
 
 async function pageWorkshops(){
   const ws=await listWorkshops(); return `<div class="page-head"><div><h2>Oficinas e presenças</h2><p>Cada aula registra carga horária e cada presença, quando nominal, entra na trajetória do jovem.</p></div><div class="actions"><button class="btn primary" data-action="new-workshop">+ Nova oficina</button></div></div><div class="grid three">${ws.map(w=>`<div class="card"><div class="pill success">${w.active?'Ativa':'Inativa'}</div><h3 style="margin-top:12px">${esc(w.name)}</h3><p class="muted">${esc(w.category||'')} · ${esc(w.days||'')}</p><p>${esc(w.start_time||'')} ${w.end_time?`– ${esc(w.end_time)}`:''}</p><div class="actions"><button class="btn" data-action="session" data-workshop="${w.id}">Registrar aula</button><button class="btn secondary" data-action="attendance" data-workshop="${w.id}">Presença</button></div></div>`).join('')||'<div class="card empty">Nenhuma oficina.</div>'}</div>`;
