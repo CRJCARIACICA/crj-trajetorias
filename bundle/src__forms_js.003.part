@@ -1,0 +1,98 @@
+g'},
+      {key:'space',label:'6.2 Espaço onde aconteceu',type:'rating'},
+      {key:'content',label:'6.3 Conteúdo da atividade',type:'rating'},
+      {key:'facilitator_rating',label:'6.4 Responsável que conduziu a atividade',type:'rating'},
+      {key:'learning',label:'6.5 Seu aprendizado',type:'rating'},
+      {key:'notes',label:'7. Dificuldades e outras observações',type:'textarea'}
+    ]}]
+  },
+  {
+    slug:'relatorio-mobilizacao', title:'Relatório de Mobilização dos Jovens', annex:'Anexo 8', sensitivity:'operacional', youthRequired:false,
+    description:'Registro das ações de mobilização e expectativas das juventudes.',
+    sections:[{title:'Mobilização',fields:[
+      {key:'date',label:'1. Data',type:'date'},
+      {key:'time',label:'2. Horário da atividade',type:'text'},
+      {key:'activity',label:'3. Atividade realizada',type:'text'},
+      {key:'location',label:'4. Local de realização da atividade',type:'text'},
+      {key:'participant_count',label:'5. Nº de jovens participantes',type:'number'},
+      {key:'positives',label:'6. Pontos positivos da ação',type:'textarea'},
+      {key:'difficulties',label:'7. Dificuldades encontradas',type:'textarea'},
+      {key:'expectations',label:'8. Expectativas dos jovens sobre o CRJ',type:'textarea'},
+      {key:'responsible',label:'9. Responsáveis pelo registro (nome/cargo)',type:'text'},
+      {key:'notes',label:'10. Observações',type:'textarea'}
+    ]}]
+  },
+  {
+    slug:'emprestimo', title:'Empréstimo de Equipamento e/ou Espaço Físico', annex:'Anexo 9', sensitivity:'operacional', youthRequired:false,
+    description:'Controle de solicitação, finalidade, participantes e devolução.',
+    sections:[
+      {title:'Solicitação',fields:[
+        {key:'request_number',label:'1. Solicitação número',type:'text'},
+        {key:'staff_responsible',label:'2. Profissional responsável pelo agendamento',type:'text'},
+        {key:'requester',label:'3. Solicitante',type:'text'},
+        {key:'cpf',label:'4. CPF',type:'text'},
+        {key:'rg',label:'5. RG',type:'text'},
+        {key:'address',label:'6. Onde você mora?',type:'textarea'},
+        {key:'contact',label:'7. Como podemos entrar em contato?',type:'textarea'},
+        {key:'birth_date',label:'8. Data de nascimento',type:'date'},
+        {key:'loan_type',label:'9. Você deseja agendar',type:'select',options:['Espaço físico','Equipamento']},
+        {key:'item',label:'10. Qual espaço ou equipamento?',type:'text'},
+        {key:'loan_date',label:'11. Data do empréstimo',type:'date'},
+        {key:'loan_time',label:'11. Horário',type:'text'},
+        {key:'return_due',label:'12. Data prevista para devolução',type:'date'},
+        {key:'return_due_time',label:'12. Horário previsto',type:'text'},
+        {key:'activity',label:'13. Qual atividade será realizada?',type:'textarea'},
+        {key:'participants',label:'14. Quantidade de participantes',type:'number'},
+        {key:'description',label:'15. Descrição do espaço/equipamento emprestado',type:'textarea'},
+      ]},
+      {title:'Devolução',fields:[
+        {key:'same_condition',label:'16. O espaço/equipamento encontra-se nas mesmas condições?',type:'select',options:['Sim','Não']},
+        {key:'condition_notes',label:'16.1 Se não, especificar',type:'textarea'},
+        {key:'actual_return',label:'17. Data efetiva de devolução',type:'date'},
+        {key:'return_responsible',label:'18. Responsável pela devolução',type:'text'},
+        {key:'receipt_responsible',label:'19. Profissional responsável pelo recebimento',type:'text'}
+      ]}
+    ]
+  },
+  {
+    slug:'emprestimo-canhoto', title:'Empréstimo — Canhoto', annex:'Anexo 10', sensitivity:'operacional', youthRequired:false,
+    description:'Comprovante simplificado do empréstimo.',
+    sections:[{title:'Canhoto',fields:[
+      {key:'request_number',label:'Solicitação número',type:'text'},
+      {key:'item',label:'Equipamento/sala agendada',type:'text'},
+      {key:'return_date',label:'Data prevista para devolução',type:'date'},
+      {key:'return_time',label:'Horário previsto para devolução',type:'text'},
+      {key:'description',label:'Descrição do espaço/equipamento emprestado',type:'textarea'},
+      {key:'staff_name',label:'Nome e cargo do profissional responsável pelo empréstimo',type:'text'}
+    ]}]
+  },
+  {
+    slug:'cfdh-planejamento', title:'CFDH — Planejamento', annex:'Anexo 11', sensitivity:'operacional', youthRequired:false,
+    description:'Planejamento do Circuito Formativo em Direitos Humanos.',
+    sections:[{title:'Planejamento',fields:[
+      {key:'reference_educator',label:'1. Educador de referência',type:'text'},
+      {key:'class_name',label:'2. Nome da turma',type:'text'},
+      {key:'initial_count',label:'3. Número inicial de participantes',type:'number'},
+      {key:'start_date',label:'4. Data de início',type:'date'},
+      {key:'end_date',label:'5. Data prevista de término',type:'date'},
+      {key:'planning_version',label:'6. Versão do planejamento',type:'select',options:['Primeira versão','Atualização']},
+      {key:'previous_date',label:'6.1 Se primeira versão, informe a data',type:'date'},
+      {key:'updated_date',label:'6.2 Se atualizada, informe a data',type:'date'},
+      {key:'topics',label:'Planejamento dos conteúdos — temas, objetivos, atividades, recursos e carga horária',type:'textarea'},
+      {key:'professional_count',label:'12. Número de profissionais envolvidos (exceto educador social e oficineiro)',type:'number'},
+      {key:'notes',label:'13. Observações',type:'textarea'}
+    ]}]
+  },
+  {
+    slug:'cfdh-avaliacao-jovens', title:'CFDH — Avaliação dos Jovens', annex:'Anexo 12', sensitivity:'operacional', youthRequired:false,
+    description:'Avaliação final do Circuito Formativo pelos jovens.',
+    sections:[{title:'Avaliação',fields:[
+      {key:'reference_team',label:'1. Educador(a) social / Oficineiro(a) de referência',type:'text'},
+      {key:'class_name',label:'2. Nome da turma/oficina',type:'text'},
+      {key:'date',label:'3. Data da avaliação',type:'date'},
+      {key:'participation',label:'4.1 Sua participação',type:'rating'},
+      {key:'group_participation',label:'4.2 Participação da turma',type:'rating'},
+      {key:'content',label:'4.3 Conteúdo debatido',type:'rating'},
+      {key:'activities',label:'4.4 Atividades realizadas',type:'rating'},
+      {key:'educator_participation',label:'4.5 Participação do(a) educador(a) social',type:'rating'},
+      {key:'youth_educator_relation',label:'4.6 Relação entre jovens e educador(a) socia
