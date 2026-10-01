@@ -1,0 +1,100 @@
+import { CONFIG } from './config.js';
+import { roleLabel } from './permissions.js';
+
+const LS = 'crj_trajetorias_demo_v1';
+let supabase = null;
+let mode = 'mock';
+
+function uid(prefix='id'){ return `${prefix}_${crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`; }
+function now(){ return new Date().toISOString(); }
+function monthKey(d=new Date()){ return new Date(d).toISOString().slice(0,7); }
+function durationHours(start,end){ if(!start || !end) return 0; const [sh,sm]=start.split(':').map(Number); const [eh,em]=end.split(':').map(Number); return Math.max(0, ((eh*60+em)-(sh*60+sm))/60); }
+
+function seed(){
+  const young1='jovem_demo_1', young2='jovem_demo_2';
+  const w1='oficina_demo_1';
+  return {
+    currentUser:{id:'demo_user',display_name:'Usuário Demonstração',role:'coordenacao_geral',active:true},
+    team:[
+      {id:'demo_user',display_name:'Coordenação Demonstração',role:'coordenacao_geral',team:'Coordenação',active:true},
+      {id:'ed1',display_name:'Educador Referência',role:'educador',team:'Educadores',active:true},
+      {id:'art1',display_name:'Articulação Local',role:'articulador',team:'Articulação',active:true},
+      {id:'tec1',display_name:'Técnica de Referência',role:'assistente_social',team:'Equipe Técnica',active:true},
+      {id:'ofi1',display_name:'Oficineiro Jiu-jitsu',role:'oficineiro',team:'Oficineiros',active:true},
+    ],
+    youth:[
+      {id:young1,preferred_name:'Ana',full_name:'Ana Souza',birth_date:'2007-04-12',cpf:'',neighborhood:'Castelo Branco',municipality:'Cariacica',status:'ativo',created_at:now(),phone:'(27) 99999-0001'},
+      {id:young2,preferred_name:'Lucas',full_name:'Lucas Santos',birth_date:'2003-08-21',cpf:'',neighborhood:'Nova Rosa da Penha',municipality:'Cariacica',status:'ativo',created_at:now(),phone:'(27) 99999-0002'},
+    ],
+    demographics:[
+      {youth_id:young1,race:'Parda(o)',gender_identity:'Mulher cisgênero',studies:'Sim',education_level:'Ensino médio regular parcial',interests:['Atividades esportivas','Formação para o trabalho']},
+      {youth_id:young2,race:'Preta(o)',gender_identity:'Homem cisgênero',studies:'Não',interests:['Formação para o trabalho']},
+    ],
+    forms:[],
+    journey:[
+      {id:'ev1',youth_id:young1,event_type:'cadastro',title:'Cadastro inicial no CRJ',event_date:new Date().toISOString(),visibility:'general',created_by:'demo_user'},
+      {id:'ev2',youth_id:young1,event_type:'oficina',title:'Inscrição em Jiu-jitsu',event_date:new Date().toISOString(),visibility:'general',created_by:'ed1'},
+      {id:'ev3',youth_id:young2,event_type:'atendimento',title:'Orientação para currículo e PTrampo',event_date:new Date().toISOString(),visibility:'team',created_by:'ed1'},
+    ],
+    services:[{id:'at1',youth_id:young2,date:new Date().toISOString().slice(0,10),category:'Trabalho e renda',description:'Orientação para currículo e encaminhamento ao PTrampo',status:'encaminhado',created_by:'ed1'}],
+    followups:[],
+    plans:[],
+    workshops:[{id:w1,name:'Jiu-jitsu',category:'Esporte',days:'Terças e quintas',start_time:'17:30',end_time:'19:30',active:true,officineiro_user_id:'ofi1',educator_user_id:'ed1'}],
+    enrollments:[{id:'en1',workshop_id:w1,youth_id:young1,status:'ativo',enrolled_at:now()}],
+    sessions:[], attendance:[], aggregate:[], indicatorEvents:[],
+  };
+}
+function load(){ let s=localStorage.getItem(LS); if(!s){ const x=seed(); localStorage.setItem(LS,JSON.stringify(x)); return x; } return JSON.parse(s); }
+function save(state){ localStorage.setItem(LS,JSON.stringify(state)); }
+function mock(){ return load(); }
+
+export async function initApi(){
+  if(!CONFIG.mockMode && CONFIG.supabaseUrl && CONFIG.supabasePublishableKey){
+    const mod = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm');
+    supabase = mod.createClient(CONFIG.supabaseUrl, CONFIG.supabasePublishableKey, {auth:{persistSession:true,autoRefreshToken:true}});
+    mode='live';
+  }
+  return mode;
+}
+export function apiMode(){ return mode; }
+
+export async function signIn(email,password){
+  if(mode==='mock') return mock().currentUser;
+  const {data,error}=await supabase.auth.signInWithPassword({email,password}); if(error) throw error;
+  return getCurrentProfile(data.user?.id);
+}
+export async function signUp(email,password,displayName=''){
+  if(mode==='mock') return {needsConfirmation:false,user:mock().currentUser};
+  const {data,error}=await supabase.auth.signUp({email,password,options:{data:{display_name:displayName||email.split('@')[0]}}});
+  if(error) throw error;
+  if(data.session?.user) return {needsConfirmation:false,user:await getCurrentProfile(data.session.user.id)};
+  return {needsConfirmation:true,user:null};
+}
+export async function demoSignIn(role){ const s=mock(); s.currentUser={...s.currentUser,role,display_name:`Demonstração — ${roleLabel(role)}`}; save(s); return s.currentUser; }
+export async function signOut(){ if(mode==='mock'){return true;} await supabase.auth.signOut(); return true; }
+export async function getSession(){
+  if(mode==='mock') return {user:mock().currentUser};
+  const {data}=await supabase.auth.getSession(); if(!data.session) return null;
+  const profile=await getCurrentProfile(data.session.user.id); return profile ? {user:profile,authUser:data.session.user} : null;
+}
+export async function getCurrentProfile(id){
+  if(mode==='mock') return mock().currentUser;
+  const {data,error}=await supabase.from('profiles').select('*').eq('id',id).single(); if(error) throw error; return data;
+}
+
+export async function dashboardStats(){
+  if(mode==='mock'){
+    const s=mock(), mk=monthKey();
+    const youthActive=s.youth.filter(x=>x.status==='ativo').length;
+    const served=new Set([
+      ...s.services.filter(x=>monthKey(x.date)===mk).map(x=>x.youth_id),
+      ...s.attendance.filter(x=>x.present && monthKey(x.date)===mk).map(x=>x.youth_id)
+    ]).size;
+    const follow=new Set(s.followups.filter(x=>monthKey(x.date)===mk).map(x=>x.youth_id)).size;
+    return {youthActive,served,followups:follow,workshops:s.workshops.filter(x=>x.active).length,forms:s.forms.length};
+  }
+  const first=new Date(); first.setDate(1); const iso=first.toISOString().slice(0,10);
+  const next=new Date(first); next.setMonth(next.getMonth()+1); const nextIso=next.toISOString().slice(0,10);
+  const [y,sv,fo,w,f]=await Promise.all([
+    supabase.from('young_people').select('id',{count:'exact',head:true}).eq('status','ativo'),
+    supabase.from('indicator_events').select('youth_id').eq('indica
