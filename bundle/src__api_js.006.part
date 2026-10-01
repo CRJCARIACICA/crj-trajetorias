@@ -78,3 +78,15 @@ export async function generateWorkshopAttendanceSubmission(sessionId){
   };
   return await saveFormSubmission('lista-presenca-contato',null,payload);
 }
+
+
+export async function publicWorkshopCheckinRoster(token){
+  if(mode==='mock')return [];
+  const {data,error}=await supabase.rpc('workshop_checkin_roster',{p_token:token});
+  if(error)throw error;return data||[];
+}
+export async function publicWorkshopCheckinMark(token,enrollmentId,secret){
+  if(mode==='mock')throw new Error('Lista virtual requer banco conectado.');
+  const {data,error}=await supabase.rpc('workshop_checkin_mark',{p_token:token,p_enrollment_id:enrollmentId,p_secret:secret});
+  if(error)throw error;return data;
+}
