@@ -163,6 +163,7 @@ async function render(){
     else if(p1==='formularios') content=await pageForms();
     else if(p1==='formulario') content=await pageForm(p2,p3||null);
     else if(p1==='oficinas') content=await pageWorkshops();
+    else if(p1==='oficina') content=await pageWorkshopDetailV2(p2);
     else if(p1==='educador') content=await pageEducatorV2();
     else if(p1==='agenda') content=await renderAgendaPage(state.user);
     else if(p1==='metas') content=await pageGoals();
@@ -171,6 +172,7 @@ async function render(){
     else content='<div class="notice danger">Página não encontrada.</div>';
     app.innerHTML=layout(content); await bindRoute();
     if(p1==='educador') await bindEducatorPageV2();
+    if(p1==='oficina') await bindWorkshopDetailV2(p2);
     if(p1==='agenda') await bindAgendaPage(state.user,{toast,rerender:render,nav});
   }catch(err){console.error(err);app.innerHTML=layout(`<div class="notice danger"><strong>Erro ao carregar.</strong><br>${esc(err.message)}</div>`);await bindRoute();}
 }
