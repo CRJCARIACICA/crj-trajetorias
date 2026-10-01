@@ -1,0 +1,33 @@
+l',type:'rating'},
+      {key:'officineiro_participation',label:'4.7 Participação do(a) oficineiro(a)',type:'rating'},
+      {key:'youth_officineiro_relation',label:'4.8 Relação entre jovens e oficineiro(a)',type:'rating'},
+      {key:'space',label:'4.9 Espaço físico',type:'rating'},
+      {key:'materials',label:'4.10 Recursos materiais utilizados',type:'rating'},
+      {key:'liked_most',label:'5. O que você mais gostou no CFDH?',type:'textarea'},
+      {key:'liked_least',label:'6. O que você menos gostou no CFDH?',type:'textarea'},
+      {key:'suggestion',label:'7. Sugestão para melhorar os próximos CFDH',type:'textarea'},
+      {key:'notes',label:'8. Outras observações',type:'textarea'}
+    ]}]
+  },
+  {
+    slug:'cfdh-avaliacao-equipe', title:'CFDH — Avaliação Educadores e Oficineiros', annex:'Anexo 13', sensitivity:'operacional', youthRequired:false,
+    description:'Avaliação final do Circuito Formativo pela equipe de referência.',
+    sections:[{title:'Avaliação',fields:[
+      {key:'reference',label:'1. Educador de referência / Oficineiro de referência',type:'text'},
+      {key:'class_name',label:'2. Nome da turma/oficina',type:'text'},
+      {key:'date',label:'3. Data da avaliação',type:'date'},
+      {key:'participation',label:'4.1 Participação da turma nas atividades',type:'rating'},
+      {key:'engagement',label:'4.2 Envolvimento da turma nas atividades',type:'rating'},
+      {key:'organization',label:'4.3 Organização dos jovens',type:'rating'},
+      {key:'content_fit',label:'4.4 Conteúdo em relação à turma',type:'rating'},
+      {key:'methodology',label:'4.5 Metodologia de trabalho',type:'rating'},
+      {key:'space',label:'4.6 Espaço físico',type:'rating'},
+      {key:'materials',label:'4.7 Recursos materiais utilizados',type:'rating'},
+      {key:'planning_time',label:'4.8 Tempo dedicado ao planejamento',type:'rating'},
+      {key:'notes',label:'5. Outras observações',type:'textarea'}
+    ]}]
+  }
+];
+
+export const FORM_MAP = Object.fromEntries(FORMS.map(f=>[f.slug,f]));
+export const RATING_OPTIONS = ['Péssimo(a)','Ruim','Regular','Bom/Boa','Ótimo(a)'];
