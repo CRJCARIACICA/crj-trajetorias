@@ -325,6 +325,22 @@ function eduGoalInfo(key){
     ]};
     return '<span class="goal-help" tabindex="0">ⓘ<span class="goal-tooltip"><b>'+esc(g.t)+'</b>'+g.i.map(x=>'<span><strong>'+esc(x[0])+'</strong><small>'+esc(x[1])+'</small></span>').join('')+'</span></span>';
   }
+  if(key==='checkin_virtual'){
+    const g={t:'Lista virtual de presença',i:[
+      ['Meta 2 · Etapa 2.1','Registra presença nominal do jovem na atividade.'],
+      ['Meta 6 · Etapa 6.1','Comprova participação e público da oficina.'],
+      ['Meta 9 · Etapa 9.1','Gera dado rastreável para monitoramento.']
+    ],n:'Só confirma presença após nome + final do CPF + senha da inscrição.'};
+    return '<span class="goal-help" tabindex="0">ⓘ<span class="goal-tooltip"><b>'+esc(g.t)+'</b>'+g.i.map(x=>'<span><strong>'+esc(x[0])+'</strong><small>'+esc(x[1])+'</small></span>').join('')+'<em>'+esc(g.n)+'</em></span></span>';
+  }
+  if(key==='lista_oficial'){
+    const g={t:'Lista oficial de presença',i:[
+      ['Meta 2 · Etapa 2.1','É meio de verificação das participações/atendimentos nominais.'],
+      ['Meta 6 · Etapa 6.1','Comprova realização da oficina e seu público.'],
+      ['Meta 9 · Etapa 9.1','Qualifica relatório e monitoramento mensal.']
+    ]};
+    return '<span class="goal-help" tabindex="0">ⓘ<span class="goal-tooltip"><b>'+esc(g.t)+'</b>'+g.i.map(x=>'<span><strong>'+esc(x[0])+'</strong><small>'+esc(x[1])+'</small></span>').join('')+'</span></span>';
+  }
   return goalInfoV2(key);
 }
 function eduTabs(view,month,userId){
