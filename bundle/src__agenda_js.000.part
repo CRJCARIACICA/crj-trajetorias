@@ -222,13 +222,27 @@ function notificationsPanel(data){
   return `<div class="card" style="margin-top:16px"><div class="page-head" style="margin-bottom:8px"><div><h3 style="margin:0">Notificações</h3><p>${unread.length} não lida(s).</p></div>${unread.length?'<button class="btn" data-mark-notifications>Marcar como lidas</button>':''}</div><div class="notification-list">${data.notifications.slice(0,18).map(n=>`<div class="notification-item ${n.read_at?'':'unread'}"><b>${esc(n.title)}</b><span>${esc(n.message||'')}</span><small>${fmtDateTime(n.created_at)}</small></div>`).join('')||'<div class="empty">Nenhuma notificação.</div>'}</div></div>`;
 }
 
+function eventHistoryChangeText(data,changes){
+  const pm=profileMap(data.profiles);
+  const labels={starts_at:'Dia/horário inicial',ends_at:'Horário final',title:'Título',description:'Descrição',location:'Local',technicians:'Responsáveis'};
+  const fmtValue=(key,v)=>{
+    if(v===null||v===undefined||v==='')return 'vazio';
+    if(key==='starts_at'||key==='ends_at')return fmtDateTime(v);
+    if(key==='technicians'&&Array.isArray(v))return v.map(id=>pm.get(id)?.display_name||id).join(', ');
+    if(key==='location'&&typeof v==='object')return locationLabel(v.type,v.details);
+    if(Array.isArray(v))return v.join(', ');
+    return String(v);
+  };
+  return Object.entries(changes||{}).map(([key,ch])=>`<div class="event-history-change"><b>${esc(labels[key]||key)}</b><span>${esc(fmtValue(key,ch?.before))} → ${esc(fmtValue(key,ch?.after))}</span></div>`).join('');
+}
+
 function eventDetailHtml(data,event,user){
   const ym=youthMap(data.youth),pm=profileMap(data.profiles),y=ym.get(event.youth_id);
   const techIds=eventTechIds(data,event.id),names=techIds.map(id=>pm.get(id)?.display_name).filter(Boolean);
   const canEdit=isTech(user)&&(techIds.includes(user.id)||event.organizer_user_id===user.id);
   const hist=data.eventHistory.filter(h=>h.event_id===event.id);
   const actionLabel={created:'Criado',edited:'Editado',postponed:'Adiado',cancelled:'Cancelado',technician_added:'Técnico adicionado',technician_removed:'Técnico removido'};
-  return `<div class="stack"><div class="event-detail-grid"><div><small>Dia</small><b>${fmtDateLong(event.starts_at)}</b></div><div><small>Horário reservado</small><b>${fmtTime(event.starts_at)}–${fmtTime(event.ends_at)}</b></div><div><small>Local</small><b>${esc(locationLabel(event.location_type,event.location_details))}</b></div><div><small>Jovem</small><b>${esc(y?yname(y):'Sem jovem vinculado')}</b></div></div><div class="field"><label>Responsável(is)</label><div class="tech-chip-list">${names.map(n=>`<span class="pill info">${esc(n)}</span>`).join('')||'<span class="muted">Equipe Técnica</span>'}</div></div>${event.description?`<div class="notice">${esc(event.description)}</div>`:''}<div><h4>Histórico do agendamento</h4><div class="event-history">${hist.map(h=>`<div><b>${esc(actionLabel[h.action]||h.action)}</b><span>${fmtDateTime(h.created_at)}${h.note?` · ${esc(h.note)}`:''}</span></div>`).join('')||'<div class="muted">Sem alterações registradas.</div>'}</div></div>${canEdit&&event.status==='confirmed'?`<div class="actions"><button class="btn primary" data-edit-event="${event.id}">Editar / adiar</button><button class="btn danger" data-cancel-event="${event.id}">Cancelar agendamento</button></div>`:''}</div>`;
+  return `<div class="stack"><div class="event-detail-grid"><div><small>Dia</small><b>${fmtDateLong(event.starts_at)}</b></div><div><small>Horário reservado</small><b>${fmtTime(event.starts_at)}–${fmtTime(event.ends_at)}</b></div><div><small>Local</small><b>${esc(locationLabel(event.location_type,event.location_details))}</b></div><div><small>Jovem</small><b>${esc(y?yname(y):'Sem jovem vinculado')}</b></div></div><div class="field"><label>Responsável(is)</label><div class="tech-chip-list">${names.map(n=>`<span class="pill info">${esc(n)}</span>`).join('')||'<span class="muted">Equipe Técnica</span>'}</div></div>${event.description?`<div class="notice">${esc(event.description)}</div>`:''}<div><h4>Histórico do agendamento</h4><div class="event-history">${hist.map(h=>{const actor=pm.get(h.actor_user_id);return `<div><b>${esc(actionLabel[h.action]||h.action)}</b><span>${esc(actor?.display_name||'Sistema')} · ${esc(roleLabel(actor?.role))} · ${fmtDateTime(h.created_at)}${h.note?` · ${esc(h.note)}`:''}</span>${eventHistoryChangeText(data,h.changes)}</div>`}).join('')||'<div class="muted">Sem alterações registradas.</div>'}</div></div>${canEdit&&event.status==='confirmed'?`<div class="actions"><button class="btn primary" data-edit-event="${event.id}">Editar / adiar</button><button class="btn danger" data-cancel-event="${event.id}">Cancelar agendamento</button></div>`:''}</div>`;
 }
 
 export async function renderAgendaPage(user){
