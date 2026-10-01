@@ -30,7 +30,42 @@ async function bindRoute(){
   document.querySelector('[data-action="logout"]')?.addEventListener('click',async e=>{e.preventDefault();await signOut();state.user=null;renderLogin()});
   document.querySelector('[data-back]')?.addEventListener('click',()=>history.back());
   document.querySelector('#search-youth')?.addEventListener('submit',e=>{e.preventDefault();nav(`jovens?q=${encodeURIComponent(new FormData(e.target).get('q'))}`)});
-  document.querySelector('#dynamic-form')?.addEventListener('submit',async e=>{e.preventDefault();const f=e.target,payload=parseForm(f),slug=f.dataset.slug,youthId=f.dataset.youth||null;try{if(f.dataset.new==='1'){const id=await createYouth(payload);toast('Jovem cadastrado');nav(`jovem/${id}`)}else{await saveFormSubmission(slug,youthId,payload);toast('Formulário salvo');if(youthId)nav(`jovem/${youthId}`);else nav('formularios')}}catch(err){toast(err.message,'danger')}});
+  document.querySelector('#dynamic-form')?.addEventListener('submit',async e=>{
+    e.preventDefault();
+    const f=e.target,payload=parseForm(f),slug=f.dataset.slug,youthId=f.dataset.youth||null;
+    try{
+      if(f.dataset.new==='1'){
+        const id=await createYouth(payload);
+        toast('Jovem cadastrado');
+        nav(`jovem/${id}`);
+        return;
+      }
+      if(f.dataset.edit==='1'){
+        await updateYouth(youthId,payload);
+        await saveFormSubmission('formulario-inicial',youthId,payload);
+        toast('Cadastro atualizado e nova versão registrada');
+        nav(`jovem/${youthId}`);
+        return;
+      }
+
+      await saveFormSubmission(slug,youthId,payload);
+
+      if(youthId && isTechnicalForm(slug)){
+        const types={acompanhamento:'Acompanhamento técnico',pvida:'PVida',ptrampo:'PTrampo','outras-demandas':'Outras Demandas'};
+        const summary=payload._technical_note||payload.technical_report||payload.objectives||payload.work_desire||payload.demand||payload.notes||`Registro metodológico: ${FORM_MAP[slug]?.title||slug}`;
+        await createFollowup({
+          youth_id:youthId,
+          date:payload._service_date||new Date().toISOString().slice(0,10),
+          followup_type:types[slug]||slug,
+          duration_hours:Number(payload._duration_hours||1),
+          summary
+        });
+      }
+
+      toast(isTechnicalForm(slug)?'Abertura técnica registrada na trajetória':'Formulário salvo');
+      if(youthId)nav(`jovem/${youthId}`);else nav('formularios');
+    }catch(err){toast(err.message,'danger')}
+  });
   document.querySelector('#aggregate-form')?.addEventListener('submit',async e=>{e.preventDefault();try{await createAggregate(parseForm(e.target));toast('Lançamento geral salvo');nav('metas')}catch(err){toast(err.message,'danger')}});
   document.querySelectorAll('[data-team-role]').forEach(el=>el.addEventListener('change',async()=>{try{await updateTeamMember(el.dataset.teamRole,{role:el.value});toast('Perfil atualizado');await render();}catch(err){toast(err.message,'danger')}}));
   document.querySelectorAll('[data-team-name]').forEach(el=>el.addEventListener('change',async()=>{try{await updateTeamMember(el.dataset.teamName,{team:el.value.trim()});toast('Equipe atualizada');}catch(err){toast(err.message,'danger')}}));
