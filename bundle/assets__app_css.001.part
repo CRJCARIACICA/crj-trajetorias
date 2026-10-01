@@ -127,3 +127,6 @@ d);font-size:12px;margin:16px 0}.divider:before,.divider:after{content:"";height
 .checkin-person:hover{border-color:var(--brand);background:#f2f9f7}
 .checkin-person b{font-size:13px}.checkin-person span{font-size:11px;color:var(--muted)}
 .hidden{display:none!important}
+
+.notification-message{white-space:pre-line}
+.referral-notification{border-left:3px solid var(--brand);padding-left:12px}
