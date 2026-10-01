@@ -278,9 +278,22 @@ export async function bindAgendaPage(user,{toast,rerender}){
   };
   document.querySelectorAll('[data-open-event]').forEach(b=>b.addEventListener('click',()=>openEvent(b.dataset.openEvent)));
 
+  document.querySelectorAll('[data-open-referral-notification]').forEach(btn=>btn.addEventListener('click',async()=>{
+    const n=data.notifications.find(x=>x.id===btn.dataset.openReferralNotification);if(!n)return;
+    modal(n.title,`<div class="stack"><div class="notice"><div style="white-space:pre-line">${esc(n.message||'')}</div></div><div class="muted">Recebido em ${fmtDateTime(n.created_at)}</div>${n.read_at?'<span class="pill success">Ciência já registrada</span>':'<div class="notice warn">Ao abrir este encaminhamento, sua ciência será registrada e devolvida automaticamente ao Educador.</div>'}<button class="btn primary" data-close-referral>Fechar</button></div>`);
+    if(!n.read_at){
+      const now=new Date().toISOString();
+      const {error}=await c.from('staff_notifications').update({read_at:now}).eq('id',n.id).is('read_at',null);
+      if(error){toast(error.message,'danger');return}
+      toast('Ciência registrada e enviada ao Educador');
+    }
+    document.querySelector('[data-close-referral]')?.addEventListener('click',async()=>{document.querySelector('#agenda-modal')?.remove();await rerender()});
+  }));
   document.querySelector('[data-mark-notifications]')?.addEventListener('click',async()=>{
-    const {error}=await c.from('staff_notifications').update({read_at:new Date().toISOString()}).is('read_at',null);
-    if(error)toast(error.message,'danger');else{toast('Notificações marcadas como lidas');await rerender()}
+    const ids=data.notifications.filter(n=>!n.read_at&&n.notification_type!=='educator_referral').map(n=>n.id);
+    if(!ids.length)return;
+    const {error}=await c.from('staff_notifications').update({read_at:new Date().toISOString()}).in('id',ids);
+    if(error)toast(error.message,'danger');else{toast('Outras notificações marcadas como lidas');await rerender()}
   });
 
   const quick=params();
