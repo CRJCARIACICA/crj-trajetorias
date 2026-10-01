@@ -48,7 +48,7 @@ async function bindRoute(){
         return;
       }
 
-      await saveFormSubmission(slug,youthId,payload);
+      const saved=await saveFormSubmission(slug,youthId,payload);
 
       if(youthId && isTechnicalForm(slug)){
         const types={acompanhamento:'Acompanhamento técnico',pvida:'PVida',ptrampo:'PTrampo','outras-demandas':'Outras Demandas'};
@@ -71,8 +71,26 @@ async function bindRoute(){
         });
       }
 
-      toast(isTechnicalForm(slug)?'Abertura técnica registrada na trajetória':'Formulário salvo');
-      if(youthId)nav(`jovem/${youthId}`);else nav('formularios');
+      toast(isTechnicalForm(slug)?'Abertura técnica registrada e evidência gerada':'Formulário salvo e evidência disponível');
+      modal('Documento salvo',`<div class="stack">
+        <div class="notice success">O registro foi salvo. A evidência usa o modelo do anexo oficial da Metodologia dos CRJs, com cabeçalho, campos preenchidos e protocolo eletrônico.</div>
+        <div><strong>${esc(FORM_MAP[slug]?.annex||'Anexo')}</strong><br><span class="muted">${esc(FORM_MAP[slug]?.title||slug)}</span></div>
+        <div class="actions">
+          <button class="btn primary" data-evidence-download="${saved.id}" data-format="pdf">Baixar PDF</button>
+          <button class="btn secondary" data-evidence-download="${saved.id}" data-format="docx">Baixar DOCX</button>
+          <button class="btn" data-evidence-return>Fechar e voltar</button>
+        </div>
+      </div>`);
+      document.querySelectorAll('[data-evidence-download]').forEach(btn=>btn.addEventListener('click',async()=>{
+        const original=btn.textContent;btn.disabled=true;btn.textContent='Gerando...';
+        try{await downloadFormSubmission(btn.dataset.evidenceDownload,btn.dataset.format);toast(`${String(btn.dataset.format).toUpperCase()} gerado`);}
+        catch(err){toast(err.message,'danger');}
+        finally{btn.disabled=false;btn.textContent=original;}
+      }));
+      document.querySelector('[data-evidence-return]')?.addEventListener('click',()=>{
+        document.querySelector('#modal')?.remove();
+        if(youthId)nav(`jovem/${youthId}`);else nav('formularios');
+      });
     }catch(err){toast(err.message,'danger')}
   });
   document.querySelector('#aggregate-form')?.addEventListener('submit',async e=>{e.preventDefault();try{await createAggregate(parseForm(e.target));toast('Lançamento geral salvo');nav('metas')}catch(err){toast(err.message,'danger')}});
