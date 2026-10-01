@@ -219,7 +219,8 @@ function requestsPanel(data,user){
 
 function notificationsPanel(data){
   const unread=data.notifications.filter(n=>!n.read_at);
-  return `<div class="card" style="margin-top:16px"><div class="page-head" style="margin-bottom:8px"><div><h3 style="margin:0">Notificações</h3><p>${unread.length} não lida(s).</p></div>${unread.length?'<button class="btn" data-mark-notifications>Marcar como lidas</button>':''}</div><div class="notification-list">${data.notifications.slice(0,18).map(n=>`<div class="notification-item ${n.read_at?'':'unread'}"><b>${esc(n.title)}</b><span>${esc(n.message||'')}</span><small>${fmtDateTime(n.created_at)}</small></div>`).join('')||'<div class="empty">Nenhuma notificação.</div>'}</div></div>`;
+  const bulkUnread=unread.filter(n=>n.notification_type!=='educator_referral');
+  return `<div class="card" style="margin-top:16px"><div class="page-head" style="margin-bottom:8px"><div><h3 style="margin:0">Notificações</h3><p>${unread.length} não lida(s).</p></div>${bulkUnread.length?'<button class="btn" data-mark-notifications>Marcar outras como lidas</button>':''}</div><div class="notification-list">${data.notifications.slice(0,24).map(n=>`<div class="notification-item ${n.read_at?'':'unread'} ${n.notification_type==='educator_referral'?'referral-notification':''}"><b>${esc(n.title)}</b><span class="notification-message">${esc(n.message||'')}</span><small>${fmtDateTime(n.created_at)}${n.acknowledged_at?' · ciência registrada':''}</small>${n.notification_type==='educator_referral'?`<button class="btn ${n.read_at?'':'primary'}" data-open-referral-notification="${n.id}">${n.read_at?'Reabrir encaminhamento':'Abrir e dar ciência'}</button>`:''}</div>`).join('')||'<div class="empty">Nenhuma notificação.</div>'}</div></div>`;
 }
 
 function eventHistoryChangeText(data,changes){
