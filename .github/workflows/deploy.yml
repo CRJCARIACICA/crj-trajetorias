@@ -23,12 +23,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Preparar site
+        run: |
+          rm -rf _site _pkg
+          mkdir -p _site _pkg
+          unzip -q crj-trajetorias.zip -d _pkg
+          cp -R _pkg/crj-trajetorias/. _site/
+          rm -f _site/crj-trajetorias-deploy.zip _site/crj-trajetorias.zip
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
+
       - name: Upload static site
         uses: actions/upload-pages-artifact@v4
         with:
-          path: '.'
+          path: '_site'
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
