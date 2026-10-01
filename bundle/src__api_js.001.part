@@ -35,6 +35,34 @@ export async function createYouth(payload){
   await saveFormSubmission('formulario-inicial',data.id,payload); return data.id;
 }
 
+
+export async function updateYouth(id,payload){
+  const coreKeys=['preferred_name','full_name','birth_date','cpf','reference_person','reference_phone','street','address_extra','neighborhood','municipality','housing','household_size','phone','email','status'];
+  const demoKeys=['race','traditional_community','traditional_community_which','gender_identity','sexual_orientation','disability','disability_which','studies','last_grade','school_name','school_grade','education_level','education_modality','education_modality_other','household_income','interests','heard_from','heard_from_other','preferred_shifts','filled_by'];
+  const core=Object.fromEntries(coreKeys.filter(k=>payload[k]!==undefined).map(k=>[k,payload[k]]));
+  const demographics=Object.fromEntries(demoKeys.filter(k=>payload[k]!==undefined).map(k=>[k,payload[k]]));
+
+  if(mode==='mock'){
+    const s=mock();
+    const y=s.youth.find(x=>x.id===id); if(!y) throw new Error('Jovem não encontrado');
+    Object.assign(y,core,{updated_at:now()});
+    let d=s.demographics.find(x=>x.youth_id===id);
+    if(d) Object.assign(d,demographics,{updated_at:now()});
+    else s.demographics.push({...demographics,youth_id:id,updated_at:now()});
+    save(s); return id;
+  }
+
+  if(Object.keys(core).length){
+    const {error}=await supabase.from('young_people').update({...core,updated_at:now()}).eq('id',id);
+    if(error) throw error;
+  }
+  if(Object.keys(demographics).length){
+    const {error}=await supabase.from('youth_demographics').upsert({...demographics,youth_id:id,updated_at:now()},{onConflict:'youth_id'});
+    if(error) throw error;
+  }
+  return id;
+}
+
 export async function listTimeline(youthId){
   if(mode==='mock') return mock().journey.filter(x=>x.youth_id===youthId).sort((a,b)=>new Date(b.event_date)-new Date(a.event_date));
   const {data,error}=await supabase.from('journey_events').select('*').eq('youth_id',youthId).order('event_date',{ascending:false}); if(error) throw error; return data||[];
