@@ -180,15 +180,4 @@ async function render(){
 window.addEventListener('hashchange',render);
 await initApi();
 window.__CRJ_RESET_DEMO__=()=>{resetDemo();location.reload()};
-await render();
-setInterval(async()=>{
-  if(!state.user||state.user?.role==='pendente')return;
-  try{
-    const before=Number(state.agendaUnread||0);
-    const next=await agendaUnreadCount();
-    state.agendaUnread=next;
-    const label=document.querySelector('a[href="#agenda"] span:last-child');
-    if(label)label.textContent=next?`Agenda (${next})`:'Agenda';
-    if(next>before)toast(`${next-before} nova(s) notificação(ões) da Agenda`,'info');
-  }catch{}
-},30000);
+
