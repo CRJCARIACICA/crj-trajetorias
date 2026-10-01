@@ -150,6 +150,12 @@ async function bindEducatorPage(){
 }
 
 async function render(){
+  const publicRoute=route();
+  if(publicRoute.parts[0]==='presenca-oficina'&&publicRoute.parts[1]){
+    app.innerHTML=await pagePublicWorkshopCheckinV2(publicRoute.parts[1]);
+    await bindPublicWorkshopCheckinV2(publicRoute.parts[1]);
+    return;
+  }
   if(!state.user){const s=await getSession();state.user=s?.user||null;if(!state.user){renderLogin();return;}}
   if(state.user?.role==='pendente'){renderPending();return;}
   try{state.agendaUnread=await agendaUnreadCount();}catch{state.agendaUnread=0;}
