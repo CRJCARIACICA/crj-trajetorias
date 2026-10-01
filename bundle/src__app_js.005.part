@@ -1,6 +1,154 @@
 ait saveAttendance(p.session_id,b.dataset.workshop,p.date,ids);document.querySelector('#modal').remove();toast('Presenças registradas');render();});}));
 }
 
+
+async function pageEducator(){
+  if(!permitted('educador_area')) return '<div class="notice danger">Seu perfil não possui acesso à Área do Educador.</div>';
+  const month=route().params.get('month')||currentMonth();
+  const team=await listTeam();
+  const educators=team.filter(x=>x.role==='educador'&&x.active);
+  const selectedId=state.user?.role==='educador'?state.user.id:(route().params.get('user')||educators[0]?.id||'');
+  const selected=educators.find(x=>x.id===selectedId)||state.user;
+  const [records,contrib,workshops,youth]=await Promise.all([
+    listEducatorRecords(month,selectedId||null),
+    educatorContributionSummary(month,selectedId||null),
+    listWorkshops(),
+    listYouth('')
+  ]);
+  const sum=type=>contrib.filter(x=>x.event_type===type).reduce((a,x)=>a+Number(x.quantity||0),0);
+  const countTypes=types=>contrib.filter(x=>types.includes(x.event_type)).reduce((a,x)=>a+Number(x.quantity||0),0);
+  const myWorkshops=workshops.filter(w=>w.educator_user_id===selectedId);
+  const unassigned=workshops.filter(w=>!w.educator_user_id&&w.active);
+  const typeLabel=t=>({
+    acolhimento_educativo:'Acolhimento educativo',
+    demanda_identificada:'Demanda identificada',
+    encaminhamento_interno:'Encaminhamento interno',
+    acompanhamento_oficina:'Acompanhamento de oficina',
+    mediacao_convivencia:'Mediação e convivência',
+    cfdh_estrutural:'CFDH estrutural',
+    ficaadica_orientacao:'#FicaAdica / orientação',
+    trampo_labpoca:'Trampo Coletivo / LABPoca',
+    mobilizacao_evento:'Mobilização / evento',
+    mostra:'Mostra',
+    estudo_caso:'Participação em estudo de caso',
+    outra_acao_educativa:'Outra ação educativa'
+  }[t]||t);
+  const recordList=records.map(r=>{
+    const y=youth.find(x=>x.id===r.youth_id),w=workshops.find(x=>x.id===r.workshop_id);
+    return `<div class="agenda-row"><div><b>${esc(typeLabel(r.record_type))}</b><span>${fmtDate(r.record_date)}${y?' · '+esc(y.preferred_name||y.full_name):''}${w?' · '+esc(w.name):''}</span><span>${esc(r.title||r.description||'Sem descrição')}${r.duration_hours>0?' · '+r.duration_hours+'h':''}</span></div>${state.user?.id===r.educator_user_id||state.user?.role==='coordenacao_geral'?'<button class="btn ghost" data-educator-delete="'+r.id+'">Excluir</button>':''}</div>`;
+  }).join('');
+  const roleIntro=`
+    <div class="card">
+      <h3>Atribuições metodológicas do Educador Social</h3>
+      <div class="check-grid educator-duty-grid">
+        <div class="check"><span><b>Referência cotidiana das juventudes</b><small>Acolher, construir vínculo, perceber interesses e demandas.</small></span></div>
+        <div class="check"><span><b>Oficinas</b><small>Acompanhar as turmas e fazer a ponte entre oficineiro, jovens e CRJ.</small></span></div>
+        <div class="check"><span><b>CFDH</b><small>Planejar e executar rodas e ações de Direitos Humanos, estruturais e transversais.</small></span></div>
+        <div class="check"><span><b>Registros</b><small>Registrar participações, atendimentos educativos, atividades e encaminhamentos.</small></span></div>
+        <div class="check"><span><b>Convivência</b><small>Construir combinados e contribuir na mediação de relações e conflitos.</small></span></div>
+        <div class="check"><span><b>Avaliação e relatórios</b><small>Produzir planejamento, registros, avaliações e evidências da execução.</small></span></div>
+        <div class="check"><span><b>Trampo Coletivo / LABPoca</b><small>Acompanhar o uso educativo e as demandas das juventudes.</small></span></div>
+        <div class="check"><span><b>Estudos de caso</b><small>Participar com a Equipe Técnica sem substituir o atendimento especializado.</small></span></div>
+      </div>
+    </div>`;
+  return `<div class="page-head"><div><h2>Área do Educador Social</h2><p>O educador registra o trabalho realizado; o sistema transforma a execução em trajetória, contribuição da equipe e indicadores.</p></div><div class="actions"><button class="btn primary" data-educator-new="acolhimento_educativo">+ Registrar contribuição</button></div></div>
+    <div class="card educator-filter"><div class="form-grid">${state.user?.role==='educador'?'<div class="field"><label>Educador</label><div class="input read-only">'+esc(selected?.display_name||'Meu perfil')+'</div></div>':`<div class="field"><label>Educador</label><select data-educator-filter-user>${educators.map(e=>`<option value="${e.id}" ${e.id===selectedId?'selected':''}>${esc(e.display_name)}</option>`).join('')}</select></div>`}<div class="field"><label>Mês</label><input class="input" type="month" data-educator-filter-month value="${esc(month)}"></div></div></div>
+    <div class="grid cards" style="margin-top:16px">
+      <div class="card kpi"><div class="label">Horas de aula registradas</div><div class="value">${sum('aula').toFixed(1)}</div><div class="meta">oficinas/cursos</div></div>
+      <div class="card kpi"><div class="label">Presenças lançadas</div><div class="value">${sum('presenca')}</div><div class="meta">registros nominais</div></div>
+      <div class="card kpi"><div class="label">CFDH estrutural</div><div class="value">${sum('cfdh_estrutural').toFixed(1)}h</div><div class="meta">entra em M6.1 CFDH</div></div>
+      <div class="card kpi"><div class="label">Registros educativos</div><div class="value">${records.length}</div><div class="meta">ações próprias do educador</div></div>
+    </div>
+    <div class="grid two" style="margin-top:16px">
+      ${roleIntro}
+      <div class="card"><h3>Registrar trabalho realizado</h3><p class="muted">Escolha a natureza do trabalho. A autoria fica vinculada ao usuário logado.</p><div class="educator-action-grid">
+        <button class="btn" data-educator-new="acolhimento_educativo">Acolhimento educativo</button>
+        <button class="btn" data-educator-new="demanda_identificada">Demanda identificada</button>
+        <button class="btn" data-educator-new="encaminhamento_interno">Encaminhamento interno</button>
+        <button class="btn" data-educator-new="acompanhamento_oficina">Acompanhamento de oficina</button>
+        <button class="btn" data-educator-new="mediacao_convivencia">Mediação / convivência</button>
+        <button class="btn" data-educator-new="cfdh_estrutural">CFDH estrutural</button>
+        <button class="btn" data-educator-new="ficaadica_orientacao">#FicaAdica / orientação</button>
+        <button class="btn" data-educator-new="trampo_labpoca">Trampo Coletivo / LABPoca</button>
+        <button class="btn" data-educator-new="mobilizacao_evento">Mobilização / evento</button>
+        <button class="btn" data-educator-new="mostra">Mostra</button>
+        <button class="btn" data-educator-new="estudo_caso">Estudo de caso</button>
+        <button class="btn" data-educator-new="outra_acao_educativa">Outra ação</button>
+      </div><div class="notice" style="margin-top:14px"><b>Limite:</b> PVida, PTrampo, Outras Demandas e Formulário de Acompanhamento continuam exclusivos da Equipe Técnica. O educador identifica e encaminha a demanda.</div></div>
+    </div>
+    <div class="grid two" style="margin-top:16px">
+      <div class="card"><h3>Instrumentais diretamente relacionados ao trabalho educativo</h3><p class="muted">Os documentos abaixo geram evidência oficial em PDF/DOCX.</p><div class="stack">
+        <button class="btn" data-nav="formulario/lista-presenca-contato">Anexo 2 · Lista de Presença e Contato</button>
+        <button class="btn" data-nav="formulario/avaliacao-atividades">Anexo 7 · Avaliação das Atividades</button>
+        <button class="btn" data-nav="formulario/relatorio-mobilizacao">Anexo 8 · Relatório de Mobilização</button>
+        <button class="btn" data-nav="formulario/cfdh-planejamento">Anexo 11 · CFDH Planejamento</button>
+        <button class="btn" data-nav="formulario/cfdh-avaliacao-jovens">Anexo 12 · CFDH Avaliação Jovens</button>
+        <button class="btn" data-nav="formulario/cfdh-avaliacao-equipe">Anexo 13 · CFDH Avaliação Educadores/Oficineiros</button>
+      </div></div>
+      <div class="card"><h3>Oficinas sob referência</h3>${myWorkshops.map(w=>`<div class="agenda-row"><div><b>${esc(w.name)}</b><span>${esc(w.days||'')} · ${esc(String(w.start_time||'').slice(0,5))}${w.end_time?'–'+esc(String(w.end_time).slice(0,5)):''}</span></div><button class="btn" data-nav="oficinas">Abrir</button></div>`).join('')||'<div class="empty">Nenhuma oficina está vinculada formalmente a este educador.</div>'}${unassigned.length&&state.user?.role!=='educador'?'<div class="notice warn" style="margin-top:12px">'+unassigned.length+' oficina(s) ativa(s) ainda sem educador referência.</div>':''}</div>
+    </div>
+    <div class="card" style="margin-top:16px"><div class="page-head" style="margin-bottom:8px"><div><h3 style="margin:0">Contribuições do mês</h3><p>Registros autorais do educador. Aula, presença e formulários também entram no resumo acima pelas tabelas próprias.</p></div><span class="pill">${records.length} registro(s)</span></div>${recordList||'<div class="empty">Nenhuma contribuição educativa registrada neste mês.</div>'}</div>`;
+}
+
+async function bindEducatorPage(){
+  if(!document.querySelector('[data-educator-new]')&&!document.querySelector('[data-educator-filter-month]')) return;
+  const monthEl=document.querySelector('[data-educator-filter-month]');
+  const userEl=document.querySelector('[data-educator-filter-user]');
+  const applyFilter=()=>{
+    const p=new URLSearchParams();
+    if(monthEl?.value)p.set('month',monthEl.value);
+    if(userEl?.value)p.set('user',userEl.value);
+    nav('educador?'+p.toString());
+  };
+  monthEl?.addEventListener('change',applyFilter);
+  userEl?.addEventListener('change',applyFilter);
+  const [youth,workshops]=await Promise.all([listYouth(''),listWorkshops()]);
+  const labels={
+    acolhimento_educativo:'Acolhimento educativo',
+    demanda_identificada:'Demanda identificada',
+    encaminhamento_interno:'Encaminhamento interno',
+    acompanhamento_oficina:'Acompanhamento de oficina',
+    mediacao_convivencia:'Mediação e convivência',
+    cfdh_estrutural:'CFDH estrutural',
+    ficaadica_orientacao:'#FicaAdica / orientação',
+    trampo_labpoca:'Trampo Coletivo / LABPoca',
+    mobilizacao_evento:'Mobilização / evento',
+    mostra:'Mostra',
+    estudo_caso:'Participação em estudo de caso',
+    outra_acao_educativa:'Outra ação educativa'
+  };
+  document.querySelectorAll('[data-educator-new]').forEach(btn=>btn.addEventListener('click',()=>{
+    const initial=btn.dataset.educatorNew||'acolhimento_educativo';
+    modal('Registrar contribuição do Educador',`<form id="educator-record-form" class="stack">
+      <div class="form-grid"><div class="field"><label>Data</label><input class="input" type="date" name="record_date" value="${new Date().toISOString().slice(0,10)}" required></div><div class="field"><label>Tipo de contribuição</label><select name="record_type" required>${Object.entries(labels).map(([k,v])=>`<option value="${k}" ${k===initial?'selected':''}>${esc(v)}</option>`).join('')}</select></div></div>
+      <div class="field"><label>Jovem relacionado <span class="muted">(quando houver)</span></label><select name="youth_id"><option value="">Sem jovem específico / atividade coletiva</option>${youth.map(y=>`<option value="${y.id}">${esc(y.preferred_name||y.full_name)} — ${esc(y.neighborhood||'')}</option>`).join('')}</select></div>
+      <div class="field"><label>Oficina relacionada <span class="muted">(quando houver)</span></label><select name="workshop_id"><option value="">Nenhuma</option>${workshops.filter(w=>w.active).map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>Título / síntese</label><input class="input" name="title" placeholder="Ex.: Roda sobre respeito às mulheres"></div>
+      <div class="field"><label>Descrição objetiva do que foi realizado</label><textarea name="description" required placeholder="Registre ação, contexto e resultado. Não inclua conteúdo clínico ou sigiloso de atendimento técnico."></textarea></div>
+      <div class="form-grid"><div class="field"><label>Duração em horas</label><input class="input" type="number" name="duration_hours" min="0" max="24" step="0.25" value="0"><small>Obrigatório para CFDH estrutural.</small></div><div class="field"><label>Nº de participantes</label><input class="input" type="number" name="participants_count" min="0"></div></div>
+      <div class="field"><label>Encaminhar demanda para</label><select name="referral_target"><option value="">Sem encaminhamento</option><option value="equipe_tecnica">Equipe Técnica</option><option value="coordenacao">Coordenação</option><option value="articulacao">Articulação</option><option value="administrativo">Administrativo</option><option value="oficina">Oficina / oficineiro</option><option value="rede_externa">Rede externa</option></select><small>Ao selecionar Equipe Técnica, os profissionais técnicos recebem notificação.</small></div>
+      <div class="field"><label>Evidência / referência</label><input class="input" name="evidence_ref" placeholder="Ex.: foto registrada, lista de presença, formulário, pasta/arquivo"></div>
+      <div class="field"><label>Observação interna</label><textarea name="notes"></textarea></div>
+      <button class="btn primary">Salvar contribuição</button>
+    </form>`);
+    document.querySelector('#educator-record-form')?.addEventListener('submit',async e=>{
+      e.preventDefault();const p=parseForm(e.target);
+      if(p.record_type==='cfdh_estrutural'&&Number(p.duration_hours||0)<=0){toast('Informe a carga horária do CFDH estrutural.','danger');return;}
+      if(['demanda_identificada','encaminhamento_interno'].includes(p.record_type)&&!p.youth_id){toast('Vincule o jovem para registrar uma demanda ou encaminhamento.','danger');return;}
+      try{
+        await createEducatorRecord(p);
+        document.querySelector('#modal')?.remove();
+        toast(p.referral_target==='equipe_tecnica'?'Registro salvo e Equipe Técnica notificada':'Contribuição do educador registrada');
+        await render();
+      }catch(err){toast(err.message,'danger')}
+    });
+  }));
+  document.querySelectorAll('[data-educator-delete]').forEach(btn=>btn.addEventListener('click',async()=>{
+    if(!confirm('Excluir este registro do educador? A contribuição e o indicador associado serão retirados.'))return;
+    try{await deleteEducatorRecord(btn.dataset.educatorDelete);toast('Registro excluído');await render();}catch(err){toast(err.message,'danger')}
+  }));
+}
+
 async function render(){
   if(!state.user){const s=await getSession();state.user=s?.user||null;if(!state.user){renderLogin();return;}}
   if(state.user?.role==='pendente'){renderPending();return;}
@@ -15,12 +163,14 @@ async function render(){
     else if(p1==='formularios') content=await pageForms();
     else if(p1==='formulario') content=await pageForm(p2,p3||null);
     else if(p1==='oficinas') content=await pageWorkshops();
+    else if(p1==='educador') content=await pageEducator();
     else if(p1==='agenda') content=await renderAgendaPage(state.user);
     else if(p1==='metas') content=await pageGoals();
     else if(p1==='lancamento-geral') content=await pageAggregate();
     else if(p1==='equipe') content=await pageTeam();
     else content='<div class="notice danger">Página não encontrada.</div>';
     app.innerHTML=layout(content); await bindRoute();
+    if(p1==='educador') await bindEducatorPage();
     if(p1==='agenda') await bindAgendaPage(state.user,{toast,rerender:render,nav});
   }catch(err){console.error(err);app.innerHTML=layout(`<div class="notice danger"><strong>Erro ao carregar.</strong><br>${esc(err.message)}</div>`);await bindRoute();}
 }
