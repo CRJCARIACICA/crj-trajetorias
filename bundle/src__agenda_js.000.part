@@ -1,0 +1,186 @@
+import { CONFIG } from './config.js';
+import { roleLabel } from './permissions.js';
+
+let supabase;
+const TECH_ROLES=['assistente_social','psicologo','terapeuta_ocupacional','coordenacao_geral'];
+const WEEKDAYS=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+const TYPE_LABELS={
+  atendimento:'Atendimento',reuniao:'Reunião',estudo_caso:'Estudo de caso',
+  acao:'Ação',acao_externa:'Ação externa',demanda:'Demanda',outra:'Outra'
+};
+const STATUS_LABELS={
+  pending_technical:'Aguardando Equipe Técnica',pending_requester:'Aguardando solicitante',
+  approved:'Confirmado',rejected:'Recusado',cancelled:'Cancelado'
+};
+const esc=(v='')=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+const isTech=u=>TECH_ROLES.includes(u?.role);
+const pad=n=>String(n).padStart(2,'0');
+const dateISO=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
+const monday=d=>{const x=new Date(d);const n=(x.getDay()+6)%7;x.setHours(12,0,0,0);x.setDate(x.getDate()-n);return x};
+const saoIso=s=>s?new Date(`${s}:00-03:00`).toISOString():null;
+const localInput=v=>{
+  if(!v)return '';
+  const p=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(v));
+  const o=Object.fromEntries(p.map(x=>[x.type,x.value]));
+  return `${o.year}-${o.month}-${o.day}T${o.hour}:${o.minute}`;
+};
+const fmtDate=v=>new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',weekday:'short',day:'2-digit',month:'2-digit'}).format(new Date(v));
+const fmtDateLong=v=>new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',weekday:'long',day:'2-digit',month:'long'}).format(new Date(v));
+const fmtTime=v=>new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}).format(new Date(v));
+const fmtDateTime=v=>new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(v));
+
+async function db(){
+  if(supabase)return supabase;
+  const mod=await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm');
+  supabase=mod.createClient(CONFIG.supabaseUrl,CONFIG.supabasePublishableKey,{auth:{persistSession:true,autoRefreshToken:true}});
+  return supabase;
+}
+function params(){
+  const raw=(location.hash.split('?')[1]||'');
+  return new URLSearchParams(raw);
+}
+function range(){
+  const p=params(),base=monday(new Date());
+  const from=p.get('from')||dateISO(base);
+  const to=p.get('to')||dateISO(addDays(new Date(from+'T12:00:00'),6));
+  return {from,to,user:p.get('user')||'',type:p.get('type')||'',team:p.get('team')||''};
+}
+function nextDay(date){return dateISO(addDays(new Date(date+'T12:00:00'),1))}
+function yname(y){return y?.preferred_name||y?.full_name||'Jovem vinculado'}
+function profileMap(rows){return new Map(rows.map(x=>[x.id,x]))}
+function youthMap(rows){return new Map(rows.map(x=>[x.id,x]))}
+function eventTypeLabel(v){return TYPE_LABELS[v]||v||'Atividade'}
+function statusClass(s){return s==='approved'?'success':s==='rejected'||s==='cancelled'?'danger':s==='pending_requester'?'warn':'info'}
+
+async function loadAgendaData(){
+  const c=await db(),r=range();
+  const fromIso=`${r.from}T00:00:00-03:00`,toIso=`${nextDay(r.to)}T00:00:00-03:00`;
+  const [profiles,availability,exceptions,events,requests,notifications,youth]=await Promise.all([
+    c.from('profiles').select('id,display_name,role,team,active').eq('active',true).order('display_name'),
+    c.from('staff_availability').select('*').eq('active',true).order('weekday').order('start_time'),
+    c.from('schedule_exceptions').select('*').gte('exception_date',r.from).lte('exception_date',r.to).order('exception_date'),
+    c.from('calendar_events').select('*').lt('starts_at',toIso).gt('ends_at',fromIso).order('starts_at'),
+    c.from('appointment_requests').select('*').order('updated_at',{ascending:false}).limit(100),
+    c.from('staff_notifications').select('*').order('created_at',{ascending:false}).limit(50),
+    c.from('young_people').select('id,preferred_name,full_name,neighborhood,status').eq('status','ativo').order('full_name')
+  ]);
+  for(const x of [profiles,availability,exceptions,events,requests,notifications,youth]) if(x.error) throw x.error;
+  return {r,profiles:profiles.data||[],availability:availability.data||[],exceptions:exceptions.data||[],events:events.data||[],requests:requests.data||[],notifications:notifications.data||[],youth:youth.data||[]};
+}
+
+export async function agendaUnreadCount(){
+  try{
+    const c=await db();
+    const {count,error}=await c.from('staff_notifications').select('id',{count:'exact',head:true}).is('read_at',null);
+    if(error)throw error;
+    return count||0;
+  }catch{return 0}
+}
+
+function overlaps(aStart,aEnd,bStart,bEnd){return aStart<bEnd&&aEnd>bStart}
+function timeMinutes(t){const [h,m]=String(t).slice(0,5).split(':').map(Number);return h*60+m}
+function minTime(n){return `${pad(Math.floor(n/60))}:${pad(n%60)}`}
+function openSlots(data,days=14){
+  const out=[],pm=profileMap(data.profiles),start=new Date();
+  start.setHours(12,0,0,0);
+  for(let di=0;di<days;di++){
+    const d=addDays(start,di),ds=dateISO(d),dow=d.getDay();
+    for(const a of data.availability.filter(x=>x.weekday===dow&&x.valid_from<=ds&&(!x.valid_until||x.valid_until>=ds))){
+      const person=pm.get(a.user_id);if(!person)continue;
+      let m=timeMinutes(a.start_time),end=timeMinutes(a.end_time),step=Number(a.slot_minutes||60);
+      for(;m+step<=end;m+=step){
+        const st=`${ds}T${minTime(m)}`,et=`${ds}T${minTime(m+step)}`;
+        const stIso=saoIso(st),etIso=saoIso(et);
+        const blocked=data.exceptions.some(x=>x.user_id===a.user_id&&x.exception_date===ds&&x.blocks_schedule&&(x.all_day||overlaps(m,m+step,timeMinutes(x.start_time),timeMinutes(x.end_time))));
+        const busy=data.events.some(e=>e.assignee_user_id===a.user_id&&e.status==='confirmed'&&overlaps(new Date(stIso),new Date(etIso),new Date(e.starts_at),new Date(e.ends_at)));
+        if(!blocked&&!busy&&new Date(stIso)>new Date()) out.push({user:a.user_id,name:person.display_name,start:st,end:et,startIso:stIso,endIso:etIso});
+      }
+    }
+  }
+  return out.sort((a,b)=>new Date(a.startIso)-new Date(b.startIso)).slice(0,30);
+}
+
+function calendarGrid(data){
+  const pm=profileMap(data.profiles),ym=youthMap(data.youth),r=data.r,days=[];
+  let d=new Date(r.from+'T12:00:00'),last=new Date(r.to+'T12:00:00');
+  while(d<=last){days.push(new Date(d));d=addDays(d,1)}
+  const filteredEvents=data.events.filter(e=>(!r.user||e.assignee_user_id===r.user)&&(!r.type||e.event_type===r.type)&&(!r.team||e.team===r.team));
+  const filteredExceptions=data.exceptions.filter(x=>(!r.user||x.user_id===r.user)&&(!r.team||pm.get(x.user_id)?.team===r.team));
+  return `<div class="agenda-week">${days.map(day=>{
+    const ds=dateISO(day);
+    const ev=filteredEvents.filter(e=>localInput(e.starts_at).slice(0,10)===ds);
+    const ex=filteredExceptions.filter(x=>x.exception_date===ds);
+    return `<div class="agenda-day"><div class="agenda-day-head"><b>${WEEKDAYS[day.getDay()]}</b><span>${pad(day.getDate())}/${pad(day.getMonth()+1)}</span></div>
+      ${[...ex.map(x=>({kind:'exception',x})),...ev.map(x=>({kind:'event',x}))].sort((a,b)=>{
+        const ta=a.kind==='event'?localInput(a.x.starts_at).slice(11):a.x.all_day?'00:00':a.x.start_time;
+        const tb=b.kind==='event'?localInput(b.x.starts_at).slice(11):b.x.all_day?'00:00':b.x.start_time;return ta.localeCompare(tb)
+      }).map(item=>{
+        if(item.kind==='exception'){
+          const x=item.x,p=pm.get(x.user_id);
+          return `<div class="agenda-block exception"><small>${x.all_day?'Dia inteiro':`${String(x.start_time).slice(0,5)}–${String(x.end_time).slice(0,5)}`}</small><b>${esc(x.title||({ausencia:'Ausência',acao_externa:'Ação externa',demanda:'Demanda',outra:'Outra'}[x.exception_type]||x.exception_type))}</b><span>${esc(p?.display_name||'')}</span></div>`;
+        }
+        const e=item.x,p=pm.get(e.assignee_user_id),y=ym.get(e.youth_id);
+        return `<div class="agenda-block event"><small>${fmtTime(e.starts_at)}–${fmtTime(e.ends_at)}</small><b>${esc(e.title)}</b><span>${esc(eventTypeLabel(e.event_type))} · ${esc(p?.display_name||'Equipe Técnica')}</span>${e.youth_id?`<span>${esc(yname(y))}</span>`:''}</div>`;
+      }).join('')||'<div class="agenda-empty">Livre</div>'}</div>`
+  }).join('')}</div>`;
+}
+
+function availabilityPanel(data,user){
+  if(!isTech(user))return '';
+  const mine=data.availability.filter(x=>x.user_id===user.id);
+  const ex=data.exceptions.filter(x=>x.user_id===user.id);
+  return `<div class="grid two" style="margin-top:16px">
+    <div class="card"><div class="page-head" style="margin-bottom:12px"><div><h3 style="margin:0">Minha disponibilidade fixa</h3><p>Horários semanais recorrentes para atendimento.</p></div><button class="btn primary" data-agenda-action="availability">+ Horário</button></div>
+      ${mine.map(a=>`<div class="agenda-row"><div><b>${WEEKDAYS[a.weekday]}</b><span>${String(a.start_time).slice(0,5)}–${String(a.end_time).slice(0,5)} · slots de ${a.slot_minutes} min</span></div><button class="btn ghost" data-delete-availability="${a.id}">Remover</button></div>`).join('')||'<div class="empty">Nenhum horário fixo definido.</div>'}
+    </div>
+    <div class="card"><div class="page-head" style="margin-bottom:12px"><div><h3 style="margin:0">Excepcionalidades</h3><p>Ausência, ação externa, demanda ou outro bloqueio.</p></div><button class="btn primary" data-agenda-action="exception">+ Exceção</button></div>
+      ${ex.slice(0,12).map(x=>`<div class="agenda-row"><div><b>${esc(x.title||({ausencia:'Ausência',acao_externa:'Ação externa',demanda:'Demanda',outra:'Outra'}[x.exception_type]||x.exception_type))}</b><span>${x.exception_date} · ${x.all_day?'dia inteiro':`${String(x.start_time).slice(0,5)}–${String(x.end_time).slice(0,5)}`}</span></div><button class="btn ghost" data-delete-exception="${x.id}">Remover</button></div>`).join('')||'<div class="empty">Nenhuma excepcionalidade neste período.</div>'}
+    </div>
+  </div>`;
+}
+
+function requestsPanel(data,user){
+  const pm=profileMap(data.profiles),ym=youthMap(data.youth);
+  const techPending=isTech(user)?data.requests.filter(r=>r.status==='pending_technical'&&(r.target_user_id===null||r.target_user_id===user.id||user.role==='coordenacao_geral')):[];
+  const mine=data.requests.filter(r=>r.requested_by===user.id);
+  const card=r=>{
+    const target=pm.get(r.target_user_id||r.proposed_assignee_user_id),y=ym.get(r.youth_id);
+    const actions=r.status==='pending_technical'&&isTech(user)?`<div class="actions"><button class="btn primary" data-request-approve="${r.id}">Aprovar</button><button class="btn secondary" data-request-counter="${r.id}">Sugerir outro horário</button><button class="btn danger" data-request-reject="${r.id}">Recusar</button></div>`:
+      r.status==='pending_requester'&&r.requested_by===user.id?`<div class="actions"><button class="btn primary" data-request-accept="${r.id}">Aceitar sugestão</button><button class="btn secondary" data-requester-counter="${r.id}">Propor outro horário</button><button class="btn danger" data-request-cancel="${r.id}">Cancelar</button></div>`:'';
+    return `<div class="request-card"><div class="request-top"><div><b>${esc(r.title)}</b><span>${esc(y?yname(y):'Sem jovem vinculado')} · ${esc(eventTypeLabel(r.request_type))}</span></div><span class="pill ${statusClass(r.status)}">${esc(STATUS_LABELS[r.status]||r.status)}</span></div><div class="request-time">${fmtDateTime(r.current_start)} → ${fmtTime(r.current_end)}${target?` · ${esc(target.display_name)}`:''}</div>${r.last_justification?`<div class="notice" style="margin:8px 0">${esc(r.last_justification)}</div>`:''}${actions}</div>`;
+  };
+  return `<div class="grid two" style="margin-top:16px">${isTech(user)?`<div class="card"><h3>Caixa da Equipe Técnica</h3><p class="muted">Solicitações aguardando decisão técnica.</p>${techPending.map(card).join('')||'<div class="empty">Nenhuma solicitação pendente.</div>'}</div>`:''}<div class="card"><h3>Minhas solicitações</h3><p class="muted">Acompanhe aprovações, recusas e contrapropostas.</p>${mine.map(card).join('')||'<div class="empty">Você ainda não fez solicitações.</div>'}</div></div>`;
+}
+
+function notificationsPanel(data){
+  const unread=data.notifications.filter(n=>!n.read_at);
+  return `<div class="card" style="margin-top:16px"><div class="page-head" style="margin-bottom:8px"><div><h3 style="margin:0">Notificações</h3><p>${unread.length} não lida(s).</p></div>${unread.length?'<button class="btn" data-mark-notifications>Marcar como lidas</button>':''}</div><div class="notification-list">${data.notifications.slice(0,12).map(n=>`<div class="notification-item ${n.read_at?'':'unread'}"><b>${esc(n.title)}</b><span>${esc(n.message||'')}</span><small>${fmtDateTime(n.created_at)}</small></div>`).join('')||'<div class="empty">Nenhuma notificação.</div>'}</div></div>`;
+}
+
+export async function renderAgendaPage(user){
+  const data=await loadAgendaData(),pm=profileMap(data.profiles),slots=openSlots(data),r=data.r;
+  window.__CRJ_AGENDA_DATA__=data;
+  window.__CRJ_AGENDA_SLOTS__=slots;
+  const technical=data.profiles.filter(x=>TECH_ROLES.includes(x.role));
+  const teams=[...new Set(data.profiles.map(x=>x.team).filter(Boolean))].sort();
+  const prev=dateISO(addDays(new Date(r.from+'T12:00:00'),-7)),next=dateISO(addDays(new Date(r.from+'T12:00:00'),7));
+  return `<div class="page-head"><div><h2>Agenda e Calendário</h2><p>Disponibilidade, solicitações, contrapropostas e compromissos confirmados da Equipe Técnica.</p></div><div class="actions"><button class="btn primary" data-agenda-action="request">+ Solicitar atendimento/ação</button>${isTech(user)?'<button class="btn secondary" data-agenda-action="direct">+ Agendamento direto</button>':''}</div></div>
+  <div class="grid cards"><div class="card kpi"><div class="label">Pendentes da Equipe Técnica</div><div class="value">${data.requests.filter(x=>x.status==='pending_technical').length}</div></div><div class="card kpi"><div class="label">Aguardando solicitante</div><div class="value">${data.requests.filter(x=>x.status==='pending_requester'&&x.requested_by===user.id).length}</div></div><div class="card kpi"><div class="label">Notificações não lidas</div><div class="value">${data.notifications.filter(x=>!x.read_at).length}</div></div><div class="card kpi"><div class="label">Horários livres próximos</div><div class="value">${slots.length}</div></div></div>
+
+  <form id="agenda-filter" class="card agenda-filter" style="margin-top:16px"><div class="field"><label>Equipe</label><select name="team"><option value="">Todas</option>${teams.map(x=>`<option value="${esc(x)}" ${r.team===x?'selected':''}>${esc(x)}</option>`).join('')}</select></div><div class="field"><label>Colaborador</label><select name="user"><option value="">Todos</option>${data.profiles.map(x=>`<option value="${x.id}" ${r.user===x.id?'selected':''}>${esc(x.display_name)} — ${esc(roleLabel(x.role))}</option>`).join('')}</select></div><div class="field"><label>Tipo</label><select name="type"><option value="">Todos</option>${Object.entries(TYPE_LABELS).map(([k,v])=>`<option value="${k}" ${r.type===k?'selected':''}>${v}</option>`).join('')}</select></div><div class="field"><label>De</label><input class="input" type="date" name="from" value="${r.from}"></div><div class="field"><label>Até</label><input class="input" type="date" name="to" value="${r.to}"></div><div class="actions"><button class="btn primary">Filtrar</button></div></form>
+
+  <div class="card" style="margin-top:16px"><div class="page-head" style="margin-bottom:12px"><div><h3 style="margin:0">Calendário</h3><p>Compromissos confirmados e bloqueios/excepcionalidades.</p></div><div class="actions"><button class="btn" data-week="${prev}">← Semana anterior</button><button class="btn" data-week="${next}">Próxima semana →</button></div></div>${calendarGrid(data)}</div>
+
+  <div class="card" style="margin-top:16px"><h3>Próximos horários disponíveis</h3><p class="muted">Clique em um horário para iniciar uma solicitação já direcionada ao profissional.</p><div class="slot-list">${slots.map(s=>`<button class="slot-chip" data-slot-user="${s.user}" data-slot-start="${s.start}" data-slot-end="${s.end}"><b>${esc(s.name)}</b><span>${fmtDateLong(s.startIso)} · ${s.start.slice(11)}–${s.end.slice(11)}</span></button>`).join('')||'<div class="empty">Nenhum horário livre encontrado nos próximos dias.</div>'}</div></div>
+
+  ${requestsPanel(data,user)}
+  ${availabilityPanel(data,user)}
+  ${notificationsPanel(data)}`;
+}
+
+function modal(title,body){
+  document.querySelector('#agenda-modal')?.remove();
+  document.body.insertAdjacentHTML('beforeend',`<div class="modal-backdrop" id="agenda-modal"><div class="modal"><div class="modal-head"><h3>${esc(title)}</h3><button class="btn ghost" data-agenda-close>✕</button></div>${body}</div></div>`);
+  document.querySelector('[data-agenda-close]')?.addEventListener('click',()=>document.querySelector('#agenda-modal')?.remove());
+}
