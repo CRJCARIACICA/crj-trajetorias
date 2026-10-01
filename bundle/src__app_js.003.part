@@ -53,10 +53,19 @@ async function bindRoute(){
       if(youthId && isTechnicalForm(slug)){
         const types={acompanhamento:'Acompanhamento técnico',pvida:'PVida',ptrampo:'PTrampo','outras-demandas':'Outras Demandas'};
         const summary=payload._technical_note||payload.technical_report||payload.objectives||payload.work_desire||payload.demand||payload.notes||`Registro metodológico: ${FORM_MAP[slug]?.title||slug}`;
+        const serviceDate=payload._service_date||new Date().toISOString().slice(0,10);
+        const serviceType=types[slug]||slug;
+        await createService({
+          youth_id:youthId,
+          date:serviceDate,
+          category:serviceType,
+          description:summary,
+          status:'realizado'
+        });
         await createFollowup({
           youth_id:youthId,
-          date:payload._service_date||new Date().toISOString().slice(0,10),
-          followup_type:types[slug]||slug,
+          date:serviceDate,
+          followup_type:serviceType,
           duration_hours:Number(payload._duration_hours||1),
           summary
         });
