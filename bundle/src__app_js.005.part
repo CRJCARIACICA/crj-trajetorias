@@ -193,6 +193,14 @@ async function render(){
 }
 
 window.addEventListener('hashchange',render);
-await initApi();
+let __bootError=null;
+try{
+  await initApi();
+}catch(err){
+  __bootError=err;
+  console.error('Falha na inicialização do CRJ Trajetórias:',err);
+  app.innerHTML=`<div class="login-page"><div class="login-card"><div class="brand-mark" style="margin-bottom:16px">CRJ</div><h1>CRJ Trajetórias</h1><div class="notice danger"><strong>Não foi possível iniciar o sistema.</strong><br>${esc(err?.message||String(err))}</div><div class="actions" style="margin-top:16px"><button class="btn primary" onclick="location.reload()">Recarregar</button></div></div></div>`;
+}
+window.__CRJ_BOOT_ERROR__=__bootError;
 window.__CRJ_RESET_DEMO__=()=>{resetDemo();location.reload()};
 
