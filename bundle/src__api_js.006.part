@@ -41,20 +41,31 @@ export async function generateWorkshopAttendanceSubmission(sessionId){
   if(mode==='mock')throw new Error('Geração automática da lista requer banco conectado.');
   const {data:s,error:se}=await supabase.from('workshop_sessions').select('*').eq('id',sessionId).single();if(se)throw se;
   const {data:w,error:we}=await supabase.from('workshops').select('*').eq('id',s.workshop_id).single();if(we)throw we;
-  const [{data:att,error:ae},{data:profiles,error:pe}]=await Promise.all([
+  const [{data:att,error:ae},{data:guest,error:ge},{data:profiles,error:pe}]=await Promise.all([
     supabase.from('attendance').select('*, young_people(full_name,preferred_name,birth_date,cpf,phone,email,neighborhood)').eq('session_id',sessionId).eq('present',true).order('created_at'),
+    supabase.from('workshop_guest_participations').select('*, provisional_people(full_name,birth_date,cpf,email,phone,neighborhood)').eq('session_id',sessionId).order('created_at'),
     supabase.from('profiles').select('id,display_name')
   ]);
-  if(ae)throw ae;if(pe)throw pe;
+  if(ae)throw ae;if(ge)throw ge;if(pe)throw pe;
   const pm=new Map((profiles||[]).map(x=>[x.id,x.display_name]));
-  const participants=(att||[]).map(x=>({
-    name:x.young_people?.preferred_name||x.young_people?.full_name||'',
-    full_name:x.young_people?.full_name||'',
-    birth_date:x.young_people?.birth_date||'',
-    cpf:x.young_people?.cpf||'',
-    contact:[x.young_people?.phone,x.young_people?.email].filter(Boolean).join(' / '),
-    neighborhood:x.young_people?.neighborhood||''
-  }));
+  const participants=[
+    ...(att||[]).map(x=>({
+      name:x.young_people?.preferred_name||x.young_people?.full_name||'',
+      full_name:x.young_people?.full_name||'',
+      birth_date:x.young_people?.birth_date||'',
+      cpf:x.young_people?.cpf||'',
+      contact:[x.young_people?.phone,x.young_people?.email].filter(Boolean).join(' / '),
+      neighborhood:x.young_people?.neighborhood||''
+    })),
+    ...(guest||[]).map(x=>({
+      name:x.provisional_people?.full_name||'',
+      full_name:x.provisional_people?.full_name||'',
+      birth_date:x.provisional_people?.birth_date||'',
+      cpf:x.provisional_people?.cpf||'',
+      contact:[x.provisional_people?.phone,x.provisional_people?.email].filter(Boolean).join(' / '),
+      neighborhood:x.provisional_people?.neighborhood||''
+    }))
+  ];
   const payload={
     activity:w.name,
     officineiro:pm.get(w.oficineiro_user_id)||'',
