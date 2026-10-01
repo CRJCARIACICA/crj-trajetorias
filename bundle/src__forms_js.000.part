@@ -1,0 +1,67 @@
+export const FORMS = [
+  {
+    slug:'formulario-inicial', title:'Formulário Inicial / Acolhimento', annex:'Anexo 1', sensitivity:'restrito', youthRequired:true,
+    description:'Cadastro inicial previsto na metodologia. Alimenta perfil, origem do acesso, interesses e leitura territorial.',
+    sections:[
+      {title:'Identificação', fields:[
+        {key:'preferred_name',label:'1. Como você prefere ser chamado?',type:'text',required:true},
+        {key:'full_name',label:'2. Nome completo',type:'text',required:true},
+        {key:'birth_date',label:'3. Data de nascimento',type:'date',required:true},
+        {key:'cpf',label:'4. Número do CPF',type:'text'},
+        {key:'reference_person',label:'5. Nome do responsável ou pessoa de referência',type:'text'},
+        {key:'reference_phone',label:'6. Telefone do responsável ou pessoa de referência',type:'tel'},
+      ]},
+      {title:'Onde você mora?', fields:[
+        {key:'street',label:'7. Rua e Nº',type:'text'},
+        {key:'address_extra',label:'8. Complemento e ponto de referência',type:'text'},
+        {key:'neighborhood',label:'9. Bairro',type:'text'},
+        {key:'municipality',label:'10. Município',type:'text'},
+        {key:'housing',label:'11. A casa em que você mora é',type:'select',options:['Própria','Alugada','Cedida por amigos','Cedida por familiares','Outro']},
+        {key:'household_size',label:'12. Quantas pessoas moram na sua casa (incluindo você)?',type:'number'},
+        {key:'phone',label:'13. Celular / telefone',type:'tel'},
+        {key:'email',label:'14. E-mail',type:'email'},
+      ]},
+      {title:'Perfil sociodemográfico', fields:[
+        {key:'race',label:'15. Qual a sua cor/raça?',type:'select',options:['Preta(o)','Parda(o)','Amarela(o)','Indígena','Branca(o)','Não sei responder']},
+        {key:'traditional_community',label:'16. Você pertence a alguma Comunidade Tradicional?',type:'select',options:['Sim','Não']},
+        {key:'traditional_community_which',label:'17. Se sim, qual?',type:'text'},
+        {key:'gender_identity',label:'18. Você se considera',type:'select',options:['Mulher cisgênero','Homem cisgênero','Mulher trans','Homem trans','Não binário','Outro','Prefiro não declarar','Não sei responder']},
+        {key:'sexual_orientation',label:'19. Qual a sua orientação sexual?',type:'select',options:['Assexual','Heterossexual','Lésbica','Gay','Bissexual','Outro','Prefiro não declarar','Não sei responder']},
+        {key:'disability',label:'20. Você é pessoa com deficiência?',type:'select',options:['Sim','Não']},
+        {key:'disability_which',label:'21. Se respondeu sim, qual?',type:'text'},
+      ]},
+      {title:'Educação', fields:[
+        {key:'studies',label:'22. Você estuda?',type:'select',options:['Sim','Não']},
+        {key:'last_grade',label:'23. Se não, qual foi a última série/ano/período completado?',type:'text'},
+        {key:'school_name',label:'24. Se sim, qual o nome da escola?',type:'text'},
+        {key:'school_grade',label:'25. Se sim, qual série/ano?',type:'text'},
+        {key:'education_level',label:'26. Em qual etapa ou nível de ensino você está?',type:'select',options:['Ensino fundamental regular parcial','Ensino fundamental regular em tempo integral','Ensino médio regular parcial','Ensino médio regular em tempo integral','Ensino superior','Não se aplica']},
+        {key:'education_modality',label:'27. Qual a modalidade de ensino?',type:'select',options:['Educação especial','Educação quilombola','Educação indígena','Educação do campo','Educação de Jovens e Adultos','Educação profissional e tecnológica','Nenhuma das opções','Outra']},
+        {key:'education_modality_other',label:'28. Se respondeu outra, qual?',type:'text'},
+      ]},
+      {title:'Renda, interesses e acesso', fields:[
+        {key:'household_income',label:'29. Qual a renda mensal total do seu domicílio?',type:'select',options:['Até meio salário mínimo','Até 1 salário mínimo','Até 2 salários mínimos','Até 3 salários mínimos','Acima de 3 salários mínimos','Nenhuma renda','Não sei responder']},
+        {key:'interests',label:'30. Quais ofertas realizadas pelo CRJ despertam o seu interesse?',type:'multiselect',options:['Atividades esportivas','Atividades de arte e cultura','Formação para o trabalho','Ensino profissionalizante','Orientação social e profissional especializada','Uso do espaço e dos equipamentos do CRJ','Agendamento para utilização de equipamentos e/ou espaço físico','Atividades relacionadas à informática/internet','Espaço Convivência','Apoio para solicitação de benefício','Encaminhamentos externos']},
+        {key:'heard_from',label:'31. Como você soube do CRJ?',type:'multiselect',options:['CRAS','CREAS','CAJUN','Projovem','Escola','Patrulha escolar / Polícia Militar / Polícia Civil','Unidade básica de saúde / ACS','CAPS','Sistema socioeducativo','Casa de acolhida / abrigo','Articulador / jovem mobilizador','Amigas(os)','Lideranças comunitárias','Redes sociais','Televisão','Outro']},
+        {key:'heard_from_other',label:'32. Se respondeu outro, qual?',type:'text'},
+        {key:'preferred_shifts',label:'33. Em qual turno pretende frequentar o CRJ?',type:'multiselect',options:['Manhã durante a semana','Tarde durante a semana','Noite durante a semana','Manhã no fim de semana','Tarde no fim de semana','Noite no fim de semana']},
+        {key:'filled_by',label:'34. Responsável pelo preenchimento',type:'multiselect',options:['Próprio jovem','Pais ou responsável','Profissional do CRJ']},
+      ]}
+    ]
+  },
+  {
+    slug:'lista-presenca-contato', title:'Lista de Presença e Contato', annex:'Anexo 2', sensitivity:'operacional', youthRequired:false,
+    description:'Registro de participação. No sistema, a lista pode ser preenchida nominalmente ou como lançamento geral.',
+    sections:[{title:'Atividade',fields:[
+      {key:'activity',label:'1. Atividade',type:'text',required:true},
+      {key:'location',label:'2. Local de realização da atividade',type:'text'},
+      {key:'date',label:'3. Data',type:'date',required:true},
+      {key:'participants',label:'Participantes / contatos',type:'textarea',help:'Quando possível, use a lista nominal de presença do módulo Oficinas para vincular cada jovem.'}
+    ]}]
+  },
+  {
+    slug:'acompanhamento', title:'Formulário de Acompanhamento', annex:'Anexo 3', sensitivity:'tecnico', youthRequired:true,
+    description:'Aprofunda os dados educacionais, socioeconômicos e os encaminhamentos do jovem acompanhado.',
+    sections:[
+      {title:'Identificação',fields:[
+      
