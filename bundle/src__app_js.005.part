@@ -9,6 +9,7 @@ async function render(){
     if(!p1||p1==='dashboard') content=await pageDashboard();
     else if(p1==='jovens') content=await pageYouth();
     else if(p1==='novo-jovem') content=await pageNewYouth();
+    else if(p1==='editar-jovem') content=await pageEditYouth(p2);
     else if(p1==='jovem') content=await pageYouthProfile(p2);
     else if(p1==='formularios') content=await pageForms();
     else if(p1==='formulario') content=await pageForm(p2,p3||null);
