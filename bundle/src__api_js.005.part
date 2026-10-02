@@ -158,20 +158,30 @@ function buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendan
   const uniqueYouth=new Set((attendance||[]).map(x=>x.youth_id).filter(Boolean));
   const uniqueGuests=new Set((guests||[]).map(x=>x.provisional_person_id).filter(Boolean));
   const plannedHours=lessons.reduce((n,l)=>n+reportDurationHours(l.start_time,l.end_time),0);
-  const executedHours=(sessions||[]).filter(s=>s.plan_lesson_id&&lessons.some(l=>l.id===s.plan_lesson_id)).reduce((n,s)=>n+Number(s.duration_hours||reportDurationHours(s.start_time,s.end_time)),0);
-  const complementaryActions=(records||[]).filter(r=>[
-    'mobilizacao','evento_programacao','mostra','acompanhamento_oficina','trampo_labpoca',
-    'mediacao_convivencia','ficaadica_orientacao','outra_acao_educativa','estudo_caso'
-  ].includes(r.record_type)).map(r=>({
-    id:r.id,date:r.record_date,type:r.record_type,title:r.title||'',description:r.description||'',
-    workshop_id:r.workshop_id||null,duration_hours:Number(r.duration_hours||0),participants_count:r.participants_count
-  }));
+  const extraSessions=(sessions||[]).filter(s=>!s.plan_lesson_id||!lessons.some(l=>l.id===s.plan_lesson_id));
+  const executedHours=(sessions||[]).reduce((n,s)=>n+Number(s.duration_hours||reportDurationHours(s.start_time,s.end_time)),0);
+  const complementaryActions=[
+    ...extraSessions.map(s=>({
+      id:s.id,date:s.session_date,type:'aula_extra',title:'Aula / atividade extra da oficina',
+      description:s.content||s.notes||'Sessão executada fora das aulas previstas no planejamento.',
+      workshop_id:s.workshop_id||null,duration_hours:Number(s.duration_hours||reportDurationHours(s.start_time,s.end_time)),
+      participants_count:(attendanceBySession.get(s.id)||[]).length+(guestBySession.get(s.id)||[]).length
+    })),
+    ...(records||[]).filter(r=>[
+      'mobilizacao','evento_programacao','mostra','acompanhamento_oficina','trampo_labpoca',
+      'mediacao_convivencia','ficaadica_orientacao','outra_acao_educativa','estudo_caso'
+    ].includes(r.record_type)).map(r=>({
+      id:r.id,date:r.record_date,type:r.record_type,title:r.title||'',description:r.description||'',
+      workshop_id:r.workshop_id||null,duration_hours:Number(r.duration_hours||0),participants_count:r.participants_count
+    }))
+  ];
   return {
     plan,lessons,workshop,report,lesson_execution:lessonExecution,complementary_actions:complementaryActions,
     metrics:{
       planned_lessons:lessons.length,
       executed_lessons:lessonExecution.filter(x=>x.executed).length,
       pending_lessons:lessonExecution.filter(x=>!x.executed).length,
+      extra_sessions:extraSessions.length,
       planned_hours:Number(plannedHours.toFixed(2)),
       executed_hours:Number(executedHours.toFixed(2)),
       participation_records:(attendance||[]).length+(guests||[]).length,
