@@ -265,3 +265,23 @@ function printAttendanceSheetV2(sheet){
   </body></html>`;
   win.document.open();win.document.write(html);win.document.close();
 }
+
+
+function attendanceSheetRowsHtmlV2(sheet){
+  const rows=sheet?.participants||[];
+  return rows.map((r,i)=>`<tr>
+    <td>${i+1}</td>
+    <td><b>${esc(r.display_name||r.full_name||'')}</b>${r.initial_form_status==='provisorio'?'<br><span class="pill warn">Inicial provisório</span>':r.initial_form_status==='visitante'?'<br><span class="pill warn">Visitante</span>':''}</td>
+    <td>${r.signature_data?`<img class="sheet-signature" src="${esc(r.signature_data)}" alt="Assinatura">`:'<span class="muted">—</span>'}</td>
+    <td>${fmtDate(r.birth_date)}</td>
+    <td>${esc(r.cpf||'—')}</td>
+    <td>${esc(r.phone||'—')}</td>
+    <td>${esc(r.email||'—')}</td>
+  </tr>`).join('')||'<tr><td colspan="7" class="empty">Nenhuma presença registrada nesta aula.</td></tr>';
+}
+function updateAttendanceSheetDomV2(sheet){
+  const body=document.querySelector('[data-sheet-body]');
+  const count=document.querySelector('[data-sheet-count]');
+  if(body)body.innerHTML=attendanceSheetRowsHtmlV2(sheet);
+  if(count)count.textContent=Number(sheet?.participant_count||0)+' participante(s)';
+}
