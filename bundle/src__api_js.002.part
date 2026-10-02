@@ -27,7 +27,7 @@ export async function getDocumentSettings(){
 }
 export async function saveDocumentSettings(patch){
   const allowed={updated_at:now()};
-  for(const k of ['header_image_data','header_mime','header_updated_at','technical_target_total_services','technical_target_unique_youth','technical_target_collective_services','technical_target_pvida','technical_target_ptrampo_youth','technical_target_ptrampo_activities','technical_target_other_demands']){
+  for(const k of ['technical_target_total_services','technical_target_unique_youth','technical_target_collective_services','technical_target_pvida','technical_target_ptrampo_youth','technical_target_ptrampo_activities','technical_target_other_demands']){
     if(patch[k]!==undefined)allowed[k]=patch[k];
   }
   if(mode==='mock'){const s=mock();s.documentSettings={...(s.documentSettings||{id:1}),...allowed};save(s);return s.documentSettings;}
