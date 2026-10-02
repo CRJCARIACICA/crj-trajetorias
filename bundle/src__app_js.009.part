@@ -88,15 +88,27 @@ async function bindWorkshopDetailV2(id){
   document.querySelectorAll('[data-remove-guest]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('Remover apenas esta visita da aula?'))return;try{await removeWorkshopGuestParticipation(b.dataset.removeGuest);toast('Visita removida');await render()}catch(err){toast(err.message,'danger')}}));
   document.querySelector('[data-open-checkin]')?.addEventListener('click',async b=>{try{const x=await openWorkshopCheckin(b.currentTarget.dataset.openCheckin),url=new URL('checkin.html',location.href);url.searchParams.set('token',x.public_token);modal('Lista virtual aberta',`<div class="stack"><div class="notice success">A lista individual foi aberta. Ela verifica a situação da trajetória de cada jovem e mostra somente a próxima etapa necessária antes de registrar a presença.</div><input class="input" value="${esc(url.href)}" readonly data-checkin-url><div class="actions"><button class="btn primary" data-copy-checkin>Copiar link</button><a class="btn secondary" href="${esc(url.href)}" target="_blank">Abrir lista</a></div></div>`);document.querySelector('[data-copy-checkin]')?.addEventListener('click',async()=>{await navigator.clipboard.writeText(url.href);toast('Link copiado')})}catch(err){toast(err.message,'danger')}});
   document.querySelector('[data-refresh-sheet]')?.addEventListener('click',async()=>{try{const latest=await getWorkshopAttendanceSheet(session.id);updateAttendanceSheetDomV2(latest)}catch(err){toast(err.message,'danger')}});
+  if(window.__crjAttendanceSheetPoll){
+    clearInterval(window.__crjAttendanceSheetPoll);
+    window.__crjAttendanceSheetPoll=null;
+  }
   if(session){
-    const sheetPoll=setInterval(async()=>{
-      if(!location.hash.includes('oficina/'+id)){clearInterval(sheetPoll);return}
+    const activeSessionId=session.id;
+    window.__crjAttendanceSheetPoll=setInterval(async()=>{
+      if(!location.hash.includes('oficina/'+id)){
+        clearInterval(window.__crjAttendanceSheetPoll);
+        window.__crjAttendanceSheetPoll=null;
+        return;
+      }
       if(document.querySelector('#modal'))return;
+      const selector=document.querySelector('[data-session-select]');
+      if(selector&&selector.value!==activeSessionId)return;
       try{
-        const latest=await getWorkshopAttendanceSheet(session.id);
+        const latest=await getWorkshopAttendanceSheet(activeSessionId);
+        if(selector&&selector.value!==activeSessionId)return;
         updateAttendanceSheetDomV2(latest);
       }catch{}
-    },6000);
+    },8000);
   }
   async function exportCurrentSheet(format){
     try{
