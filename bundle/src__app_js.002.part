@@ -32,10 +32,10 @@ function isTechnicalForm(slug){
   return ['acompanhamento','pvida','ptrampo','outras-demandas'].includes(slug);
 }
 function isCfdhSharedForm(slug){
-  return ['cfdh-planejamento','cfdh-avaliacao-jovens','cfdh-avaliacao-equipe'].includes(slug);
+  return ['cfdh-planejamento','cfdh-avaliacao-jovens'].includes(slug);
 }
 function isWorkshopEducationForm(slug){
-  return slug==='avaliacao-atividades';
+  return ['avaliacao-atividades','cfdh-avaliacao-equipe'].includes(slug);
 }
 function canWriteMethodologyForm(slug){
   if(isTechnicalForm(slug))return technicalWriter();
