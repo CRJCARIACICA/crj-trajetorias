@@ -100,6 +100,45 @@ async function openFormalEnrollmentV2(workshopId,youthObj){
     });
   }catch(err){toast(err.message,'danger')}
 }
+
+async function openPlannedLessonFollowV2(workshop,lesson,plan,existingSessions=[]){
+  const existing=existingSessions.find(s=>s.plan_lesson_id===lesson.id);
+  if(existing){nav('oficina/'+workshop.id+'?session='+existing.id);return}
+  const team=await listTeam(),educators=team.filter(x=>x.active&&x.role==='educador');
+  const defaultEducator=plan?.educator_user_id||workshop.educator_user_id||state.user?.id||'';
+  const html='<form id="planned-session-form" class="stack">'+
+    '<div class="notice info"><b>'+esc(workshop.name)+' · Aula '+esc(lesson.lesson_number)+'</b><br>'+esc(lesson.theme||'Aula planejada')+'</div>'+
+    '<div class="form-grid"><div class="field"><label>Data</label><input class="input" type="date" name="session_date" value="'+esc(lesson.scheduled_date||'')+'" required></div><div class="field"><label>Educador(a) acompanhando</label><select name="educator_user_id" required><option value="">Selecione</option>'+educators.map(e=>'<option value="'+e.id+'" '+(e.id===defaultEducator?'selected':'')+'>'+esc(e.display_name)+'</option>').join('')+'</select></div></div>'+
+    '<div class="form-grid"><div class="field"><label>Início</label><input class="input" type="time" name="start_time" value="'+esc(String(lesson.start_time||'').slice(0,5))+'" required></div><div class="field"><label>Fim</label><input class="input" type="time" name="end_time" value="'+esc(String(lesson.end_time||'').slice(0,5))+'" required></div></div>'+
+    '<div class="form-grid"><div class="field"><label>Local</label><select name="location_type"><option value="">Usar local da oficina</option>'+['LABPoca','Sala de computadores','Sala de dança','Trampo Coletivo','Externa','Outro'].map(x=>'<option value="'+x+'">'+x+'</option>').join('')+'</select></div><div class="field"><label>Outro / externo</label><input class="input" name="location_other" value="'+esc(lesson.location_other||'')+'"></div></div>'+
+    '<div class="field"><label>Conteúdo / atividade executada</label><textarea name="content">'+esc(lesson.proposed_activities||lesson.theme||'')+'</textarea></div>'+
+    '<div class="field"><label>CFDH dentro da aula (minutos)</label><input class="input" type="number" min="0" step="5" name="cfdh_minutes" value="0"></div>'+
+    '<div class="field"><label>Observação</label><textarea name="notes">'+esc(lesson.observations||'')+'</textarea></div>'+
+    '<button class="btn primary">Abrir acompanhamento e lista de presença</button></form>';
+  modal('Acompanhar aula planejada',html);
+  const form=document.querySelector('#planned-session-form'),loc=form?.querySelector('[name="location_type"]');
+  if(loc)loc.value=lesson.location_type||workshop.location_type||'';
+  decorateEduGoalForm(form,'aula');
+  form?.addEventListener('submit',async e=>{
+    e.preventDefault();const p=parseForm(e.target);
+    if(!p.educator_user_id){toast('Selecione o educador que está acompanhando a aula.','danger');return}
+    if(!p.start_time||!p.end_time||p.end_time<=p.start_time){toast('Confira o horário planejado.','danger');return}
+    if(['Externa','Outro'].includes(p.location_type)&&!String(p.location_other||'').trim()){toast('Descreva o local.','danger');return}
+    try{
+      const saved=await createWorkshopSession({...p,workshop_id:workshop.id,calendar_entry_id:lesson.calendar_entry_id||null,plan_lesson_id:lesson.id});
+      document.querySelector('#modal')?.remove();
+      toast('Acompanhamento da aula aberto');
+      nav('oficina/'+workshop.id+'?session='+saved.id);
+      await render();
+    }catch(err){toast(err.message,'danger')}
+  });
+}
+async function changeSessionEducatorV2(session){
+  const team=await listTeam(),educators=team.filter(x=>x.active&&x.role==='educador');
+  modal('Alterar educador da aula','<form id="change-session-educator-form" class="stack"><div class="notice"><b>'+esc(fmtDate(session.session_date))+' · '+esc(String(session.start_time||'').slice(0,5))+'</b><br>Esta alteração vale somente para esta aula e fica registrada no histórico.</div><div class="field"><label>Educador(a) acompanhando</label><select name="educator_user_id" required><option value="">Selecione</option>'+educators.map(e=>'<option value="'+e.id+'" '+(e.id===session.educator_user_id?'selected':'')+'>'+esc(e.display_name)+'</option>').join('')+'</select></div><button class="btn primary">Salvar educador da aula</button></form>');
+  document.querySelector('#change-session-educator-form')?.addEventListener('submit',async e=>{e.preventDefault();const p=parseForm(e.target);try{await updateWorkshopSession(session.id,{educator_user_id:p.educator_user_id});document.querySelector('#modal')?.remove();toast('Educador da aula atualizado');await render()}catch(err){toast(err.message,'danger')}});
+}
+
 async function bindWorkshopDetailV2(id){
   const workshops=await listWorkshops(),w=workshops.find(x=>x.id===id);if(!w)return;
   const [sessions,youth,provisional]=await Promise.all([listWorkshopSessions(id,40),listYouth(''),listProvisionalPeople()]);
