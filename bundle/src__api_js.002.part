@@ -487,6 +487,19 @@ export async function createWorkshopSession(row){
   }
   return data;
 }
+export async function updateWorkshopSession(id,patch){
+  const allowed={};
+  for(const k of ['session_date','start_time','end_time','content','notes','cfdh_minutes','location_type','location_other','educator_user_id']){
+    if(patch[k]!==undefined)allowed[k]=patch[k]||null;
+  }
+  if(patch.start_time!==undefined||patch.end_time!==undefined){
+    allowed.duration_hours=Number(patch.duration_hours||durationHours(patch.start_time,patch.end_time));
+  }
+  if(mode==='mock'){const s=mock(),rec=(s.sessions||[]).find(x=>x.id===id);if(!rec)throw new Error('Aula não encontrada');Object.assign(rec,allowed);save(s);return rec;}
+  const {data,error}=await supabase.from('workshop_sessions').update(allowed).eq('id',id).select('*').single();
+  if(error)throw error;return data;
+}
+
 export async function saveAttendance(sessionId,workshopId,date,youthIds){
   if(mode==='mock'){
     const s=mock(); s.attendance=s.attendance.filter(a=>a.session_id!==sessionId);
