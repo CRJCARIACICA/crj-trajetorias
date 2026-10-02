@@ -117,6 +117,7 @@ export async function listTechnicalTeamDashboard(month=monthKey()){
   return buildTechnicalDashboard(details,settings);
 }
 function buildTechnicalDashboard(records,settings){
+  records=(records||[]).filter(r=>r.status!=='cancelado');
   const youthIds=new Set(),byProfessional=new Map();
   for(const r of records){
     for(const y of r.youth||[])youthIds.add(y.id);
