@@ -70,7 +70,7 @@ export async function generateWorkshopAttendanceSubmission(sessionId){
     activity:w.name,
     officineiro:pm.get(w.oficineiro_user_id)||'',
     educator_reference:pm.get(w.educator_user_id)||'',
-    location:'CRJ Cariacica',
+    location:(s.location_type||w.location_type)==='Externa'?'Externa'+((s.location_other||w.location_other)?' - '+(s.location_other||w.location_other):''):(s.location_type||w.location_type)==='Outro'?(s.location_other||w.location_other||'Outro'):(s.location_type||w.location_type||'CRJ Cariacica'),
     date:s.session_date,
     start_time:String(s.start_time||'').slice(0,5),
     end_time:String(s.end_time||'').slice(0,5),
