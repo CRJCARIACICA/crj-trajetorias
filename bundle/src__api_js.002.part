@@ -478,7 +478,7 @@ export async function workshopRoster(workshopId){
 }
 export async function createWorkshopSession(row){
   const hrs=Number(row.duration_hours||durationHours(row.start_time,row.end_time));
-  const payload={...row,duration_hours:hrs,location_type:row.location_type||null,location_other:row.location_other||null,calendar_entry_id:row.calendar_entry_id||null};
+  const payload={...row,duration_hours:hrs,location_type:row.location_type||null,location_other:row.location_other||null,calendar_entry_id:row.calendar_entry_id||null,plan_lesson_id:row.plan_lesson_id||null,educator_user_id:row.educator_user_id||null};
   if(mode==='mock'){ const s=mock(), rec={id:uid('sess'),...payload,created_by:s.currentUser.id}; s.sessions.push(rec); s.indicatorEvents.push({id:uid('met'),indicator_code:'M6.1_OFICINAS_HORAS',event_date:rec.session_date,quantity:hrs,source_type:'workshop_session',source_id:rec.id,source_mode:'identified'}); if(rec.calendar_entry_id){const ce=(s.workshopCalendar||[]).find(x=>x.id===rec.calendar_entry_id);if(ce){ce.status='realizada';ce.session_id=rec.id}} save(s); return rec; }
   const {data,error}=await supabase.from('workshop_sessions').insert(payload).select('*').single(); if(error) throw error;
   if(data.calendar_entry_id){
