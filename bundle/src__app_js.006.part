@@ -45,6 +45,14 @@ function educatorGoalV2(key){
       ['Meta 6 · Etapa 6.1','Contabiliza evento/programação mensal quando a execução é registrada.'],
       ['Meta 4 · Etapa 4.2','Comprova ações do núcleo socioafirmativo.']
     ]},
+    passeio_visita:{t:'Passeio / visita externa',i:[
+      ['Meta 6 · Etapa 6.1','Registra atividade/programação executada quando pertinente.'],
+      ['Meta 4 · Etapa 4.2','Comprova participação do Educador em ação externa vinculada ao trabalho educativo.']
+    ]},
+    atividade_externa:{t:'Atividade externa',i:[
+      ['Meta 6 · Etapa 6.1','Registra atividade/programação executada quando pertinente.'],
+      ['Meta 4 · Etapa 4.2','Comprova ação educativa realizada fora do espaço regular do CRJ.']
+    ]},
     mostra:{t:'Mostra',i:[
       ['Meta 6 · Etapa 6.1','Comprova a mostra semestral do CRJ.'],
       ['Meta 4 · Etapa 4.5','Se for Mostra de Profissões, colabora com o indicador específico.']
@@ -96,7 +104,7 @@ function educatorTypeLabelV2(t){
     encaminhamento_interno:'Encaminhamento interno',acompanhamento_oficina:'Acompanhamento de oficina',
     mediacao_convivencia:'Mediação e convivência',ficaadica_orientacao:'#FicaAdica / orientação',
     trampo_labpoca:'Trampo Coletivo / LABPoca',mobilizacao:'Mobilização',
-    evento_programacao:'Evento / programação',mostra:'Mostra',estudo_caso:'Estudo de caso',
+    evento_programacao:'Evento / programação',passeio_visita:'Passeio / visita externa',atividade_externa:'Atividade externa',mostra:'Mostra',estudo_caso:'Estudo de caso',
     outra_acao_educativa:'Outra ação educativa'})[t]||t;
 }
 
