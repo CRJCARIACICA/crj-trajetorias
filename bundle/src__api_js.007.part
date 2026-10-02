@@ -35,3 +35,46 @@ export async function removeWorkshopGuestParticipation(id){
   const {error}=await supabase.from('workshop_guest_participations').delete().eq('id',id);
   if(error)throw error;
 }
+
+
+export async function getWorkshopAttendanceSheet(sessionId){
+  if(mode==='mock'){
+    const st=mock(),s=(st.sessions||[]).find(x=>x.id===sessionId),w=(st.workshops||[]).find(x=>x.id===s?.workshop_id);
+    const youthMap=new Map((st.youth||[]).map(x=>[x.id,x]));
+    const rows=(st.attendance||[]).filter(x=>x.session_id===sessionId&&x.present!==false).map((x,i)=>{
+      const y=youthMap.get(x.youth_id)||{};
+      return {record_kind:'youth',record_id:x.id,person_id:x.youth_id,display_name:y.preferred_name||y.full_name||'',full_name:y.full_name||'',birth_date:y.birth_date||'',cpf:y.cpf||'',phone:y.phone||'',email:y.email||'',signature_data:null,initial_form_status:y.initial_form_status||'completo'};
+    });
+    return {session_id:sessionId,workshop_id:w?.id||'',workshop_name:w?.name||'',officineiro:'',educator:'',date:s?.session_date||'',start_time:s?.start_time||'',end_time:s?.end_time||'',participant_count:rows.length,participants:rows};
+  }
+  const {data,error}=await supabase.rpc('staff_workshop_attendance_sheet',{p_session_id:sessionId});
+  if(error)throw error;
+  return data||null;
+}
+
+export async function createWorkshopAttendanceSubmission(sessionId){
+  const sheet=await getWorkshopAttendanceSheet(sessionId);
+  if(!sheet)throw new Error('Lista da aula não encontrada.');
+  const participants=(sheet.participants||[]).map((r,i)=>({
+    number:i+1,
+    name:r.display_name||r.full_name||'',
+    full_name:r.full_name||r.display_name||'',
+    signature_data:r.signature_data||'',
+    birth_date:r.birth_date||'',
+    cpf:r.cpf||'',
+    phone:r.phone||'',
+    email:r.email||'',
+    initial_form_status:r.initial_form_status||''
+  }));
+  const payload={
+    activity:sheet.workshop_name||'',
+    officineiro:sheet.officineiro||'',
+    educator_reference:sheet.educator||'',
+    date:sheet.date||'',
+    start_time:String(sheet.start_time||'').slice(0,5),
+    end_time:String(sheet.end_time||'').slice(0,5),
+    participant_count:Number(sheet.participant_count||participants.length||0),
+    participants
+  };
+  return await saveFormSubmission('lista-presenca-contato',null,payload);
+}
