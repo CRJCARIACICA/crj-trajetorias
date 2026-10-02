@@ -91,6 +91,7 @@ export async function downloadFormSubmission(submissionId,format='pdf'){
   if(!token) throw new Error('Sessão expirada. Entre novamente.');
   const res=await fetch(`${CONFIG.supabaseUrl}/functions/v1/crj-export-document`,{
     method:'POST',
+    cache:'no-store',
     headers:{
       'Content-Type':'application/json',
       'Authorization':`Bearer ${token}`,
@@ -100,17 +101,26 @@ export async function downloadFormSubmission(submissionId,format='pdf'){
   });
   if(!res.ok){
     const err=await res.json().catch(()=>({}));
-    throw new Error(err.error||'Não foi possível gerar o documento.');
+    throw new Error(err.error||`Não foi possível gerar o ${String(format).toUpperCase()}.`);
   }
   const blob=await res.blob();
-  let filename=`documento-crj.${format==='docx'?'docx':'pdf'}`;
+  if(!blob||blob.size<20) throw new Error('O servidor gerou um arquivo vazio. Tente novamente.');
+  let filename=`documento-crj.${format==='docx'?'doc':'pdf'}`;
   const cd=res.headers.get('content-disposition')||'';
-  const m=cd.match(/filename="?([^"]+)"?/i);
-  if(m?.[1]) filename=m[1];
+  const m=cd.match(/filename="?([^";]+)"?/i);
+  if(m?.[1]) filename=m[1].trim();
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url),2000);
+  a.href=url;
+  a.download=filename;
+  a.style.display='none';
+  document.body.appendChild(a);
+  try{
+    a.click();
+  }finally{
+    setTimeout(()=>{a.remove();URL.revokeObjectURL(url)},30000);
+  }
+  return {filename,size:blob.size,type:blob.type};
 }
 
 
