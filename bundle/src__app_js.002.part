@@ -9,7 +9,7 @@ async function pageYouth(){
       <td><div class="name">${esc(y.preferred_name||y.full_name)}</div><div class="muted">${esc(y.full_name)}</div></td>
       <td>${age(y.birth_date)}</td>
       <td>${esc(y.neighborhood||'—')}</td>
-      <td><div class="stack" style="gap:5px"><span class="pill success">${esc(y.status||'ativo')}</span><span class="pill ${y.initial_form_status==='provisorio'?'warn':'info'}">${y.initial_form_status==='provisorio'?'Formulário Inicial provisório':'Formulário Inicial completo'}</span></div></td>
+      <td><div class="stack" style="gap:5px"><span class="pill success">${esc(y.status||'ativo')}</span><span class="pill ${y.initial_form_status==='provisorio'?'warn':'info'}">${y.initial_form_status==='provisorio'?`Formulário Inicial parcial · ${(y.initial_form_pending_fields||[]).length} pendência(s)`:'Formulário Inicial completo'}</span></div></td>
       <td><button class="btn ${y.initial_form_status==='provisorio'?'primary':''}" data-nav="jovem/${y.id}">${y.initial_form_status==='provisorio'?'Completar trajetória':'Abrir trajetória'}</button></td>
     </tr>`).join('')||`<tr><td colspan="5" class="empty">Nenhum jovem encontrado.</td></tr>`
   }</tbody></table></div>`;
@@ -42,7 +42,7 @@ function technicalSystemFields(form,youthId,values={}){
 }
 function formPageHtml(form,youthId,isNew=false,values={},isEdit=false){
   const prefilled=youthId&&!isEdit?'<div class="notice" style="margin-bottom:16px">Os dados compatíveis foram pré-preenchidos a partir do cadastro do jovem. Revise antes de salvar. Alterar este formulário não altera automaticamente o cadastro-base.</div>':'';
-  const editInfo=isEdit?'<div class="notice warn" style="margin-bottom:16px">Você está editando o cadastro-base do jovem. Ao salvar, o sistema atualiza a ficha e registra uma nova versão do Formulário Inicial na trajetória.</div>':'';
+  const editInfo=isEdit?'<div class="notice warn" style="margin-bottom:16px">Você está completando o mesmo Formulário Inicial do jovem. Ao salvar, o sistema atualiza a ficha, o Anexo 1 atual e recalcula automaticamente as pendências.</div>':'';
   return `<div class="page-head"><div><h2>${esc(form.title)} ${form.slug==='formulario-inicial'?eduGoalInfo('cadastro'):''}</h2><p>${esc(form.description)}</p></div><div class="actions"><button class="btn" data-back>Voltar</button></div></div><form id="dynamic-form" data-slug="${form.slug}" data-youth="${youthId||''}" data-new="${isNew?'1':'0'}" data-edit="${isEdit?'1':'0'}" data-provisional="${isNew?(route().params.get('provisional')||''):''}"><div class="card">${prefilled}${editInfo}${technicalSystemFields(form,youthId,values)}${form.sections.map(s=>`<div class="section"><div class="section-title">${esc(s.title)}</div><div class="form-grid">${s.fields.map(f=>fieldHtml(f,values[f.key])).join('')}</div></div>`).join('')}<div class="actions" style="margin-top:22px"><button class="btn primary">${isEdit?'Salvar alterações':'Salvar documento'}</button></div></div></form>`;
 }
 async function pageEditYouth(id){
@@ -133,7 +133,7 @@ async function pageYouthProfile(id){
   ]);
   if(!y)return `<div class="notice danger">Jovem não encontrado.</div>`;
   const pendingCount=Array.isArray(y.initial_form_pending_fields)?y.initial_form_pending_fields.length:0;
-  const initialPending=y.initial_form_status==='provisorio'?`<div class="notice warn" style="margin-bottom:16px"><b>Formulário Inicial provisório</b><br>Este jovem entrou no CRJ por uma atividade/serviço antes de concluir o Anexo 1. Há ${pendingCount} campo(s) pendente(s). Complete o mesmo cadastro para preservar toda a trajetória.<div class="actions" style="margin-top:10px"><button class="btn primary" data-nav="editar-jovem/${id}">Completar Formulário Inicial</button></div></div>`:'';
+  const initialPending=y.initial_form_status==='provisorio'?`<div class="notice warn" style="margin-bottom:16px"><b>Formulário Inicial provisório</b><br>Este jovem possui o próprio Formulário Inicial parcialmente preenchido. Há ${pendingCount} pendência(s) significativa(s). Complete o mesmo Anexo 1 para manter a trajetória sem duplicação.<div class="actions" style="margin-top:10px"><button class="btn primary" data-nav="editar-jovem/${id}">Completar Formulário Inicial</button></div></div>`:'';
 
   const auditEdits=audit.filter(a=>a.action==='updated');
   const journeyItems=[
