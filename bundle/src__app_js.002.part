@@ -347,6 +347,31 @@ async function pageWorkshops(){
       '<div class="card workshop-calendar-card">'+workshopCalendarGrid(entries,month)+'</div>'+
       '<div class="card" style="margin-top:16px"><h3>Regras fixas cadastradas</h3>'+ws.filter(w=>w.schedule_mode==='semanal_fixa').map(w=>'<div class="agenda-row"><div><b>'+esc(w.name)+'</b><span>'+esc(workshopScheduleLabel(w))+' · '+esc(workshopPeriodLabel(w))+' · '+esc(String(w.start_time||'').slice(0,5))+(w.end_time?'–'+esc(String(w.end_time).slice(0,5)):'')+'</span></div><button class="btn" data-generate-workshop-calendar="'+w.id+'">Gerar / atualizar calendário</button></div>').join('')||'<div class="empty">Nenhuma oficina com semana fixa.</div>'+'</div>';
   }
+
+  if(view==='planejamento'){
+    const month=route().params.get('month')||currentMonth(),planId=route().params.get('plan')||'';
+    const [ws,team]=await Promise.all([listWorkshops(),listTeam()]);
+    const teamMap=new Map(team.map(x=>[x.id,x.display_name]));
+    if(planId){
+      const bundle=await getWorkshopMonthlyPlan(planId);
+      const workshop=ws.find(x=>x.id===bundle.plan.workshop_id);
+      if(!workshop)return '<div class="notice danger">Oficina vinculada ao planejamento não encontrada.</div>';
+      if(state.user?.role==='oficineiro'&&workshop.oficineiro_user_id!==state.user.id)return '<div class="notice danger">Este planejamento pertence a outra oficina.</div>';
+      return workshopTabs(view)+workshopPlanEditorHtml(bundle,workshop,teamMap);
+    }
+    let visible=ws.filter(w=>w.active);
+    if(state.user?.role==='oficineiro')visible=visible.filter(w=>w.oficineiro_user_id===state.user.id);
+    const plans=await listWorkshopMonthlyPlans(month);
+    const byWorkshop=new Map(plans.map(p=>[p.workshop_id,p]));
+    return '<div class="page-head"><div><h2>Planejamento mensal das oficinas</h2><p>O sistema usa o calendário da oficina para criar automaticamente uma linha de planejamento para cada aula prevista no mês.</p></div></div>'+
+      workshopTabs(view)+
+      '<div class="toolbar"><label class="field month-filter"><span>Mês de referência</span><input class="input" type="month" data-workshop-month value="'+esc(month)+'"></label><span class="notice info compact">Tema inicial: Aula 1, Aula 2... · Datas, horários e locais ficam vinculados ao calendário.</span></div>'+
+      '<div class="grid three workshop-planning-grid">'+visible.map(w=>{
+        const p=byWorkshop.get(w.id);
+        return '<div class="card workshop-plan-summary"><div class="actions"><span class="pill info">'+esc(workshopTypeLabel(w.workshop_type))+'</span>'+(p?'<span class="pill '+(p.status==='finalizado'?'success':'warn')+'">'+esc(p.status)+'</span>':'<span class="pill">Não criado</span>')+'</div><h3>'+esc(w.name)+'</h3><p class="muted">'+esc(workshopScheduleLabel(w))+' · '+esc(workshopLocationLabel(w))+'</p><p><b>Oficineiro(a):</b> '+esc(teamMap.get(w.oficineiro_user_id)||'Não definido')+'<br><b>Educador(a):</b> '+esc(teamMap.get(w.educator_user_id)||'Não definido')+'</p><div class="actions">'+(p?'<button class="btn primary" data-workshop-plan-open="'+p.id+'">Abrir planejamento</button><button class="btn secondary" data-workshop-plan-generate="'+w.id+'">Sincronizar calendário</button>':'<button class="btn primary" data-workshop-plan-generate="'+w.id+'">Gerar planejamento do mês</button>')+'</div></div>';
+      }).join('')||'<div class="card empty">Nenhuma oficina ativa disponível para planejamento.</div>'+'</div>';
+  }
+
   if(view==='oficineiros'){
     const month=route().params.get('month')||currentMonth();
     let dashboards=await listWorkshopInstructorDashboard(month);if(state.user?.role==='oficineiro')dashboards=dashboards.filter(i=>i.id===state.user.id);
