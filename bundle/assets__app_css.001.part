@@ -231,3 +231,51 @@ d);font-size:12px;margin:16px 0}.divider:before,.divider:after{content:"";height
   .methodology-preview-scroll{padding:10px}
   .methodology-preview-pane{overflow:auto}
 }
+
+
+/* Gestão ampliada de oficinas */
+.workshop-tabs{margin-bottom:18px}
+.workshop-card-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin-top:12px}
+.workshop-card-meta span{display:grid;gap:2px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:#fafcfb;font-size:.86rem}
+.workshop-card-meta b{font-size:.68rem;text-transform:uppercase;color:var(--muted);letter-spacing:.04em}
+.workshop-weekdays{grid-template-columns:repeat(4,minmax(0,1fr))}
+.month-filter{min-width:190px}
+.month-filter>span{display:block;font-size:.72rem;font-weight:700;margin-bottom:5px;color:var(--muted);text-transform:uppercase}
+.notice.info{background:#f2f7ff;border-color:#cdddf8;color:#244d7d}
+.notice.compact{padding:9px 12px}
+.workshop-calendar-card{overflow:auto}
+.calendar-week-head,.calendar-month-grid{display:grid;grid-template-columns:repeat(7,minmax(145px,1fr));min-width:1015px}
+.calendar-week-head>div{padding:9px 8px;text-align:center;font-size:.75rem;font-weight:800;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--line)}
+.calendar-month-grid{border-left:1px solid var(--line);border-top:1px solid var(--line)}
+.calendar-day{min-height:145px;padding:7px;background:#fff;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.calendar-day.outside{background:#f7f9f8;min-height:40px}
+.calendar-day-number{font-size:.75rem;font-weight:800;color:var(--muted);margin-bottom:6px}
+.calendar-event{display:grid;gap:2px;padding:7px;border:1px solid var(--line);border-radius:9px;margin-bottom:6px;background:#f8fbfa;font-size:.72rem}
+.calendar-event b{font-size:.73rem}
+.calendar-event span,.calendar-event small{color:var(--muted)}
+.calendar-event.done{border-color:#b9e1ca;background:#f0faf4}
+.calendar-event.cancelled{opacity:.6;text-decoration:line-through;background:#faf6f6}
+.calendar-event.planned{border-left:3px solid var(--brand)}
+.calendar-event-actions{display:flex;gap:4px;margin-top:3px;flex-wrap:wrap}
+.calendar-event-actions .btn{padding:4px 6px;font-size:.66rem;border-radius:7px}
+.instructor-dashboard{gap:18px}
+.instructor-head{margin-bottom:10px}
+.instructor-head h3{font-size:1.15rem;margin:0}
+.instructor-head p{margin:4px 0 0;color:var(--muted)}
+.instructor-kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
+.instructor-kpis .kpi{padding:12px;border:1px solid var(--line);border-radius:12px;background:#fafcfb}
+.instructor-kpis .value{font-size:1.55rem}
+.instructor-record-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.instructor-record-row:last-child{border-bottom:0}
+.instructor-record-row>div{display:grid;gap:3px}
+.instructor-record-row span{font-size:.82rem;color:var(--muted)}
+.instructor-evidence-paper{max-width:960px}
+.instructor-kpi-table td{text-align:center;font-weight:700}
+@media(max-width:980px){
+  .workshop-card-meta{grid-template-columns:1fr}
+  .instructor-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .workshop-weekdays{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:620px){
+  .instructor-kpis{grid-template-columns:1fr}
+}
