@@ -31,6 +31,24 @@ async function printEducatorPlannedAttendance(planId,lessonId){
   openPrintableDocument('Lista de Presença · '+w.name+' · '+fmtDate(lesson.scheduled_date),html);
 }
 
+
+async function pageCfdhShared(){
+  if(!permitted('cfdh_shared'))return '<div class="notice danger">Seu perfil não possui acesso ao CFDH compartilhado.</div>';
+  const month=route().params.get('month')||currentMonth();
+  const [plans,reports,team,workshops]=await Promise.all([listEducatorPlans(month,null),listEducatorReports(null),listTeam(),listWorkshops()]);
+  const cfdhPlans=(plans||[]).filter(p=>['cfdh_estrutural','cfdh_transversal'].includes(p.plan_type)&&(!p.planned_start||String(p.planned_start).slice(0,7)===month));
+  const reportMap=new Map((reports||[]).map(r=>[r.plan_id,r])),teamMap=new Map(team.map(x=>[x.id,x])),workshopMap=new Map(workshops.map(w=>[w.id,w]));
+  const cards=cfdhPlans.map(p=>{
+    const rep=reportMap.get(p.id),owner=teamMap.get(p.educator_user_id),workshop=workshopMap.get(p.workshop_id);
+    return '<div class="card"><div class="actions"><span class="pill success">'+esc(p.plan_type==='cfdh_transversal'?'CFDH transversal':'CFDH estrutural')+'</span><span class="pill">'+esc(p.status||'planejado')+'</span></div><h3>'+esc(p.activity_title||'Planejamento CFDH')+'</h3><p>'+esc(p.description_objective||'')+'</p><div class="muted">'+fmtDate(p.planned_start)+(p.planned_end?' a '+fmtDate(p.planned_end):'')+' · '+(p.planned_duration_hours||0)+'h · '+(p.expected_participants??'—')+' jovem(ns)</div><div class="muted" style="margin-top:5px">Responsável pelo registro: '+esc(owner?.display_name||'Não identificado')+(owner?.role?' · '+esc(roleLabel(owner.role)):'')+(workshop?' · Oficina: '+esc(workshop.name):'')+'</div>'+(rep?'<div class="notice '+(rep.execution_status==='nao_realizado'?'danger':rep.execution_status==='parcial'?'warn':'success')+'" style="margin-top:10px"><b>Execução: '+esc(rep.execution_status)+'</b> · '+(rep.actual_participants??0)+' participantes · '+(rep.actual_duration_hours??0)+'h<br>'+esc(rep.actual_description||'')+'</div>':'<div class="notice warn" style="margin-top:10px">Relatório de execução ainda não preenchido.</div>')+'<div class="actions" style="margin-top:10px"><button class="btn secondary" data-cfdh-edit-plan="'+p.id+'">Editar planejamento</button><button class="btn primary" data-cfdh-report-plan="'+p.id+'">'+(rep?'Editar relatório de execução':'Relatar execução')+'</button></div></div>';
+  }).join('');
+  return '<div class="page-head"><div><h2>CFDH compartilhado</h2><p>Planejamento, execução e avaliação construídos conjuntamente por Educadores e Equipe Técnica.</p></div><div class="actions"><button class="btn primary" data-new-cfdh-plan>+ Novo planejamento CFDH</button></div></div>'+
+    '<div class="card"><div class="form-grid"><div class="field"><label>Mês de referência</label><input class="input" type="month" data-cfdh-month value="'+esc(month)+'"></div><div class="field"><label>Participação</label><div class="input read-only">Educadores · Psicologia · Serviço Social · Terapia Ocupacional</div></div></div></div>'+
+    '<div class="page-head educator-subhead"><div><h3>Planejamento e execução</h3><p>Qualquer integrante autorizado pode colaborar nos planejamentos de CFDH e responder o relatório de execução.</p></div></div><div class="grid two">'+(cards||'<div class="card empty">Nenhum planejamento de CFDH neste mês.</div>')+'</div>'+
+    '<div class="page-head educator-subhead" style="margin-top:20px"><div><h3>Documentos oficiais do CFDH</h3><p>Os formulários abaixo usam o mesmo acesso compartilhado e mantêm pré-visualização do documento.</p></div></div>'+
+    '<div class="grid three"><div class="card"><span class="pill">Anexo 11</span><h3>CFDH — Planejamento</h3><p class="muted">Documento oficial de planejamento do Circuito Formativo.</p><button class="btn primary" data-nav="formulario/cfdh-planejamento">Preencher Anexo 11</button></div><div class="card"><span class="pill">Anexo 12</span><h3>CFDH — Avaliação dos Jovens</h3><p class="muted">Avaliação final do CFDH pelos jovens.</p><button class="btn primary" data-nav="formulario/cfdh-avaliacao-jovens">Preencher Anexo 12</button></div><div class="card"><span class="pill">Anexo 13</span><h3>CFDH — Avaliação da Equipe</h3><p class="muted">Avaliação de educadores/oficineiros dentro do CFDH, tratada como documento compartilhado do circuito.</p><button class="btn primary" data-nav="formulario/cfdh-avaliacao-equipe">Preencher Anexo 13</button></div></div>';
+}
+
 async function pageEducatorV2(){
   if(!permitted('educador_area'))return '<div class="notice danger">Seu perfil nao possui acesso a Area do Educador.</div>';
   const rr=route(),month=rr.params.get('month')||currentMonth(),view=rr.params.get('view')||'responsabilidades';
