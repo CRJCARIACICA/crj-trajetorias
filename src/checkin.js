@@ -206,26 +206,51 @@ function showVisitorForm(prefill={}){
     '<form id="visitor-form" class="stack"><div class="field"><label>Nome completo</label><input class="input" name="full_name" value="'+esc(prefill.full_name||'')+'" required></div>'+
     '<div class="form-grid"><div class="field"><label>Data de nascimento</label><input class="input" type="date" name="birth_date" value="'+esc(prefill.birth_date||'')+'" required></div><div class="field"><label>CPF</label><input class="input" name="cpf" inputmode="numeric" value="'+esc(prefill.cpf||lastCpf||'')+'" required></div></div>'+
     '<div class="field"><label>Bairro</label><input class="input" name="neighborhood" required></div>'+signatureBlock()+
-    '<button class="btn primary">Registrar visita</button></form>','4');
+    '<button class="btn primary" type="submit">Registrar visita</button></form>','4');
   backButton(showCpfCheck);
   const form=app.querySelector('#visitor-form'),getSignature=bindSignature(form);
   form.addEventListener('submit',async e=>{
-    e.preventDefault();const sig=getSignature();if(!sig){form.insertAdjacentHTML('afterbegin',notice('danger','Assinatura obrigatória','Assine antes de registrar a visita.'));return}
-    const fd=new FormData(form),btn=form.querySelector('button[type="submit"]');btn.disabled=true;btn.textContent='Registrando...';
-    const {data,error}=await db.rpc('workshop_checkin_guest',{
-      p_token:token,p_full_name:fd.get('full_name'),p_birth_date:fd.get('birth_date'),p_cpf:fd.get('cpf'),p_neighborhood:fd.get('neighborhood'),p_signature_data:sig
-    });
-    if(error){btn.disabled=false;btn.textContent='Registrar visita';form.querySelector('.notice.danger')?.remove();form.insertAdjacentHTML('afterbegin',notice('danger','Não foi possível registrar',error.message));return}
-    if(data.existing_youth){await resolveCandidate(data.candidate_id,'Este CPF já possui trajetória no CRJ.');return}
-    if(data.must_provisional){
-      visitorSnapshot={...data,cpf:onlyDigits(fd.get('cpf')),birth_date:fd.get('birth_date'),display_name:fd.get('full_name')};
-      shell('3ª visita registrada',
-        '<div class="notice warn"><b>Sua visita foi registrada.</b><br>Você atingiu 3 visitas como visitante. Para as próximas oportunidades e presenças, conclua agora a inscrição provisória.</div>'+
-        '<button class="btn primary" data-force-provisional>Continuar inscrição provisória</button>','5');
-      app.querySelector('[data-force-provisional]').addEventListener('click',()=>showProvisionalForm({cpf:visitorSnapshot.cpf,full_name:visitorSnapshot.display_name,birth_date:visitorSnapshot.birth_date}));
-      return;
+    e.preventDefault();
+    const btn=form.querySelector('button[type="submit"]');
+    form.querySelectorAll('.notice.danger').forEach(x=>x.remove());
+    try{
+      const sig=getSignature();
+      if(!sig){
+        form.insertAdjacentHTML('afterbegin',notice('danger','Assinatura obrigatória','Assine antes de registrar a visita.'));
+        return;
+      }
+      const fd=new FormData(form);
+      btn.disabled=true;btn.textContent='Registrando visita...';
+      const result=await db.rpc('workshop_checkin_guest',{
+        p_token:token,
+        p_full_name:String(fd.get('full_name')||'').trim(),
+        p_birth_date:fd.get('birth_date'),
+        p_cpf:fd.get('cpf'),
+        p_neighborhood:String(fd.get('neighborhood')||'').trim(),
+        p_signature_data:sig
+      });
+      if(result.error)throw result.error;
+      const data=result.data||{};
+      if(data.existing_youth){
+        await resolveCandidate(data.candidate_id,'Este CPF já possui trajetória no CRJ.');
+        return;
+      }
+      if(data.must_provisional){
+        visitorSnapshot={...data,cpf:onlyDigits(fd.get('cpf')),birth_date:fd.get('birth_date'),display_name:fd.get('full_name')};
+        shell('3ª visita registrada',
+          '<div class="notice warn"><b>Sua visita foi registrada.</b><br>Você atingiu 3 visitas como visitante. Para continuar participando depois deste registro, conclua a inscrição provisória.</div>'+
+          '<div class="actions"><button class="btn primary" data-force-provisional>Continuar inscrição provisória</button><button class="btn secondary" data-next-person>Próxima pessoa</button></div>','5');
+        app.querySelector('[data-force-provisional]').addEventListener('click',()=>showProvisionalForm({cpf:visitorSnapshot.cpf,full_name:visitorSnapshot.display_name,birth_date:visitorSnapshot.birth_date}));
+        app.querySelector('[data-next-person]').addEventListener('click',mainButtons);
+        return;
+      }
+      app.innerHTML='<div class="checkin-success"><div class="success-mark">✓</div><h2>Visita registrada</h2><p>Visita '+esc(data.visits||1)+' de 3 registrada na lista desta aula.</p><div class="notice success"><b>Registro concluído.</b><br>A lista oficial da aula já foi atualizada.</div><button class="btn primary" data-next-person>Registrar próxima pessoa</button></div>';
+      app.querySelector('[data-next-person]').addEventListener('click',mainButtons);
+      setTimeout(()=>{if(app.querySelector('[data-next-person]'))mainButtons()},4500);
+    }catch(err){
+      btn.disabled=false;btn.textContent='Registrar visita';
+      form.insertAdjacentHTML('afterbegin',notice('danger','Não foi possível registrar a visita',err?.message||String(err)));
     }
-    showSuccess('Visita registrada','Visita '+data.visits+' de 3. Você pode fazer a inscrição provisória a qualquer momento.',data);
   });
 }
 function showSuccess(title,text,state={}){
