@@ -93,7 +93,7 @@ export async function generateWorkshopFixedCalendar(workshop,horizonDays=90){
 }
 export async function listWorkshopInstructorRecords(instructorId=null){
   if(mode==='mock'){const s=mock();return (s.workshopInstructorRecords||[]).filter(x=>!instructorId||x.instructor_user_id===instructorId);}
-  let q=supabase.from('workshop_instructor_records').select('*, workshops(name), profiles!workshop_instructor_records_instructor_user_id_fkey(display_name)').order('record_date',{ascending:false}).order('created_at',{ascending:false});
+  let q=supabase.from('workshop_instructor_records').select('*').order('record_date',{ascending:false}).order('created_at',{ascending:false});
   if(instructorId)q=q.eq('instructor_user_id',instructorId);
   const {data,error}=await q;if(error)throw error;return data||[];
 }
@@ -127,7 +127,7 @@ export async function listWorkshopInstructorDashboard(month=monthKey()){
     supabase.from('workshop_sessions').select('*').gte('session_date',start).lt('session_date',end).order('session_date',{ascending:false}),
     supabase.from('attendance').select('session_id,workshop_id,attendance_date,present').gte('attendance_date',start).lt('attendance_date',end).eq('present',true),
     supabase.from('workshop_guest_participations').select('session_id,workshop_id,participation_date').gte('participation_date',start).lt('participation_date',end),
-    supabase.from('workshop_instructor_records').select('*').order('record_date',{ascending:false}).limit(500),
+    supabase.from('workshop_instructor_records').select('*').gte('record_date',start).lt('record_date',end).order('record_date',{ascending:false}).limit(500),
     supabase.from('educator_records').select('workshop_id,record_date,record_type,title,description').eq('record_type','acompanhamento_oficina').gte('record_date',start).lt('record_date',end)
   ]);
   for(const q of [profilesQ,workshopsQ,sessionsQ,attendanceQ,guestsQ,recordsQ,eduQ])if(q.error)throw q.error;
