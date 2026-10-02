@@ -75,12 +75,29 @@ export async function addJourney(youthId,eventType,title,details='',visibility='
 
 export async function saveFormSubmission(formSlug,youthId,payload){
   if(mode==='mock'){
-    const s=mock(); const row={id:uid('form'),form_slug:formSlug,youth_id:youthId||null,payload,submitted_at:now(),created_by:s.currentUser.id}; s.forms.push(row);
-    if(youthId) s.journey.push({id:uid('ev'),youth_id:youthId,event_type:'formulario',title:`Formulário: ${formSlug}`,details:'Registro metodológico preenchido',visibility:['acompanhamento','pvida','ptrampo','outras-demandas'].includes(formSlug)?'technical':'team',event_date:now(),created_by:s.currentUser.id}); save(s); return row;
+    const s=mock();
+    if(formSlug==='formulario-inicial'&&youthId){
+      let row=s.forms.find(x=>x.youth_id===youthId&&x.form_slug==='formulario-inicial');
+      if(row){row.payload=payload;row.submitted_at=now();row.updated_at=now();}
+      else{row={id:uid('form'),form_slug:formSlug,youth_id:youthId,payload,submitted_at:now(),updated_at:now(),created_by:s.currentUser.id};s.forms.push(row);}
+      s.journey.push({id:uid('ev'),youth_id:youthId,event_type:'formulario',title:'Formulário: formulario-inicial',details:'Formulário Inicial atualizado',visibility:'team',event_date:now(),created_by:s.currentUser.id});
+      save(s);return row;
+    }
+    const row={id:uid('form'),form_slug:formSlug,youth_id:youthId||null,payload,submitted_at:now(),created_by:s.currentUser.id};s.forms.push(row);
+    if(youthId)s.journey.push({id:uid('ev'),youth_id:youthId,event_type:'formulario',title:`Formulário: ${formSlug}`,details:'Registro metodológico preenchido',visibility:['acompanhamento','pvida','ptrampo','outras-demandas'].includes(formSlug)?'technical':'team',event_date:now(),created_by:s.currentUser.id});
+    save(s);return row;
   }
-  const {data,error}=await supabase.from('methodology_form_submissions').insert({form_slug:formSlug,youth_id:youthId||null,payload}).select('*').single(); if(error) throw error;
-  if(youthId) await addJourney(youthId,'formulario',`Formulário: ${formSlug}`,'Registro metodológico preenchido',['acompanhamento','pvida','ptrampo','outras-demandas'].includes(formSlug)?'technical':'team');
-  return data;
+  let data,error;
+  if(formSlug==='formulario-inicial'&&youthId){
+    const r=await supabase.rpc('save_initial_form_document',{p_youth_id:youthId,p_payload:payload});
+    data=r.data;error=r.error;
+  }else{
+    const r=await supabase.from('methodology_form_submissions').insert({form_slug:formSlug,youth_id:youthId||null,payload}).select('*').single();
+    data=r.data;error=r.error;
+  }
+  if(error)throw error;
+  if(youthId)await addJourney(youthId,'formulario',`Formulário: ${formSlug}`,formSlug==='formulario-inicial'?'Formulário Inicial atualizado':'Registro metodológico preenchido',['acompanhamento','pvida','ptrampo','outras-demandas'].includes(formSlug)?'technical':'team');
+  return Array.isArray(data)?data[0]:data;
 }
 export async function listFormSubmissions(youthId){
   if(mode==='mock') return mock().forms.filter(x=>x.youth_id===youthId).sort((a,b)=>new Date(b.submitted_at)-new Date(a.submitted_at));
