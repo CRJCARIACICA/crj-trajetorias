@@ -282,6 +282,16 @@ function attendanceSheetRowsHtmlV2(sheet){
 function updateAttendanceSheetDomV2(sheet){
   const body=document.querySelector('[data-sheet-body]');
   const count=document.querySelector('[data-sheet-count]');
-  if(body)body.innerHTML=attendanceSheetRowsHtmlV2(sheet);
-  if(count)count.textContent=Number(sheet?.participant_count||0)+' participante(s)';
+  const rows=sheet?.participants||[];
+  const fingerprint=JSON.stringify(rows.map(r=>[
+    r.record_kind||'',r.record_id||'',r.person_id||'',r.display_name||r.full_name||'',
+    r.birth_date||'',r.cpf||'',r.phone||'',r.email||'',r.initial_form_status||'',
+    String(r.signature_data||'').length
+  ]));
+  if(body&&body.dataset.sheetFingerprint!==fingerprint){
+    body.innerHTML=attendanceSheetRowsHtmlV2(sheet);
+    body.dataset.sheetFingerprint=fingerprint;
+  }
+  const label=Number(sheet?.participant_count||0)+' participante(s)';
+  if(count&&count.textContent!==label)count.textContent=label;
 }
