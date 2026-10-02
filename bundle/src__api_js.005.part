@@ -66,13 +66,35 @@ export async function listWorkshopAttendance(workshopId){
   const {data,error}=await supabase.from('attendance').select('*').eq('workshop_id',workshopId).order('attendance_date',{ascending:false});
   if(error)throw error;return data||[];
 }
-export async function registerWorkshopEnrollment(row){
-  if(mode==='mock'){await enrollYouth(row.workshop_id,row.youth_id);return {id:'mock'};}
-  const {data,error}=await supabase.rpc('register_workshop_enrollment',{
-    p_workshop_id:row.workshop_id,p_youth_id:row.youth_id,p_cpf:row.cpf||null,p_email:row.email||null,
-    p_neighborhood:row.neighborhood||null,p_signature_data:row.signature_data,p_secret:row.secret
+export async function getYouthWorkshopEnrollmentContext(youthId){
+  if(mode==='mock'){
+    const st=mock(),active=(st.enrollments||[]).filter(x=>x.youth_id===youthId&&x.status==='ativo');
+    return {enrolled_workshop_ids:active.map(x=>x.workshop_id),has_reusable_signature:active.some(x=>x.signature_data),signature_signed_at:null};
+  }
+  const {data,error}=await supabase.rpc('get_youth_workshop_enrollment_context',{p_youth_id:youthId});
+  if(error)throw error;return data||{enrolled_workshop_ids:[],has_reusable_signature:false};
+}
+export async function registerWorkshopEnrollments(row){
+  const ids=[...new Set((row.workshop_ids||[]).filter(Boolean))];
+  if(!ids.length)throw new Error('Selecione ao menos uma oficina.');
+  if(mode==='mock'){
+    const st=mock();st.enrollments||=[];
+    for(const workshop_id of ids){
+      if(!st.enrollments.some(x=>x.workshop_id===workshop_id&&x.youth_id===row.youth_id&&x.status==='ativo')){
+        st.enrollments.push({id:uid('en'),workshop_id,youth_id:row.youth_id,status:'ativo',enrolled_at:now(),signature_data:row.signature_data||null});
+      }
+    }
+    save(st);return {ok:true,registered_count:ids.length};
+  }
+  const {data,error}=await supabase.rpc('register_workshop_enrollments',{
+    p_workshop_ids:ids,p_youth_id:row.youth_id,p_cpf:row.cpf||null,p_email:row.email||null,
+    p_neighborhood:row.neighborhood||null,p_signature_data:row.signature_data||null,p_secret:row.secret
   });
-  if(error)throw error;return {id:data};
+  if(error)throw error;return data||{};
+}
+export async function registerWorkshopEnrollment(row){
+  const out=await registerWorkshopEnrollments({...row,workshop_ids:[row.workshop_id]});
+  return {id:Array.isArray(out.enrollment_ids)?out.enrollment_ids[0]:null,...out};
 }
 export async function openWorkshopCheckin(sessionId){
   if(mode==='mock')throw new Error('Lista virtual requer banco conectado.');
