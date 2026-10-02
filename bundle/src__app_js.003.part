@@ -31,6 +31,23 @@ async function bindRoute(){
   document.querySelector('[data-back]')?.addEventListener('click',()=>history.back());
   document.querySelector('#search-youth')?.addEventListener('submit',e=>{e.preventDefault();nav(`jovens?q=${encodeURIComponent(new FormData(e.target).get('q'))}`)});
   decorateMethodologyFormGoals(document.querySelector('#dynamic-form'));
+  const dynamicForm=document.querySelector('#dynamic-form');
+  const methodologyWorkspace=document.querySelector('[data-methodology-workspace]');
+  const methodologyPreview=document.querySelector('[data-methodology-preview]');
+  const methodologyToggle=document.querySelector('[data-toggle-methodology-preview]');
+  const refreshMethodologyPreview=()=>{
+    if(!dynamicForm||!methodologyPreview)return;
+    const definition=FORM_MAP[dynamicForm.dataset.slug];
+    if(!definition)return;
+    methodologyPreview.innerHTML=methodologyPreviewHtml(definition,parseForm(dynamicForm));
+  };
+  dynamicForm?.addEventListener('input',refreshMethodologyPreview);
+  dynamicForm?.addEventListener('change',refreshMethodologyPreview);
+  methodologyToggle?.addEventListener('click',()=>{
+    if(!methodologyWorkspace)return;
+    methodologyWorkspace.classList.toggle('preview-open');
+    methodologyToggle.textContent=methodologyWorkspace.classList.contains('preview-open')?'Ocultar pré-visualização':'Abrir pré-visualização';
+  });
   document.querySelector('#dynamic-form')?.addEventListener('submit',async e=>{
     e.preventDefault();
     const f=e.target,payload=parseForm(f),slug=f.dataset.slug,youthId=f.dataset.youth||null;
