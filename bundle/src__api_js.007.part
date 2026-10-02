@@ -64,12 +64,14 @@ export async function createWorkshopAttendanceSubmission(sessionId){
     cpf:r.cpf||'',
     phone:r.phone||'',
     email:r.email||'',
+    neighborhood:r.neighborhood||'',
     initial_form_status:r.initial_form_status||''
   }));
   const payload={
     activity:sheet.workshop_name||'',
     officineiro:sheet.officineiro||'',
     educator_reference:sheet.educator||'',
+    location:'CRJ Cariacica',
     date:sheet.date||'',
     start_time:String(sheet.start_time||'').slice(0,5),
     end_time:String(sheet.end_time||'').slice(0,5),
