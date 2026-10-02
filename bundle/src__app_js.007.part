@@ -1,3 +1,36 @@
+
+function openPrintableDocument(title,html){
+  const win=window.open('','_blank','noopener,noreferrer,width=1200,height=850');
+  if(!win){toast('O navegador bloqueou a janela de impressão.','danger');return}
+  win.document.open();
+  win.document.write('<!doctype html><html><head><meta charset="utf-8"><title>'+esc(title)+'</title><style>@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;background:#fff}.methodology-paper{width:100%;max-width:none;margin:0;background:#fff;color:#111;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:9px;line-height:1.25;box-shadow:none;border:0}.methodology-annex-title{text-align:center;font-weight:700;font-size:11px;margin-bottom:12px}.methodology-institutional-header{text-align:center;margin:0 auto 9px}.methodology-institutional-header img{display:block;width:330px;height:auto;margin:auto}.methodology-inner-title{text-align:center;font-size:10px;font-weight:800;border:1px solid #222;padding:5px 7px;margin-bottom:-1px}.methodology-row{border:1px solid #222;margin-top:-1px;min-height:24px;padding:6px 8px}.methodology-row b{font-size:9px}.methodology-inline-answer{margin-left:6px}.methodology-answer{margin-top:5px}.methodology-row-tall{min-height:48px}.methodology-planning-table,.methodology-presence-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:7px}.methodology-planning-table th,.methodology-planning-table td,.methodology-presence-table th,.methodology-presence-table td{border:1px solid #222;padding:4px;vertical-align:top}.methodology-planning-table th,.methodology-presence-table th{text-align:center;font-weight:700}.methodology-presence-table td{height:29px}.methodology-system-note{font-size:7px;margin-top:5px;color:#555}.workshop-plan-table th:nth-child(1){width:14%}.workshop-plan-table th:nth-child(2){width:13%}.workshop-plan-table th:nth-child(3){width:16%}.workshop-plan-table th:nth-child(4){width:20%}.workshop-plan-table th:nth-child(5){width:14%}.workshop-plan-table th:nth-child(6){width:8%}.workshop-plan-table th:nth-child(7){width:15%}.methodology-presence-table th:nth-child(1){width:5%}.methodology-presence-table th:nth-child(2){width:27%}.methodology-presence-table th:nth-child(3){width:15%}.methodology-presence-table th:nth-child(4){width:15%}.methodology-presence-table th:nth-child(5){width:23%}.methodology-presence-table th:nth-child(6){width:15%}</style></head><body>'+html+'<script>window.addEventListener("load",()=>setTimeout(()=>window.print(),180));<\/script></body></html>');
+  win.document.close();
+}
+async function printEducatorWorkshopPlan(planId){
+  const [bundle,workshops,team]=await Promise.all([getWorkshopMonthlyPlan(planId),listWorkshops(),listTeam()]);
+  const w=workshops.find(x=>x.id===bundle.plan.workshop_id);
+  if(!w)throw new Error('Oficina não encontrada.');
+  const teamMap=new Map(team.map(x=>[x.id,x.display_name]));
+  openPrintableDocument('Planejamento · '+w.name,workshopPlanPreviewHtml(bundle,w,teamMap));
+}
+async function printEducatorPlannedAttendance(planId,lessonId){
+  const [bundle,workshops,team]=await Promise.all([getWorkshopMonthlyPlan(planId),listWorkshops(),listTeam()]);
+  const w=workshops.find(x=>x.id===bundle.plan.workshop_id),lesson=(bundle.lessons||[]).find(x=>x.id===lessonId);
+  if(!w||!lesson)throw new Error('Aula planejada não encontrada.');
+  const teamMap=new Map(team.map(x=>[x.id,x.display_name]));
+  const html=methodologyAttendancePreviewHtml({
+    activity:w.name||'',
+    location:workshopLocationLabel({location_type:lesson.location_type,location_other:lesson.location_other}),
+    date:lesson.scheduled_date||'',
+    start_time:String(lesson.start_time||'').slice(0,5),
+    end_time:String(lesson.end_time||'').slice(0,5),
+    officineiro:teamMap.get(bundle.plan.instructor_user_id)||'',
+    educator_reference:teamMap.get(bundle.plan.educator_user_id)||'',
+    participants:[]
+  });
+  openPrintableDocument('Lista de Presença · '+w.name+' · '+fmtDate(lesson.scheduled_date),html);
+}
+
 async function pageEducatorV2(){
   if(!permitted('educador_area'))return '<div class="notice danger">Seu perfil nao possui acesso a Area do Educador.</div>';
   const rr=route(),month=rr.params.get('month')||currentMonth(),view=rr.params.get('view')||'responsabilidades';
