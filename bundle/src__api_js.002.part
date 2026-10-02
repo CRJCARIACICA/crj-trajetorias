@@ -206,6 +206,92 @@ export async function updateWorkshopInstructorProfile(userId,row){
   if(q.error)throw q.error;return q.data;
 }
 
+
+export async function listWorkshopMonthlyPlans(month=monthKey(),workshopId=null){
+  const planMonth=String(month).slice(0,7)+'-01';
+  if(mode==='mock'){
+    const s=mock();let rows=(s.workshopMonthlyPlans||[]).filter(x=>x.plan_month===planMonth);
+    if(workshopId)rows=rows.filter(x=>x.workshop_id===workshopId);
+    return rows;
+  }
+  let q=supabase.from('workshop_monthly_plans').select('*').eq('plan_month',planMonth).order('created_at',{ascending:false});
+  if(workshopId)q=q.eq('workshop_id',workshopId);
+  const out=await q;if(out.error)throw out.error;return out.data||[];
+}
+export async function getWorkshopMonthlyPlan(planId){
+  if(mode==='mock'){
+    const s=mock(),plan=(s.workshopMonthlyPlans||[]).find(x=>x.id===planId);
+    if(!plan)throw new Error('Planejamento não encontrado.');
+    const lessons=(s.workshopPlanLessons||[]).filter(x=>x.plan_id===planId).sort((a,b)=>a.lesson_number-b.lesson_number);
+    return {plan,lessons};
+  }
+  const p=await supabase.from('workshop_monthly_plans').select('*').eq('id',planId).single();
+  const l=await supabase.from('workshop_plan_lessons').select('*').eq('plan_id',planId).order('lesson_number');
+  if(p.error)throw p.error;if(l.error)throw l.error;
+  return {plan:p.data,lessons:l.data||[]};
+}
+export async function syncWorkshopMonthlyPlan(workshopId,month=monthKey()){
+  const key=String(month).slice(0,7),planMonth=key+'-01';
+  const parts=key.split('-').map(Number),yy=parts[0],mm=parts[1];
+  const start=planMonth,end=new Date(Date.UTC(yy,mm,1)).toISOString().slice(0,10);
+  if(mode==='mock'){
+    const s=mock(),w=s.workshops.find(x=>x.id===workshopId);if(!w)throw new Error('Oficina não encontrada.');
+    if(w.schedule_mode==='semanal_fixa')await generateWorkshopFixedCalendar(w);
+    s.workshopMonthlyPlans||=[];s.workshopPlanLessons||=[];
+    let plan=s.workshopMonthlyPlans.find(x=>x.workshop_id===workshopId&&x.plan_month===planMonth);
+    if(!plan){plan={id:uid('wplan'),workshop_id:workshopId,plan_month:planMonth,instructor_user_id:w.oficineiro_user_id||null,educator_user_id:w.educator_user_id||null,status:'rascunho',created_at:now(),updated_at:now()};s.workshopMonthlyPlans.push(plan)}
+    const entries=(s.workshopCalendar||[]).filter(x=>x.workshop_id===workshopId&&x.scheduled_date>=start&&x.scheduled_date<end&&x.status!=='cancelada').sort((a,b)=>String(a.scheduled_date+a.start_time).localeCompare(String(b.scheduled_date+b.start_time)));
+    for(const x of s.workshopPlanLessons.filter(x=>x.plan_id===plan.id))x.included=false;
+    entries.forEach((e,i)=>{let x=s.workshopPlanLessons.find(z=>z.plan_id===plan.id&&z.calendar_entry_id===e.id);if(!x){x={id:uid('wlesson'),plan_id:plan.id,calendar_entry_id:e.id,theme:'Aula '+(i+1)};s.workshopPlanLessons.push(x)}Object.assign(x,{lesson_number:i+1,scheduled_date:e.scheduled_date,start_time:e.start_time,end_time:e.end_time,location_type:e.location_type||w.location_type||null,location_other:e.location_other||w.location_other||null,included:true,updated_at:now()})});
+    save(s);return {plan,lessons:s.workshopPlanLessons.filter(x=>x.plan_id===plan.id&&x.included).sort((a,b)=>a.lesson_number-b.lesson_number)};
+  }
+  const wq=await supabase.from('workshops').select('*').eq('id',workshopId).single();if(wq.error)throw wq.error;
+  const w=wq.data;
+  if(w.schedule_mode==='semanal_fixa')await generateWorkshopFixedCalendar(w);
+  let pq=await supabase.from('workshop_monthly_plans').select('*').eq('workshop_id',workshopId).eq('plan_month',planMonth).maybeSingle();
+  if(pq.error)throw pq.error;
+  let plan=pq.data;
+  if(!plan){
+    const ins=await supabase.from('workshop_monthly_plans').insert({workshop_id:workshopId,plan_month:planMonth,instructor_user_id:w.oficineiro_user_id||null,educator_user_id:w.educator_user_id||null,status:'rascunho'}).select('*').single();
+    if(ins.error)throw ins.error;plan=ins.data;
+  }else{
+    const upd=await supabase.from('workshop_monthly_plans').update({instructor_user_id:w.oficineiro_user_id||plan.instructor_user_id||null,educator_user_id:w.educator_user_id||plan.educator_user_id||null,updated_at:now()}).eq('id',plan.id).select('*').single();
+    if(upd.error)throw upd.error;plan=upd.data;
+  }
+  const calQ=await supabase.from('workshop_calendar').select('*').eq('workshop_id',workshopId).gte('scheduled_date',start).lt('scheduled_date',end).neq('status','cancelada').order('scheduled_date').order('start_time');
+  const lessQ=await supabase.from('workshop_plan_lessons').select('*').eq('plan_id',plan.id);
+  if(calQ.error)throw calQ.error;if(lessQ.error)throw lessQ.error;
+  const existing=new Map((lessQ.data||[]).filter(x=>x.calendar_entry_id).map(x=>[x.calendar_entry_id,x]));
+  const disable=await supabase.from('workshop_plan_lessons').update({included:false,updated_at:now()}).eq('plan_id',plan.id);
+  if(disable.error)throw disable.error;
+  const rows=(calQ.data||[]).map((e,i)=>{
+    const old=existing.get(e.id)||{};
+    return {plan_id:plan.id,calendar_entry_id:e.id,lesson_number:i+1,scheduled_date:e.scheduled_date,start_time:e.start_time||w.start_time||null,end_time:e.end_time||w.end_time||null,location_type:e.location_type||w.location_type||null,location_other:e.location_other||w.location_other||null,theme:old.theme||('Aula '+(i+1)),objective:old.objective||null,proposed_activities:old.proposed_activities||null,resources:old.resources||null,cfdh_transversal:old.cfdh_transversal||null,observations:old.observations||null,included:true,updated_at:now()};
+  });
+  if(rows.length){
+    const up=await supabase.from('workshop_plan_lessons').upsert(rows,{onConflict:'plan_id,calendar_entry_id'}).select('*');
+    if(up.error)throw up.error;
+  }
+  const finalQ=await supabase.from('workshop_plan_lessons').select('*').eq('plan_id',plan.id).eq('included',true).order('lesson_number');
+  if(finalQ.error)throw finalQ.error;
+  return {plan,lessons:finalQ.data||[]};
+}
+export async function saveWorkshopMonthlyPlan(planId,header={},lessons=[]){
+  const planPatch={updated_at:now()};
+  for(const k of ['general_objective','general_methodology','expected_results','general_resources','observations','status'])if(header[k]!==undefined)planPatch[k]=header[k]===''?null:header[k];
+  if(mode==='mock'){
+    const s=mock(),plan=(s.workshopMonthlyPlans||[]).find(x=>x.id===planId);if(!plan)throw new Error('Planejamento não encontrado.');Object.assign(plan,planPatch);
+    for(const row of lessons){const x=(s.workshopPlanLessons||[]).find(z=>z.id===row.id&&z.plan_id===planId);if(x)for(const k of ['theme','objective','proposed_activities','resources','cfdh_transversal','observations'])if(row[k]!==undefined)x[k]=row[k]}
+    save(s);return {plan,lessons:(s.workshopPlanLessons||[]).filter(x=>x.plan_id===planId&&x.included)};
+  }
+  const p=await supabase.from('workshop_monthly_plans').update(planPatch).eq('id',planId).select('*').single();if(p.error)throw p.error;
+  if(lessons.length){
+    const payload=lessons.map(row=>({id:row.id,plan_id:planId,theme:row.theme||'',objective:row.objective||null,proposed_activities:row.proposed_activities||null,resources:row.resources||null,cfdh_transversal:row.cfdh_transversal||null,observations:row.observations||null,updated_at:now()}));
+    const l=await supabase.from('workshop_plan_lessons').upsert(payload,{onConflict:'id'});if(l.error)throw l.error;
+  }
+  return getWorkshopMonthlyPlan(planId);
+}
+
 export async function enrollYouth(workshopId,youthId){
   if(mode==='mock'){ const s=mock(); if(!s.enrollments.some(x=>x.workshop_id===workshopId&&x.youth_id===youthId&&x.status==='ativo')) s.enrollments.push({id:uid('en'),workshop_id:workshopId,youth_id:youthId,status:'ativo',enrolled_at:now()}); s.journey.push({id:uid('ev'),youth_id:youthId,event_type:'oficina',title:'Inscrição em oficina',details:s.workshops.find(w=>w.id===workshopId)?.name||'',visibility:'general',event_date:now(),created_by:s.currentUser.id}); save(s); return; }
   const {error}=await supabase.from('workshop_enrollments').insert({workshop_id:workshopId,youth_id:youthId}); if(error) throw error;
