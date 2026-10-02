@@ -74,6 +74,25 @@ export async function addJourney(youthId,eventType,title,details='',visibility='
 }
 
 export async function saveFormSubmission(formSlug,youthId,payload){
+  payload={...(payload||{})};
+  const requestNumberPattern=/^\d{3}\/(0[1-9]|1[0-2])-\d{4}$/;
+  if(formSlug==='emprestimo'){
+    if(mode==='mock'){
+      const s=mock();s.documentNumberSequences||={};
+      const d=new Date(),key='emprestimo:'+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+      const n=(s.documentNumberSequences[key]||0)+1;s.documentNumberSequences[key]=n;
+      payload.request_number=String(n).padStart(3,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'-'+d.getFullYear();
+      save(s);
+    }else{
+      const r=await supabase.rpc('next_document_request_number',{p_scope:'emprestimo',p_reference_date:new Date().toISOString().slice(0,10)});
+      if(r.error)throw r.error;
+      payload.request_number=r.data;
+    }
+  }else if(formSlug==='emprestimo-canhoto'){
+    const n=String(payload.request_number||'').trim();
+    if(!requestNumberPattern.test(n))throw new Error('Informe o número da solicitação principal no padrão 000/MM-AAAA, por exemplo 001/10-2026.');
+    payload.request_number=n;
+  }
   if(mode==='mock'){
     const s=mock();
     if(formSlug==='formulario-inicial'&&youthId){
