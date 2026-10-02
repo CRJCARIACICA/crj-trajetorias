@@ -40,9 +40,56 @@ async function pageWorkshopDetailV2(id){
   </div>`:''}
   <div class="card" style="margin-top:16px"><h3>Historico de aulas</h3>${sessions.map(s=>`<div class="agenda-row"><div><b>${fmtDate(s.session_date)} · ${String(s.start_time||'').slice(0,5)}–${String(s.end_time||'').slice(0,5)}</b><span>${esc(s.content||'Sem conteudo registrado')} · ${esc(workshopLocationLabel({location_type:s.location_type||w.location_type,location_other:s.location_other||w.location_other}))} · ${Number(s.duration_hours||0)}h · CFDH ${Number(s.cfdh_minutes||0)}min ${eduGoalInfo('aula')}</span></div><button class="btn" data-nav="oficina/${id}?session=${s.id}">Abrir</button></div>`).join('')||'<div class="empty">Nenhuma aula registrada.</div>'}</div>`;
 }
-function openFormalEnrollmentV2(workshopId,youthObj){
-  modal('Inscricao formal na oficina',`<form id="formal-enrollment-form" class="stack"><input type="hidden" name="workshop_id" value="${workshopId}"><input type="hidden" name="youth_id" value="${youthObj.id}"><div class="notice"><b>${esc(youthObj.preferred_name||youthObj.full_name)}</b><br>Os dados abaixo sao pre-preenchidos do Formulario Inicial quando ja existirem. A inscricao guarda uma fotografia desses dados sem alterar o cadastro-base.</div><div class="form-grid"><div class="field"><label>CPF</label><input class="input" name="cpf" value="${esc(youthObj.cpf||'')}" required></div><div class="field"><label>E-mail</label><input class="input" type="email" name="email" value="${esc(youthObj.email||'')}"></div></div><div class="field"><label>Bairro</label><input class="input" name="neighborhood" value="${esc(youthObj.neighborhood||'')}"></div><div class="field"><label>Senha para confirmar presenca</label><input class="input" type="password" name="secret" minlength="4" required><small>O banco guarda apenas o hash da senha.</small></div><div class="field"><label>Assinatura manuscrita</label><canvas class="signature-pad" data-signature-pad></canvas><div class="actions"><button type="button" class="btn" data-clear-signature>Limpar assinatura</button></div></div><button class="btn primary">Concluir inscricao ${eduGoalInfo('inscricao_oficina')}</button></form>`);
-  const form=document.querySelector('#formal-enrollment-form'),canvas=form?.querySelector('[data-signature-pad]'),pad=canvas?bindSignaturePadV2(canvas):null;decorateEduGoalForm(form,'inscricao_oficina');form?.querySelector('[data-clear-signature]')?.addEventListener('click',()=>pad?.clear());form?.addEventListener('submit',async e=>{e.preventDefault();if(!pad?.isDirty()){toast('Solicite a assinatura do jovem no campo de desenho.','danger');return}const p=parseForm(e.target);p.signature_data=pad.data();try{await registerWorkshopEnrollment(p);document.querySelector('#modal')?.remove();toast('Inscricao formal registrada');await render()}catch(err){toast(err.message,'danger')}});
+async function openFormalEnrollmentV2(workshopId,youthObj){
+  try{
+    const [workshops,context]=await Promise.all([listWorkshops(),getYouthWorkshopEnrollmentContext(youthObj.id)]);
+    const enrolled=new Set(context?.enrolled_workshop_ids||[]);
+    const active=workshops.filter(w=>w.active);
+    const available=active.filter(w=>!enrolled.has(w.id));
+    const enrolledNames=active.filter(w=>enrolled.has(w.id)).map(w=>w.name);
+    if(!available.length){
+      modal('Inscrição em oficinas','<div class="stack"><div class="notice success"><b>'+esc(youthObj.preferred_name||youthObj.full_name)+'</b><br>Este jovem já possui inscrição ativa em todas as oficinas disponíveis.</div>'+(enrolledNames.length?'<div class="check-grid">'+enrolledNames.map(n=>'<div class="check"><span>'+esc(n)+'</span><span class="pill success">Inscrito</span></div>').join('')+'</div>':'')+'</div>');
+      return;
+    }
+    const reuse=Boolean(context?.has_reusable_signature);
+    const options=available.map(w=>'<label class="check workshop-enrollment-option"><input type="checkbox" name="workshop_ids" value="'+w.id+'" '+(w.id===workshopId?'checked':'')+'><span><b>'+esc(w.name)+'</b><small>'+esc(workshopScheduleLabel(w))+' · '+esc(workshopLocationLabel(w))+'</small></span></label>').join('');
+    const already=enrolledNames.length?'<div class="field"><label>Já possui inscrição ativa</label><div class="check-grid">'+enrolledNames.map(n=>'<div class="check"><span>'+esc(n)+'</span><span class="pill success">Inscrito</span></div>').join('')+'</div></div>':'';
+    const signatureHtml=reuse
+      ?'<div class="notice success"><b>Assinatura já registrada</b><br>A mesma assinatura será reutilizada automaticamente nas novas oficinas selecionadas.</div><label class="check"><input type="checkbox" data-new-enrollment-signature><span>Coletar uma nova assinatura agora</span></label><div data-new-signature-wrap hidden><div class="field"><label>Nova assinatura manuscrita</label><canvas class="signature-pad" data-signature-pad></canvas><div class="actions"><button type="button" class="btn" data-clear-signature>Limpar assinatura</button></div></div></div>'
+      :'<div class="notice warn"><b>Primeira inscrição formal</b><br>É necessário coletar a assinatura uma única vez. Ela poderá ser reutilizada nas próximas inscrições.</div><div class="field"><label>Assinatura manuscrita</label><canvas class="signature-pad" data-signature-pad></canvas><div class="actions"><button type="button" class="btn" data-clear-signature>Limpar assinatura</button></div></div>';
+    modal('Inscrição em uma ou mais oficinas','<form id="formal-enrollment-form" class="stack"><input type="hidden" name="youth_id" value="'+youthObj.id+'"><div class="notice"><b>'+esc(youthObj.preferred_name||youthObj.full_name)+'</b><br>Selecione uma ou mais oficinas disponíveis. Os dados do cadastro e a assinatura válida do jovem serão reaproveitados.</div>'+already+'<div class="field"><label>Oficinas disponíveis</label><div class="check-grid workshop-enrollment-grid">'+options+'</div><small>É possível realizar várias inscrições na mesma operação.</small></div><div class="form-grid"><div class="field"><label>CPF</label><input class="input" name="cpf" value="'+esc(youthObj.cpf||'')+'" required></div><div class="field"><label>E-mail</label><input class="input" type="email" name="email" value="'+esc(youthObj.email||'')+'" required></div></div><div class="field"><label>Bairro</label><input class="input" name="neighborhood" value="'+esc(youthObj.neighborhood||'')+'" required></div><div class="field"><label>Senha para confirmar presença</label><input class="input" type="password" name="secret" minlength="4" maxlength="32" required><small>A mesma senha será configurada nas oficinas selecionadas nesta inscrição.</small></div>'+signatureHtml+'<button class="btn primary">Concluir inscrição nas oficinas '+eduGoalInfo('inscricao_oficina')+'</button></form>');
+    const form=document.querySelector('#formal-enrollment-form');
+    const canvas=form?.querySelector('[data-signature-pad]');
+    const pad=canvas?bindSignaturePadV2(canvas):null;
+    decorateEduGoalForm(form,'inscricao_oficina');
+    form?.querySelector('[data-clear-signature]')?.addEventListener('click',()=>pad?.clear());
+    const newSigToggle=form?.querySelector('[data-new-enrollment-signature]');
+    const sigWrap=form?.querySelector('[data-new-signature-wrap]');
+    newSigToggle?.addEventListener('change',()=>{if(sigWrap)sigWrap.hidden=!newSigToggle.checked});
+    form?.addEventListener('submit',async e=>{
+      e.preventDefault();
+      const workshopIds=[...form.querySelectorAll('[name="workshop_ids"]:checked')].map(x=>x.value);
+      if(!workshopIds.length){toast('Selecione ao menos uma oficina.','danger');return}
+      const p=parseForm(form);
+      let signatureData=null;
+      const collectingNew=!reuse||Boolean(newSigToggle?.checked);
+      if(collectingNew){
+        if(!pad?.isDirty()){toast('Solicite a assinatura do jovem no campo de desenho.','danger');return}
+        signatureData=pad.data();
+      }
+      const btn=form.querySelector('button[type="submit"],button.btn.primary'),original=btn?.textContent||'';
+      if(btn){btn.disabled=true;btn.textContent='Inscrevendo...'}
+      try{
+        const result=await registerWorkshopEnrollments({...p,youth_id:youthObj.id,workshop_ids:workshopIds,signature_data:signatureData});
+        document.querySelector('#modal')?.remove();
+        toast((result?.registered_count||workshopIds.length)+' oficina(s) vinculada(s) ao jovem');
+        await render();
+      }catch(err){
+        toast(err.message,'danger');
+        if(btn){btn.disabled=false;btn.textContent=original}
+      }
+    });
+  }catch(err){toast(err.message,'danger')}
 }
 async function bindWorkshopDetailV2(id){
   const workshops=await listWorkshops(),w=workshops.find(x=>x.id===id);if(!w)return;
@@ -51,7 +98,7 @@ async function bindWorkshopDetailV2(id){
   const session=sessions.find(x=>x.id===sessionId)||sessions[0]||null;
   const sheet=session?await getWorkshopAttendanceSheet(session.id):null;
   document.querySelector('[data-session-select]')?.addEventListener('change',e=>nav(`oficina/${id}?session=${e.target.value}`));
-  document.querySelectorAll('[data-formal-enroll]').forEach(b=>b.addEventListener('click',()=>{const y=youth.find(x=>x.id===b.dataset.formalEnroll);if(y)openFormalEnrollmentV2(id,y)}));
+  document.querySelectorAll('[data-formal-enroll]').forEach(b=>b.addEventListener('click',async()=>{const y=youth.find(x=>x.id===b.dataset.formalEnroll);if(y)await openFormalEnrollmentV2(id,y)}));
   document.querySelectorAll('[data-convert-provisional]').forEach(b=>b.addEventListener('click',()=>nav(`novo-jovem?provisional=${b.dataset.convertProvisional}`)));
   document.querySelector('[data-add-workshop-participant]')?.addEventListener('click',async b=>{
     try{
