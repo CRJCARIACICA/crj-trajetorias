@@ -158,6 +158,18 @@
     const month=route().params.get('month')||currentMonth();nav('oficinas?view=planejamento&month='+month+'&plan='+btn.dataset.workshopPlanOpen);
   }));
 
+  document.querySelectorAll('[data-edu-workshop-plan-pdf]').forEach(btn=>btn.addEventListener('click',async()=>{
+    const original=btn.textContent;btn.disabled=true;btn.textContent='Gerando...';
+    try{await downloadWorkshopMonthlyPlan(btn.dataset.eduWorkshopPlanPdf,'pdf');toast('PDF do planejamento gerado')}catch(err){toast(err.message,'danger')}finally{btn.disabled=false;btn.textContent=original}
+  }));
+  document.querySelectorAll('[data-edu-workshop-plan-docx]').forEach(btn=>btn.addEventListener('click',async()=>{
+    const original=btn.textContent;btn.disabled=true;btn.textContent='Gerando...';
+    try{await downloadWorkshopMonthlyPlan(btn.dataset.eduWorkshopPlanDocx,'docx');toast('DOCX do planejamento gerado')}catch(err){toast(err.message,'danger')}finally{btn.disabled=false;btn.textContent=original}
+  }));
+  document.querySelectorAll('[data-edu-workshop-plan-print]').forEach(btn=>btn.addEventListener('click',async()=>{
+    try{await printEducatorWorkshopPlan(btn.dataset.eduWorkshopPlanPrint)}catch(err){toast(err.message,'danger')}
+  }));
+
   const workshopPlanForm=document.querySelector('#workshop-plan-form');
   if(workshopPlanForm){
     const planId=workshopPlanForm.dataset.planId,workshopId=workshopPlanForm.dataset.workshopId;
