@@ -223,7 +223,7 @@ function workshopPeriodLabel(w){
 }
 function workshopTabs(view){
   return '<div class="tabs workshop-tabs">'+[
-    ['oficinas','Oficinas'],['calendario','Calendário'],['oficineiros','Oficineiros']
+    ['oficinas','Oficinas'],['calendario','Calendário'],['planejamento','Planejamento'],['oficineiros','Oficineiros']
   ].map(x=>'<button class="tab '+(view===x[0]?'active':'')+'" data-nav="oficinas?view='+x[0]+'">'+x[1]+'</button>').join('')+'</div>';
 }
 function workshopCalendarGrid(entries,month){
