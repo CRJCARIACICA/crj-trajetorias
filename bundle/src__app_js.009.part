@@ -12,6 +12,7 @@ async function pageWorkshopDetailV2(id){
   const workshops=await listWorkshops(),w=workshops.find(x=>x.id===id);if(!w)return '<div class="notice danger">Oficina nao encontrada.</div>';
   const [sessions,roster,attendance,guests,provisional,stats,youth]=await Promise.all([listWorkshopSessions(id,40),workshopRoster(id),listWorkshopAttendance(id),listGuestParticipations(id),listProvisionalPeople(),listProvisionalParticipationStats(),listYouth('')]);
   const sessionId=route().params.get('session')||sessions[0]?.id||'',session=sessions.find(x=>x.id===sessionId)||sessions[0]||null;
+  const sheet=session?await getWorkshopAttendanceSheet(session.id):null;
   const enrolled=new Set(roster.map(x=>x.youth_id)),counts={};for(const a of attendance)if(a.present)counts[a.youth_id]=(counts[a.youth_id]||0)+1;
   const youthAlerts=youth.filter(y=>(counts[y.id]||0)>=4&&!enrolled.has(y.id)).sort((a,b)=>(counts[b.id]||0)-(counts[a.id]||0));
   const sm=new Map(stats.map(x=>[x.provisional_person_id,x]));
@@ -30,6 +31,24 @@ async function pageWorkshopDetailV2(id){
       ${sessionGuests.map(g=>{const p=provisional.find(x=>x.id===g.provisional_person_id);return `<div class="session-presence-row visitor"><div><b>${esc(p?.full_name||'Visitante')}</b><span>Nascimento: ${fmtDate(p?.birth_date)} · CPF final ${esc(String(p?.cpf||'').replace(/\D/g,'').slice(-4)||'----')}</span><small>Visitante · ${esc(p?.neighborhood||'Bairro não informado')}</small></div><div class="actions"><span class="pill warn">Visitante</span><button class="btn ghost" data-edit-guest="${g.id}" data-person="${g.provisional_person_id}">Editar</button><button class="btn danger" data-remove-guest="${g.id}">Remover</button></div></div>`}).join('')}
       ${(!sessionAttendance.length&&!sessionGuests.length)?'<div class="empty">Nenhum registro nesta aula.</div>':''}
     </div></div>`:''}
+  ${session&&sheet?`<div class="card attendance-sheet-card" style="margin-top:16px">
+    <div class="page-head" style="margin-bottom:10px">
+      <div><h3 style="margin:0">Lista de Presença e Contato · documento vivo</h3><p>Atualizada pelos registros desta aula e pronta para evidência oficial.</p></div>
+      <div class="actions"><span class="pill success">${Number(sheet.participant_count||0)} participante(s)</span><button class="btn" data-refresh-sheet>Atualizar</button><button class="btn primary" data-sheet-pdf>PDF</button><button class="btn secondary" data-sheet-docx>DOCX</button><button class="btn" data-sheet-print>Imprimir</button></div>
+    </div>
+    <div class="attendance-sheet-meta">
+      <div><b>Nome da oficina</b><span>${esc(sheet.workshop_name||w.name||'')}</span></div>
+      <div><b>Oficineiro(a)</b><span>${esc(sheet.officineiro||'—')}</span></div>
+      <div><b>Educador(a)</b><span>${esc(sheet.educator||'—')}</span></div>
+      <div><b>Data</b><span>${fmtDate(sheet.date)}</span></div>
+      <div><b>Início</b><span>${esc(String(sheet.start_time||'').slice(0,5))}</span></div>
+      <div><b>Término</b><span>${esc(String(sheet.end_time||'').slice(0,5))}</span></div>
+    </div>
+    <div class="table-wrap"><table class="table attendance-official-table">
+      <thead><tr><th>#</th><th>Nome</th><th>Assinatura</th><th>Data de nascimento</th><th>CPF</th><th>Telefone</th><th>E-mail</th></tr></thead>
+      <tbody>${(sheet.participants||[]).map((r,i)=>`<tr><td>${i+1}</td><td><b>${esc(r.display_name||r.full_name||'')}</b>${r.initial_form_status==='provisorio'?'<br><span class="pill warn">Inicial provisório</span>':r.initial_form_status==='visitante'?'<br><span class="pill warn">Visitante</span>':''}</td><td>${r.signature_data?`<img class="sheet-signature" src="${esc(r.signature_data)}" alt="Assinatura">`:'<span class="muted">—</span>'}</td><td>${fmtDate(r.birth_date)}</td><td>${esc(r.cpf||'—')}</td><td>${esc(r.phone||'—')}</td><td>${esc(r.email||'—')}</td></tr>`).join('')||'<tr><td colspan="7" class="empty">Nenhuma presença registrada nesta aula.</td></tr>'}</tbody>
+    </table></div>
+  </div>`:''}
   <div class="card" style="margin-top:16px"><h3>Historico de aulas</h3>${sessions.map(s=>`<div class="agenda-row"><div><b>${fmtDate(s.session_date)} · ${String(s.start_time||'').slice(0,5)}–${String(s.end_time||'').slice(0,5)}</b><span>${esc(s.content||'Sem conteudo registrado')} · ${Number(s.duration_hours||0)}h · CFDH ${Number(s.cfdh_minutes||0)}min ${eduGoalInfo('aula')}</span></div><button class="btn" data-nav="oficina/${id}?session=${s.id}">Abrir</button></div>`).join('')||'<div class="empty">Nenhuma aula registrada.</div>'}</div>`;
 }
 function openFormalEnrollmentV2(workshopId,youthObj){
@@ -64,5 +83,17 @@ async function bindWorkshopDetailV2(id){
   }));
   document.querySelectorAll('[data-remove-guest]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('Remover apenas esta visita da aula?'))return;try{await removeWorkshopGuestParticipation(b.dataset.removeGuest);toast('Visita removida');await render()}catch(err){toast(err.message,'danger')}}));
   document.querySelector('[data-open-checkin]')?.addEventListener('click',async b=>{try{const x=await openWorkshopCheckin(b.currentTarget.dataset.openCheckin),url=new URL('checkin.html',location.href);url.searchParams.set('token',x.public_token);modal('Lista virtual aberta',`<div class="stack"><div class="notice success">A lista individual foi aberta. Ela verifica a situação da trajetória de cada jovem e mostra somente a próxima etapa necessária antes de registrar a presença.</div><input class="input" value="${esc(url.href)}" readonly data-checkin-url><div class="actions"><button class="btn primary" data-copy-checkin>Copiar link</button><a class="btn secondary" href="${esc(url.href)}" target="_blank">Abrir lista</a></div></div>`);document.querySelector('[data-copy-checkin]')?.addEventListener('click',async()=>{await navigator.clipboard.writeText(url.href);toast('Link copiado')})}catch(err){toast(err.message,'danger')}});
-  document.querySelector('[data-generate-attendance]')?.addEventListener('click',async b=>{const btn=b.currentTarget,old=btn.textContent;btn.disabled=true;btn.textContent='Gerando...';try{const sub=await generateWorkshopAttendanceSubmission(btn.dataset.generateAttendance);modal('Lista oficial gerada',`<div class="stack"><div class="notice success">A Lista de Presenca e Contato foi preenchida automaticamente a partir das presencas nominais desta aula.</div><div class="actions"><button class="btn primary" data-auto-list-pdf>Baixar PDF</button><button class="btn secondary" data-auto-list-docx>Baixar DOCX</button></div></div>`);document.querySelector('[data-auto-list-pdf]')?.addEventListener('click',()=>downloadFormSubmission(sub.id,'pdf'));document.querySelector('[data-auto-list-docx]')?.addEventListener('click',()=>downloadFormSubmission(sub.id,'docx'))}catch(err){toast(err.message,'danger')}finally{btn.disabled=false;btn.textContent=old}});
+  document.querySelector('[data-refresh-sheet]')?.addEventListener('click',()=>render());
+  async function exportCurrentSheet(format){
+    try{
+      const sub=await createWorkshopAttendanceSubmission(session.id);
+      await downloadFormSubmission(sub.id,format);
+      toast(String(format).toUpperCase()+' gerado');
+    }catch(err){toast(err.message,'danger')}
+  }
+  document.querySelector('[data-sheet-pdf]')?.addEventListener('click',()=>exportCurrentSheet('pdf'));
+  document.querySelector('[data-sheet-docx]')?.addEventListener('click',()=>exportCurrentSheet('docx'));
+  document.querySelector('[data-sheet-print]')?.addEventListener('click',()=>printAttendanceSheetV2(sheet));
+  document.querySelector('[data-generate-attendance]')?.addEventListener('click',async()=>{try{const sub=await createWorkshopAttendanceSubmission(session.id);modal('Lista oficial atualizada',`<div class="stack"><div class="notice success">A Lista de Presença e Contato foi consolidada com ${Number(sheet?.participant_count||0)} participante(s).</div><div class="actions"><button class="btn primary" data-auto-list-pdf>PDF</button><button class="btn secondary" data-auto-list-docx>DOCX</button><button class="btn" data-auto-list-print>Imprimir</button></div></div>`);document.querySelector('[data-auto-list-pdf]')?.addEventListener('click',()=>downloadFormSubmission(sub.id,'pdf'));document.querySelector('[data-auto-list-docx]')?.addEventListener('click',()=>downloadFormSubmission(sub.id,'docx'));document.querySelector('[data-auto-list-print]')?.addEventListener('click',()=>printAttendanceSheetV2(sheet))}catch(err){toast(err.message,'danger')}});
+
 }
