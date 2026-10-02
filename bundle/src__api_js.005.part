@@ -46,11 +46,19 @@ export async function saveWorkshopMonthlyReport(row){
     actual_description:row.actual_description||null,
     actual_participants:row.actual_participants===''||row.actual_participants==null?null:Number(row.actual_participants),
     actual_duration_hours:row.actual_duration_hours===''||row.actual_duration_hours==null?null:Number(row.actual_duration_hours),
+    methodology_applied:row.methodology_applied||null,
+    results_achieved:row.results_achieved||null,
+    resources_used:row.resources_used||null,
+    unplanned_actions:row.unplanned_actions||null,
+    youth_feedback:row.youth_feedback||null,
     positive_points:row.positive_points||null,
     difficulties:row.difficulties||null,
     actions_performed:row.actions_performed||null,
+    next_steps:row.next_steps||null,
+    observations:row.observations||null,
     justification:row.justification||null,
     evidence_ref:row.evidence_ref||null,
+    execution_snapshot:row.execution_snapshot||{},
     updated_at:now()
   };
   if(mode==='mock'){
@@ -61,6 +69,125 @@ export async function saveWorkshopMonthlyReport(row){
   }
   const {data,error}=await supabase.from('workshop_monthly_reports').upsert(payload,{onConflict:'plan_id'}).select('*').single();
   if(error)throw error;return data;
+}
+
+
+function reportMonthRange(month){
+  const [y,m]=String(month).slice(0,7).split('-').map(Number);
+  const start=y+'-'+String(m).padStart(2,'0')+'-01';
+  const end=new Date(Date.UTC(y,m,1)).toISOString().slice(0,10);
+  return {start,end};
+}
+function reportDurationHours(start,end){
+  if(!start||!end)return 0;
+  const a=String(start).slice(0,5).split(':').map(Number),b=String(end).slice(0,5).split(':').map(Number);
+  if(a.length<2||b.length<2)return 0;
+  return Math.max(0,((b[0]*60+b[1])-(a[0]*60+a[1]))/60);
+}
+export async function getWorkshopMonthlyReportBundle(planId){
+  const planBundle=await getWorkshopMonthlyPlan(planId);
+  const plan=planBundle.plan||{},lessons=(planBundle.lessons||[]).filter(x=>x.included!==false);
+  const workshopId=plan.workshop_id,month=String(plan.plan_month||'').slice(0,7),range=reportMonthRange(month);
+  if(mode==='mock'){
+    const st=mock(),workshop=(st.workshops||[]).find(x=>x.id===workshopId)||{};
+    const sessions=(st.sessions||[]).filter(x=>x.workshop_id===workshopId&&String(x.session_date||'').slice(0,7)===month);
+    const attendance=(st.attendance||[]).filter(x=>sessions.some(s=>s.id===x.session_id)&&x.present!==false);
+    const guests=(st.guestParticipations||[]).filter(x=>sessions.some(s=>s.id===x.session_id));
+    const report=(st.workshopMonthlyReports||[]).find(x=>x.plan_id===planId)||null;
+    const records=(st.educatorRecords||[]).filter(x=>x.educator_user_id===plan.educator_user_id&&String(x.record_date||'').slice(0,7)===month);
+    const team=st.team||[];
+    return buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendance,guests,report,records,team});
+  }
+  const [wq,sq,rq,records,team]=await Promise.all([
+    supabase.from('workshops').select('*').eq('id',workshopId).single(),
+    supabase.from('workshop_sessions').select('*').eq('workshop_id',workshopId).gte('session_date',range.start).lt('session_date',range.end).order('session_date').order('start_time'),
+    supabase.from('workshop_monthly_reports').select('*').eq('plan_id',planId).maybeSingle(),
+    listEducatorRecords(month,plan.educator_user_id||null),
+    listTeam()
+  ]);
+  if(wq.error)throw wq.error;if(sq.error)throw sq.error;if(rq.error)throw rq.error;
+  const sessions=sq.data||[],sessionIds=sessions.map(x=>x.id);
+  let attendance=[],guests=[];
+  if(sessionIds.length){
+    const [aq,gq]=await Promise.all([
+      supabase.from('attendance').select('id,session_id,youth_id,present,attendance_date').in('session_id',sessionIds).eq('present',true),
+      supabase.from('workshop_guest_participations').select('id,session_id,provisional_person_id,participation_date').in('session_id',sessionIds)
+    ]);
+    if(aq.error)throw aq.error;if(gq.error)throw gq.error;
+    attendance=aq.data||[];guests=gq.data||[];
+  }
+  return buildWorkshopMonthlyReportBundle({planBundle,workshop:wq.data||{},sessions,attendance,guests,report:rq.data||null,records,team});
+}
+function buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendance,guests,report,records,team}){
+  const plan=planBundle.plan||{},lessons=(planBundle.lessons||[]).filter(x=>x.included!==false);
+  const teamMap=new Map((team||[]).map(x=>[x.id,x]));
+  const attendanceBySession=new Map(),guestBySession=new Map();
+  for(const a of attendance||[]){const arr=attendanceBySession.get(a.session_id)||[];arr.push(a);attendanceBySession.set(a.session_id,arr)}
+  for(const g of guests||[]){const arr=guestBySession.get(g.session_id)||[];arr.push(g);guestBySession.set(g.session_id,arr)}
+  const sessionByLesson=new Map((sessions||[]).filter(s=>s.plan_lesson_id).map(s=>[s.plan_lesson_id,s]));
+  const lessonExecution=lessons.map(l=>{
+    const s=sessionByLesson.get(l.id)||null;
+    const nominal=s?(attendanceBySession.get(s.id)||[]):[],visitor=s?(guestBySession.get(s.id)||[]):[];
+    return {
+      lesson_id:l.id,
+      lesson_number:l.lesson_number,
+      planned_date:l.scheduled_date,
+      planned_start:l.start_time,
+      planned_end:l.end_time,
+      planned_theme:l.theme||('Aula '+l.lesson_number),
+      planned_objective:l.objective||'',
+      planned_activities:l.proposed_activities||'',
+      planned_resources:l.resources||'',
+      planned_cfdh:l.cfdh_transversal||'',
+      executed:Boolean(s),
+      session_id:s?.id||null,
+      actual_date:s?.session_date||null,
+      actual_start:s?.start_time||null,
+      actual_end:s?.end_time||null,
+      actual_hours:s?Number(s.duration_hours||reportDurationHours(s.start_time,s.end_time)):0,
+      actual_content:s?.content||'',
+      actual_notes:s?.notes||'',
+      cfdh_minutes:Number(s?.cfdh_minutes||0),
+      educator_user_id:s?.educator_user_id||null,
+      educator_name:teamMap.get(s?.educator_user_id)?.display_name||'',
+      participant_count:nominal.length+visitor.length,
+      registered_youth_count:nominal.length,
+      visitor_count:visitor.length
+    };
+  });
+  const uniqueYouth=new Set((attendance||[]).map(x=>x.youth_id).filter(Boolean));
+  const uniqueGuests=new Set((guests||[]).map(x=>x.provisional_person_id).filter(Boolean));
+  const plannedHours=lessons.reduce((n,l)=>n+reportDurationHours(l.start_time,l.end_time),0);
+  const executedHours=(sessions||[]).filter(s=>s.plan_lesson_id&&lessons.some(l=>l.id===s.plan_lesson_id)).reduce((n,s)=>n+Number(s.duration_hours||reportDurationHours(s.start_time,s.end_time)),0);
+  const complementaryActions=(records||[]).filter(r=>[
+    'mobilizacao','evento_programacao','mostra','acompanhamento_oficina','trampo_labpoca',
+    'mediacao_convivencia','ficaadica_orientacao','outra_acao_educativa','estudo_caso'
+  ].includes(r.record_type)).map(r=>({
+    id:r.id,date:r.record_date,type:r.record_type,title:r.title||'',description:r.description||'',
+    workshop_id:r.workshop_id||null,duration_hours:Number(r.duration_hours||0),participants_count:r.participants_count
+  }));
+  return {
+    plan,lessons,workshop,report,lesson_execution:lessonExecution,complementary_actions:complementaryActions,
+    metrics:{
+      planned_lessons:lessons.length,
+      executed_lessons:lessonExecution.filter(x=>x.executed).length,
+      pending_lessons:lessonExecution.filter(x=>!x.executed).length,
+      planned_hours:Number(plannedHours.toFixed(2)),
+      executed_hours:Number(executedHours.toFixed(2)),
+      participation_records:(attendance||[]).length+(guests||[]).length,
+      unique_participants:uniqueYouth.size+uniqueGuests.size,
+      registered_unique_youth:uniqueYouth.size,
+      unique_visitors:uniqueGuests.size,
+      cfdh_minutes:lessonExecution.reduce((n,x)=>n+Number(x.cfdh_minutes||0),0)
+    },
+    team:(team||[]).map(x=>({id:x.id,display_name:x.display_name,role:x.role,active:x.active}))
+  };
+}
+export async function downloadWorkshopMonthlyReport(reportId,format='pdf'){
+  return downloadCrjDocumentRequest({report_id:reportId,format},'Relatorio_Oficina');
+}
+export async function downloadEducatorReferral(recordId,format='pdf'){
+  return downloadCrjDocumentRequest({educator_record_id:recordId,format},'Encaminhamento_Educador');
 }
 
 export async function listEducatorReferralReceipts(){
