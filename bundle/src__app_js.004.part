@@ -120,4 +120,63 @@
   document.querySelectorAll('[data-instructor-record-edit]').forEach(btn=>btn.addEventListener('click',async()=>{try{const rows=await listWorkshopInstructorRecords(btn.dataset.instructor),rec=rows.find(x=>x.id===btn.dataset.instructorRecordEdit);if(rec)await openInstructorRecordV2(btn.dataset.instructor,rec)}catch(err){toast(err.message,'danger')}}));
   document.querySelectorAll('[data-instructor-evidence]').forEach(btn=>btn.addEventListener('click',async()=>{try{const month=route().params.get('month')||currentMonth(),rows=await listWorkshopInstructorDashboard(month),i=rows.find(x=>x.id===btn.dataset.instructorEvidence);if(!i)return;modal('Prévia de evidência · Oficineiro(a)','<div class="methodology-preview-modal">'+workshopInstructorEvidencePreviewHtml(i,month)+'</div>');document.querySelector('#modal .modal')?.classList.add('modal-wide')}catch(err){toast(err.message,'danger')}}));
 
+
+  document.querySelector('[data-new-instructor-account]')?.addEventListener('click',()=>{
+    let html='<form id="instructor-account-form" class="stack">';
+    html+='<div class="form-grid"><div class="field"><label>Nome completo</label><input class="input" name="name" required></div><div class="field"><label>E-mail de acesso</label><input class="input" type="email" name="email" required></div></div>';
+    html+='<div class="form-grid"><div class="field"><label>Senha inicial</label><input class="input" type="password" name="password" minlength="6" required><small>Mínimo de 6 caracteres.</small></div><div class="field"><label>CPF</label><input class="input" name="cpf"></div></div>';
+    html+='<div class="form-grid"><div class="field"><label>Telefone</label><input class="input" name="phone"></div><div class="field"><label>Área / especialidade</label><input class="input" name="specialty" placeholder="Ex.: Capoeira, Jiu-jitsu, Tranças..."></div></div>';
+    html+='<div class="field"><label>Carga horária semanal de referência</label><input class="input" type="number" min="0" step="0.5" name="contracted_weekly_hours"><small>Usada como referência de acompanhamento; as horas executadas vêm das aulas registradas e listas.</small></div>';
+    html+='<div class="field"><label>Informações relevantes</label><textarea name="notes"></textarea></div>';
+    html+='<div class="notice info">O cadastro cria o acesso do oficineiro no sistema com perfil <b>Oficineiro(a)</b> e uma ficha profissional vinculada.</div><button class="btn primary">Criar cadastro do oficineiro</button></form>';
+    modal('Cadastrar oficineiro',html);
+    document.querySelector('#instructor-account-form')?.addEventListener('submit',async e=>{e.preventDefault();const p=parseForm(e.target);const btn=e.target.querySelector('button[type="submit"],button.btn.primary');if(btn){btn.disabled=true;btn.textContent='Criando...'}try{await createWorkshopInstructorAccount(p);document.querySelector('#modal')?.remove();toast('Oficineiro cadastrado e acesso criado');await render()}catch(err){toast(err.message,'danger');if(btn){btn.disabled=false;btn.textContent='Criar cadastro do oficineiro'}}});
+  });
+
+  document.querySelectorAll('[data-edit-instructor-profile]').forEach(btn=>btn.addEventListener('click',async()=>{
+    try{
+      const profiles=await listWorkshopInstructorProfiles(),p=profiles.find(x=>x.id===btn.dataset.editInstructorProfile);if(!p)return;
+      let html='<form id="instructor-profile-form" class="stack"><div class="field"><label>Nome</label><input class="input" name="display_name" value="'+esc(p.display_name||'')+'" required></div>';
+      html+='<div class="form-grid"><div class="field"><label>E-mail de referência</label><input class="input" type="email" name="email" value="'+esc(p.email||'')+'"><small>Alterar aqui não troca o e-mail usado para login.</small></div><div class="field"><label>CPF</label><input class="input" name="cpf" value="'+esc(p.cpf||'')+'"></div></div>';
+      html+='<div class="form-grid"><div class="field"><label>Telefone</label><input class="input" name="phone" value="'+esc(p.phone||'')+'"></div><div class="field"><label>Área / especialidade</label><input class="input" name="specialty" value="'+esc(p.specialty||'')+'"></div></div>';
+      html+='<div class="field"><label>Carga horária semanal de referência</label><input class="input" type="number" min="0" step="0.5" name="contracted_weekly_hours" value="'+esc(p.contracted_weekly_hours??'')+'"></div><div class="field"><label>Informações relevantes</label><textarea name="notes">'+esc(p.notes||'')+'</textarea></div><button class="btn primary">Salvar cadastro</button></form>';
+      modal('Editar cadastro do oficineiro',html);
+      document.querySelector('#instructor-profile-form')?.addEventListener('submit',async e=>{e.preventDefault();const x=parseForm(e.target);try{await updateTeamMember(p.id,{display_name:x.display_name});await updateWorkshopInstructorProfile(p.id,x);document.querySelector('#modal')?.remove();toast('Cadastro do oficineiro atualizado');await render()}catch(err){toast(err.message,'danger')}});
+    }catch(err){toast(err.message,'danger')}
+  }));
+
+  document.querySelectorAll('[data-workshop-plan-generate]').forEach(btn=>btn.addEventListener('click',async()=>{
+    const month=route().params.get('month')||currentMonth(),original=btn.textContent;btn.disabled=true;btn.textContent='Gerando...';
+    try{const out=await syncWorkshopMonthlyPlan(btn.dataset.workshopPlanGenerate,month);toast(out.lessons.length+' aula(s) prevista(s) vinculada(s)');nav('oficinas?view=planejamento&month='+month+'&plan='+out.plan.id)}catch(err){toast(err.message,'danger');btn.disabled=false;btn.textContent=original}
+  }));
+  document.querySelectorAll('[data-workshop-plan-open]').forEach(btn=>btn.addEventListener('click',()=>{
+    const month=route().params.get('month')||currentMonth();nav('oficinas?view=planejamento&month='+month+'&plan='+btn.dataset.workshopPlanOpen);
+  }));
+
+  const workshopPlanForm=document.querySelector('#workshop-plan-form');
+  if(workshopPlanForm){
+    const planId=workshopPlanForm.dataset.planId,workshopId=workshopPlanForm.dataset.workshopId;
+    Promise.all([getWorkshopMonthlyPlan(planId),listWorkshops(),listTeam()]).then(([bundle,ws,team])=>{
+      const workshop=ws.find(x=>x.id===workshopId),teamMap=new Map(team.map(x=>[x.id,x.display_name])),preview=document.querySelector('[data-workshop-plan-preview]'),workspace=document.querySelector('[data-workshop-plan-workspace]'),toggle=document.querySelector('[data-toggle-workshop-plan-preview]');
+      const statusEl=workshopPlanForm.querySelector('[name="status"]');if(statusEl)statusEl.value=bundle.plan.status||'rascunho';
+      const collect=()=>{
+        const header={};
+        for(const k of ['general_objective','general_methodology','expected_results','general_resources','observations','status'])header[k]=workshopPlanForm.querySelector('[name="'+k+'"]')?.value||'';
+        const lessons=[...workshopPlanForm.querySelectorAll('[data-plan-lesson]')].map(card=>({id:card.dataset.planLesson,theme:card.querySelector('[name="theme"]')?.value||'',objective:card.querySelector('[name="objective"]')?.value||'',proposed_activities:card.querySelector('[name="proposed_activities"]')?.value||'',resources:card.querySelector('[name="resources"]')?.value||'',cfdh_transversal:card.querySelector('[name="cfdh_transversal"]')?.value||'',observations:card.querySelector('[name="observations"]')?.value||''}));
+        return {header,lessons};
+      };
+      const refresh=()=>{
+        if(!preview||!workshop)return;
+        const edit=collect(),lessonMap=new Map(edit.lessons.map(x=>[x.id,x]));
+        const draft={plan:{...bundle.plan,...edit.header},lessons:(bundle.lessons||[]).map(l=>({...l,...(lessonMap.get(l.id)||{})}))};
+        preview.innerHTML=workshopPlanPreviewHtml(draft,workshop,teamMap);
+      };
+      workshopPlanForm.addEventListener('input',refresh);workshopPlanForm.addEventListener('change',refresh);
+      toggle?.addEventListener('click',()=>{workspace?.classList.toggle('preview-open');toggle.textContent=workspace?.classList.contains('preview-open')?'Ocultar':'Abrir prévia'});
+      refresh();
+    }).catch(err=>toast(err.message,'danger'));
+    workshopPlanForm.addEventListener('submit',async e=>{e.preventDefault();const header={};for(const k of ['general_objective','general_methodology','expected_results','general_resources','observations','status'])header[k]=workshopPlanForm.querySelector('[name="'+k+'"]')?.value||'';const lessons=[...workshopPlanForm.querySelectorAll('[data-plan-lesson]')].map(card=>({id:card.dataset.planLesson,theme:card.querySelector('[name="theme"]')?.value||'',objective:card.querySelector('[name="objective"]')?.value||'',proposed_activities:card.querySelector('[name="proposed_activities"]')?.value||'',resources:card.querySelector('[name="resources"]')?.value||'',cfdh_transversal:card.querySelector('[name="cfdh_transversal"]')?.value||'',observations:card.querySelector('[name="observations"]')?.value||''}));try{await saveWorkshopMonthlyPlan(planId,header,lessons);toast('Planejamento salvo');await render()}catch(err){toast(err.message,'danger')}});
+    document.querySelector('[data-sync-workshop-plan]')?.addEventListener('click',async btnEv=>{const btn=btnEv.currentTarget,original=btn.textContent;btn.disabled=true;btn.textContent='Sincronizando...';try{const detail=await getWorkshopMonthlyPlan(planId),month=String(detail.plan.plan_month||'').slice(0,7);await syncWorkshopMonthlyPlan(workshopId,month);toast('Planejamento sincronizado com o calendário');await render()}catch(err){toast(err.message,'danger');btn.disabled=false;btn.textContent=original}});
+  }
+
   document.querySelectorAll('[data-action="attendance"]').forEach(b=>b.addEventListener('click',async()=>{const roster=await workshopRoster(b.dataset.workshop); if(!roster.length){toast('Inscreva jovens na oficina antes de lançar presença','warn');return;} const sessionId=`manual_${Date.now()}`,date=new Date().toISOString().slice(0,10);modal('Lista de presença',`<form id="attendance-form"><input type="hidden" name="session_id" value="${sessionId}"><input type="hidden" name="date" value="${date}"><div class="check-grid">${roster.map(r=>`<label class="check"><input type="checkbox" name="youth_id" value="${r.youth_id}"><span>${esc(r.youth?.preferred_name||r.youth?.full_name)}</span></label>`).join('')}</div><div class="actions" style="margin-top:16px"><button class="btn primary">Salvar presença</button></div></form>`);const attendanceForm=document.querySelector('#attendance-form');decorateEduGoalForm(attendanceForm,'presenca');attendanceForm.addEventListener('submit',async e=>{e.preventDefault();const p=parseForm(e.target),ids=Array.isArray(p.youth_id)?p.youth_id:p.youth_id?[p.youth_id]:[];aw
