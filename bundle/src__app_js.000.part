@@ -5,7 +5,7 @@ import { ROLES, can, roleLabel } from './permissions.js';
 import { renderAgendaPage, bindAgendaPage, agendaUnreadCount } from './agenda.js';
 
 const app=document.querySelector('#app');
-const state={session:null,user:null,agendaUnread:0};
+const state={session:null,user:null,agendaUnread:0,documentSettings:null};
 const esc=(v='')=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const fmtDate=v=>v?new Date(v.length===10?`${v}T12:00:00`:v).toLocaleDateString('pt-BR'):'—';
 const fmtDateTime=v=>v?new Date(v).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—';
