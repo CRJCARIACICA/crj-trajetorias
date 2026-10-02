@@ -79,12 +79,17 @@ export async function saveFormSubmission(formSlug,youthId,payload){
   if(formSlug==='emprestimo'){
     if(mode==='mock'){
       const s=mock();s.documentNumberSequences||={};
-      const d=new Date(),key='emprestimo:'+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+      const parts=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+      const get=t=>parts.find(x=>x.type===t)?.value||'';
+      const year=get('year'),month=get('month'),key='emprestimo:'+year+'-'+month;
       const n=(s.documentNumberSequences[key]||0)+1;s.documentNumberSequences[key]=n;
-      payload.request_number=String(n).padStart(3,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'-'+d.getFullYear();
+      payload.request_number=String(n).padStart(3,'0')+'/'+month+'-'+year;
       save(s);
     }else{
-      const r=await supabase.rpc('next_document_request_number',{p_scope:'emprestimo',p_reference_date:new Date().toISOString().slice(0,10)});
+      const parts=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+      const get=t=>parts.find(x=>x.type===t)?.value||'';
+      const localDate=get('year')+'-'+get('month')+'-'+get('day');
+      const r=await supabase.rpc('next_document_request_number',{p_scope:'emprestimo',p_reference_date:localDate});
       if(r.error)throw r.error;
       payload.request_number=r.data;
     }
