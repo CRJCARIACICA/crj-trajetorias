@@ -31,6 +31,18 @@ function technicalWriter(){
 function isTechnicalForm(slug){
   return ['acompanhamento','pvida','ptrampo','outras-demandas'].includes(slug);
 }
+function isCfdhSharedForm(slug){
+  return ['cfdh-planejamento','cfdh-avaliacao-jovens','cfdh-avaliacao-equipe'].includes(slug);
+}
+function isWorkshopEducationForm(slug){
+  return slug==='avaliacao-atividades';
+}
+function canWriteMethodologyForm(slug){
+  if(isTechnicalForm(slug))return technicalWriter();
+  if(isCfdhSharedForm(slug))return permitted('cfdh_shared');
+  if(isWorkshopEducationForm(slug))return permitted('workshop_education_docs');
+  return true;
+}
 async function youthPrefill(youthId){
   const [{core,demographics},forms]=await Promise.all([getYouth(youthId),listFormSubmissions(youthId)]);
   const initial=forms.find(x=>x.form_slug==='formulario-inicial');
@@ -66,7 +78,11 @@ async function pageEditYouth(id){
 async function pageForm(slug,youthId){
   const f=FORM_MAP[slug];
   if(!f)return `<div class="notice danger">Formulário não encontrado.</div>`;
-  if(isTechnicalForm(slug)&&!technicalWriter()) return '<div class="notice danger">Este documento é restrito à Equipe Técnica e à Coordenação Geral.</div>';
+  if(!canWriteMethodologyForm(slug)){
+    if(isCfdhSharedForm(slug))return '<div class="notice danger">Este documento de CFDH é compartilhado entre Educadores, Equipe Técnica e Coordenação Geral.</div>';
+    if(isWorkshopEducationForm(slug))return '<div class="notice danger">Este documento de avaliação de oficina é exclusivo dos Educadores e da Coordenação Geral.</div>';
+    return '<div class="notice danger">Este documento é restrito à Equipe Técnica e à Coordenação Geral.</div>';
+  }
   if(f.youthRequired&&!youthId)return `<div class="page-head"><div><h2>${esc(f.title)}</h2><p>Este documento precisa estar vinculado a um jovem.</p></div></div><div class="notice">Abra a ficha do jovem em <b>Jovens → Abrir trajetória</b> e utilize uma das ações disponíveis.</div><div class="actions" style="margin-top:16px"><button class="btn primary" data-nav="jovens">Selecionar jovem</button></div>`;
   const values=youthId?await youthPrefill(youthId):{};
   if(slug==='lista-presenca-contato'&&route().params.get('context')==='uso-livre'){
@@ -190,13 +206,13 @@ async function pageYouthProfile(id){
 
 async function pageForms(){
   return `<div class="page-head"><div><h2>Formulários da Metodologia</h2><p>Os 13 anexos foram convertidos em formulários digitais. Documentos individuais devem ser abertos pela trajetória do jovem para reaproveitar o cadastro e manter o vínculo correto.</p></div></div><div class="grid three">${FORMS.map(f=>{
-    const technical=isTechnicalForm(f.slug), allowed=!technical||technicalWriter();
+    const technical=isTechnicalForm(f.slug),cfdh=isCfdhSharedForm(f.slug),workshopEdu=isWorkshopEducationForm(f.slug),allowed=canWriteMethodologyForm(f.slug);
     let action='';
     if(f.slug==='formulario-inicial') action='<button class="btn primary" data-nav="novo-jovem">Cadastrar jovem</button>';
-    else if(f.youthRequired) action=allowed?'<button class="btn primary" data-nav="jovens">Abrir pela trajetória</button>':'<button class="btn" disabled>Restrito à Equipe Técnica</button>';
+    else if(f.youthRequired) action=allowed?'<button class="btn primary" data-nav="jovens">Abrir pela trajetória</button>':'<button class="btn" disabled>Sem permissão para preencher</button>';
     else if(f.slug==='lista-presenca-contato') action='<div class="actions"><button class="btn primary" data-nav="formulario/lista-presenca-contato">Preencher lista</button><button class="btn secondary" data-nav="formulario/lista-presenca-contato?context=uso-livre">Uso livre</button></div>';
-    else action=`<button class="btn primary" data-nav="formulario/${f.slug}">Preencher</button>`;
-    return `<div class="card"><div class="actions"><span class="pill">${esc(f.annex)}</span>${technical?'<span class="pill info">Equipe Técnica</span>':''}</div><h3 style="margin-top:12px">${esc(f.title)}</h3><p class="muted">${esc(f.description)}</p>${action}</div>`;
+    else action=allowed?`<button class="btn primary" data-nav="formulario/${f.slug}">Preencher</button>`:'<button class="btn" disabled>Somente visualização / sem permissão</button>';
+    return `<div class="card"><div class="actions"><span class="pill">${esc(f.annex)}</span>${technical?'<span class="pill info">Equipe Técnica</span>':''}${cfdh?'<span class="pill success">Educadores + Equipe Técnica</span>':''}${workshopEdu?'<span class="pill warn">Exclusivo Educadores</span>':''}</div><h3 style="margin-top:12px">${esc(f.title)}</h3><p class="muted">${esc(f.description)}</p>${action}</div>`;
   }).join('')}</div>`;
 }
 
