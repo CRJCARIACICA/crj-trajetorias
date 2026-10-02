@@ -56,7 +56,11 @@ function openFormalEnrollmentV2(workshopId,youthObj){
   const form=document.querySelector('#formal-enrollment-form'),canvas=form?.querySelector('[data-signature-pad]'),pad=canvas?bindSignaturePadV2(canvas):null;decorateEduGoalForm(form,'inscricao_oficina');form?.querySelector('[data-clear-signature]')?.addEventListener('click',()=>pad?.clear());form?.addEventListener('submit',async e=>{e.preventDefault();if(!pad?.isDirty()){toast('Solicite a assinatura do jovem no campo de desenho.','danger');return}const p=parseForm(e.target);p.signature_data=pad.data();try{await registerWorkshopEnrollment(p);document.querySelector('#modal')?.remove();toast('Inscricao formal registrada');await render()}catch(err){toast(err.message,'danger')}});
 }
 async function bindWorkshopDetailV2(id){
-  const workshops=await listWorkshops(),w=workshops.find(x=>x.id===id);if(!w)return;const [sessions,youth,provisional]=await Promise.all([listWorkshopSessions(id,40),listYouth(''),listProvisionalPeople()]);
+  const workshops=await listWorkshops(),w=workshops.find(x=>x.id===id);if(!w)return;
+  const [sessions,youth,provisional]=await Promise.all([listWorkshopSessions(id,40),listYouth(''),listProvisionalPeople()]);
+  const sessionId=route().params.get('session')||sessions[0]?.id||'';
+  const session=sessions.find(x=>x.id===sessionId)||sessions[0]||null;
+  const sheet=session?await getWorkshopAttendanceSheet(session.id):null;
   document.querySelector('[data-session-select]')?.addEventListener('change',e=>nav(`oficina/${id}?session=${e.target.value}`));
   document.querySelectorAll('[data-formal-enroll]').forEach(b=>b.addEventListener('click',()=>{const y=youth.find(x=>x.id===b.dataset.formalEnroll);if(y)openFormalEnrollmentV2(id,y)}));
   document.querySelectorAll('[data-convert-provisional]').forEach(b=>b.addEventListener('click',()=>nav(`novo-jovem?provisional=${b.dataset.convertProvisional}`)));
