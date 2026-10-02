@@ -250,6 +250,7 @@ async function render(){
     else if(p1==='oficinas') content=await pageWorkshops();
     else if(p1==='oficina') content=await pageWorkshopDetailV2(p2);
     else if(p1==='educador') content=await pageEducatorV2();
+    else if(p1==='cfdh') content=await pageCfdhShared();
     else if(p1==='equipe-tecnica') content=await pageTechnicalTeam();
     else if(p1==='agenda') content=await renderAgendaPage(state.user);
     else if(p1==='metas') content=await pageGoals();
@@ -258,6 +259,7 @@ async function render(){
     else content='<div class="notice danger">Página não encontrada.</div>';
     app.innerHTML=layout(content); await bindRoute();
     if(p1==='educador') await bindEducatorPageV2();
+    if(p1==='cfdh') await bindCfdhShared();
     if(p1==='equipe-tecnica') await bindTechnicalPage();
     if(p1==='oficina') await bindWorkshopDetailV2(p2);
     if(p1==='agenda') await bindAgendaPage(state.user,{toast,rerender:render,nav});
