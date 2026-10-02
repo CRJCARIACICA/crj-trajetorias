@@ -1,4 +1,4 @@
-eturn data;
+eturn await maybeMirrorTechnicalService(data,row);
 }
 export async function createFollowup(row){
   if(mode==='mock'){
@@ -8,6 +8,143 @@ export async function createFollowup(row){
   }
   const {data,error}=await supabase.from('followups').insert({youth_id:row.youth_id,followup_date:row.date,followup_type:row.followup_type,summary:row.summary,duration_hours:row.duration_hours||1,status:row.status||'ativo'}).select('*').single(); if(error) throw error;
   await addJourney(row.youth_id,'acompanhamento',`Acompanhamento — ${row.followup_type||'Técnico'}`,row.summary||'','technical',new Date(row.date).toISOString()); return data;
+}
+
+
+async function currentTechnicalProfile(){
+  if(mode==='mock')return mock().currentUser;
+  const {data}=await supabase.auth.getUser();
+  if(!data.user)return null;
+  return getCurrentProfile(data.user.id);
+}
+export async function getDocumentSettings(){
+  if(mode==='mock'){
+    const s=mock();s.documentSettings||={id:1,technical_target_total_services:380,technical_target_unique_youth:null,technical_target_collective_services:null,technical_target_pvida:1,technical_target_ptrampo_youth:15,technical_target_ptrampo_activities:8,technical_target_other_demands:1};
+    return s.documentSettings;
+  }
+  const {data,error}=await supabase.from('crj_document_settings').select('*').eq('id',1).single();
+  if(error)throw error;return data;
+}
+export async function saveDocumentSettings(patch){
+  const allowed={updated_at:now()};
+  for(const k of ['header_image_data','header_mime','header_updated_at','technical_target_total_services','technical_target_unique_youth','technical_target_collective_services','technical_target_pvida','technical_target_ptrampo_youth','technical_target_ptrampo_activities','technical_target_other_demands']){
+    if(patch[k]!==undefined)allowed[k]=patch[k];
+  }
+  if(mode==='mock'){const s=mock();s.documentSettings={...(s.documentSettings||{id:1}),...allowed};save(s);return s.documentSettings;}
+  const {data,error}=await supabase.from('crj_document_settings').update(allowed).eq('id',1).select('*').single();
+  if(error)throw error;return data;
+}
+export async function createTechnicalService(row){
+  const youthIds=Array.isArray(row.youth_ids)?row.youth_ids:row.youth_ids?[row.youth_ids]:row.youth_id?[row.youth_id]:[];
+  const professionalIds=Array.isArray(row.professional_ids)?row.professional_ids:row.professional_ids?[row.professional_ids]:[];
+  if(!youthIds.length)throw new Error('Selecione ao menos um jovem atendido.');
+  if(!professionalIds.length)throw new Error('Selecione ao menos um técnico responsável.');
+  if(mode==='mock'){
+    const s=mock();s.technicalServices||=[];
+    const rec={id:uid('ts'),service_date:row.service_date||new Date().toISOString().slice(0,10),service_type:row.service_type||'individual',program_type:row.program_type||'atendimento',reason:row.reason||'Atendimento técnico',summary:row.summary||'',status:row.status||'realizado',created_by:s.currentUser.id,created_at:now(),youth_ids:youthIds,professional_ids:professionalIds};
+    s.technicalServices.push(rec);save(s);return rec;
+  }
+  const ins=await supabase.from('technical_service_records').insert({
+    service_date:row.service_date||new Date().toISOString().slice(0,10),
+    service_type:row.service_type||'individual',
+    program_type:row.program_type||'atendimento',
+    reason:row.reason||'Atendimento técnico',
+    summary:row.summary||null,
+    status:row.status||'realizado'
+  }).select('*').single();
+  if(ins.error)throw ins.error;
+  const serviceId=ins.data.id;
+  const yRows=youthIds.map(youth_id=>({service_id:serviceId,youth_id}));
+  const pRows=professionalIds.map(professional_id=>({service_id:serviceId,professional_id,responsibility:'Técnico responsável'}));
+  const [yr,pr]=await Promise.all([
+    supabase.from('technical_service_youth').insert(yRows),
+    supabase.from('technical_service_professionals').insert(pRows)
+  ]);
+  if(yr.error)throw yr.error;if(pr.error)throw pr.error;
+  const category={pvida:'PVida',ptrampo:'PTrampo','outras-demandas':'Outras Demandas',acompanhamento:'Acompanhamento técnico',atendimento:'Atendimento técnico'}[row.program_type]||'Atendimento técnico';
+  for(const youth_id of youthIds){
+    const legacy=await supabase.from('service_records').insert({youth_id,service_date:ins.data.service_date,category,description:row.reason||row.summary||category,status:row.status||'realizado'}).select('id').single();
+    if(!legacy.error){
+      await addJourney(youth_id,'atendimento',category,row.reason||row.summary||'','technical',new Date(ins.data.service_date).toISOString());
+    }
+  }
+  return ins.data;
+}
+export async function maybeMirrorTechnicalService(service,row){
+  try{
+    if(!service?.id)return service;
+    const profile=await currentTechnicalProfile();
+    if(!profile||!['assistente_social','psicologo','terapeuta_ocupacional'].includes(profile.role))return service;
+    const exists=await supabase.from('technical_service_records').select('id').eq('legacy_service_record_id',service.id).maybeSingle();
+    if(exists.data)return service;
+    const program=String(row.category||'').toLowerCase().includes('pvida')?'pvida':String(row.category||'').toLowerCase().includes('ptrampo')?'ptrampo':String(row.category||'').toLowerCase().includes('outras')?'outras-demandas':String(row.category||'').toLowerCase().includes('acompanh')?'acompanhamento':'atendimento';
+    const tr=await supabase.from('technical_service_records').insert({
+      service_date:service.service_date||row.date,
+      service_type:'individual',
+      program_type:program,
+      reason:row.category||'Atendimento técnico',
+      summary:row.description||null,
+      status:row.status||'realizado',
+      legacy_service_record_id:service.id
+    }).select('*').single();
+    if(tr.error)throw tr.error;
+    await supabase.from('technical_service_youth').insert({service_id:tr.data.id,youth_id:row.youth_id});
+    await supabase.from('technical_service_professionals').insert({service_id:tr.data.id,professional_id:profile.id,responsibility:'Técnico responsável'});
+  }catch(err){console.warn('Falha ao espelhar atendimento técnico:',err)}
+  return service;
+}
+export async function listTechnicalTeamDashboard(month=monthKey()){
+  const key=String(month).slice(0,7),start=key+'-01';
+  const parts=key.split('-').map(Number),end=new Date(Date.UTC(parts[0],parts[1],1)).toISOString().slice(0,10);
+  if(mode==='mock'){
+    const s=mock(),records=(s.technicalServices||[]).filter(x=>x.service_date>=start&&x.service_date<end),youthMap=new Map((s.youth||[]).map(x=>[x.id,x])),teamMap=new Map((s.team||[]).map(x=>[x.id,x]));
+    const details=records.map(r=>({...r,youth:(r.youth_ids||[]).map(id=>youthMap.get(id)).filter(Boolean),professionals:(r.professional_ids||[]).map(id=>teamMap.get(id)).filter(Boolean)}));
+    return buildTechnicalDashboard(details,await getDocumentSettings());
+  }
+  const [rq,yq,pq,youngQ,teamQ,settings]=await Promise.all([
+    supabase.from('technical_service_records').select('*').gte('service_date',start).lt('service_date',end).order('service_date',{ascending:false}).order('created_at',{ascending:false}),
+    supabase.from('technical_service_youth').select('*'),
+    supabase.from('technical_service_professionals').select('*'),
+    supabase.from('young_people').select('id,full_name,preferred_name'),
+    supabase.from('profiles').select('id,display_name,role,active'),
+    getDocumentSettings()
+  ]);
+  for(const q of [rq,yq,pq,youngQ,teamQ])if(q.error)throw q.error;
+  const youthByService=new Map(),profByService=new Map(),youngMap=new Map((youngQ.data||[]).map(x=>[x.id,x])),teamMap=new Map((teamQ.data||[]).map(x=>[x.id,x]));
+  for(const y of yq.data||[]){const a=youthByService.get(y.service_id)||[];const yp=youngMap.get(y.youth_id);if(yp)a.push(yp);youthByService.set(y.service_id,a)}
+  for(const p of pq.data||[]){const a=profByService.get(p.service_id)||[];const pp=teamMap.get(p.professional_id);if(pp)a.push(pp);profByService.set(p.service_id,a)}
+  const details=(rq.data||[]).map(r=>({...r,youth:youthByService.get(r.id)||[],professionals:profByService.get(r.id)||[]}));
+  return buildTechnicalDashboard(details,settings);
+}
+function buildTechnicalDashboard(records,settings){
+  const youthIds=new Set(),byProfessional=new Map();
+  for(const r of records){
+    for(const y of r.youth||[])youthIds.add(y.id);
+    for(const p of r.professionals||[]){const row=byProfessional.get(p.id)||{id:p.id,display_name:p.display_name,role:p.role,services:0,unique_youth:new Set()};row.services++;for(const y of r.youth||[])row.unique_youth.add(y.id);byProfessional.set(p.id,row)}
+  }
+  const countProgram=t=>records.filter(r=>r.program_type===t);
+  const uniqueProgram=t=>new Set(countProgram(t).flatMap(r=>(r.youth||[]).map(y=>y.id))).size;
+  const metrics={
+    total_services:records.length,
+    unique_youth:youthIds.size,
+    individual_services:records.filter(r=>r.service_type==='individual').length,
+    collective_services:records.filter(r=>r.service_type==='coletivo').length,
+    pvida_services:countProgram('pvida').length,
+    pvida_unique_youth:uniqueProgram('pvida'),
+    ptrampo_services:countProgram('ptrampo').length,
+    ptrampo_unique_youth:uniqueProgram('ptrampo'),
+    other_demands:countProgram('outras-demandas').length,
+    other_unique_youth:uniqueProgram('outras-demandas')
+  };
+  const evidence=[];
+  for(const r of records){
+    const professionals=(r.professionals||[]).map(p=>p.display_name).join(', ');
+    for(const y of r.youth||[]) evidence.push({
+      service_id:r.id,date:r.service_date,youth_id:y.id,youth_name:y.preferred_name||y.full_name,
+      reason:r.reason,professional_names:professionals,service_type:r.service_type,program_type:r.program_type,status:r.status
+    });
+  }
+  return {records,metrics,evidence,settings,professionals:[...byProfessional.values()].map(x=>({...x,unique_youth:x.unique_youth.size})).sort((a,b)=>b.services-a.services)};
 }
 
 export async function listWorkshops(){
