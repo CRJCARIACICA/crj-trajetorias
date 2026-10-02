@@ -27,7 +27,7 @@ g'},
     description:'Controle de solicitação, finalidade, participantes e devolução.',
     sections:[
       {title:'Solicitação',fields:[
-        {key:'request_number',label:'1. Solicitação número',type:'text'},
+        {key:'request_number',label:'1. Solicitação número',type:'text',readonly:true,placeholder:'Gerado ao salvar: 001/10-2026',help:'Numeração automática mensal no padrão 000/MM-AAAA. Reinicia em 001 a cada mês.'},
         {key:'staff_responsible',label:'2. Profissional responsável pelo agendamento',type:'text'},
         {key:'requester',label:'3. Solicitante',type:'text'},
         {key:'cpf',label:'4. CPF',type:'text'},
@@ -58,7 +58,7 @@ g'},
     slug:'emprestimo-canhoto', title:'Empréstimo — Canhoto', annex:'Anexo 10', sensitivity:'operacional', youthRequired:false,
     description:'Comprovante simplificado do empréstimo.',
     sections:[{title:'Canhoto',fields:[
-      {key:'request_number',label:'Solicitação número',type:'text'},
+      {key:'request_number',label:'Solicitação número',type:'text',required:true,placeholder:'Ex.: 001/10-2026',help:'Use exatamente o mesmo número gerado no Anexo 9. O canhoto não gera nova numeração.'},
       {key:'item',label:'Equipamento/sala agendada',type:'text'},
       {key:'return_date',label:'Data prevista para devolução',type:'date'},
       {key:'return_time',label:'Horário previsto para devolução',type:'text'},
