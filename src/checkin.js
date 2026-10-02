@@ -258,8 +258,9 @@ function showSuccess(title,text,state={}){
     (state.schedule?'<div class="notice success"><b>Oficina</b><br>'+esc(state.schedule)+'</div>':'')+
     pendingBox(state)+
     (state.email_queued?'<div class="notice info"><b>Confirmação por e-mail</b><br>A confirmação foi colocada na fila de envio. A senha criada não é enviada em texto aberto.</div>':'')+
-    '<button class="btn secondary" data-another>Registrar outra pessoa</button></div>';
+    '<button class="btn primary" data-another>Registrar próxima pessoa</button></div>';
   app.querySelector('[data-another]').addEventListener('click',mainButtons);
+  setTimeout(()=>{if(app.querySelector('[data-another]'))mainButtons()},4500);
 }
 
 try{
