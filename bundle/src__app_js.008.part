@@ -1,3 +1,47 @@
+
+async function bindCfdhShared(){
+  const monthEl=document.querySelector('[data-cfdh-month]');
+  monthEl?.addEventListener('change',()=>nav('cfdh?month='+monthEl.value));
+  const month=route().params.get('month')||currentMonth();
+  const [plans,reports,workshops]=await Promise.all([listEducatorPlans(month,null),listEducatorReports(null),listWorkshops()]);
+  const cfdhPlans=(plans||[]).filter(p=>['cfdh_estrutural','cfdh_transversal'].includes(p.plan_type));
+  const openPlan=async(plan=null)=>{
+    let html='<form id="cfdh-plan-form" class="stack">';
+    html+='<div class="notice info"><b>CFDH compartilhado</b><br>Educadores e Equipe Técnica podem construir e atualizar este planejamento.</div>';
+    html+='<div class="form-grid"><div class="field"><label>Tipo</label><select name="plan_type" required><option value="cfdh_estrutural">CFDH estrutural</option><option value="cfdh_transversal">CFDH transversal</option></select></div><div class="field"><label>Oficina vinculada</label><select name="workshop_id"><option value="">Não se aplica</option>'+workshops.filter(w=>w.active).map(w=>'<option value="'+w.id+'">'+esc(w.name)+'</option>').join('')+'</select></div></div>';
+    html+='<div class="field"><label>ATIVIDADE / título</label><input class="input" name="activity_title" value="'+esc(plan?.activity_title||'')+'" required></div>';
+    html+='<div class="field"><label>DESCRIÇÃO / objetivo</label><textarea name="description_objective" required>'+esc(plan?.description_objective||'')+'</textarea></div>';
+    html+='<div class="form-grid"><div class="field"><label>Núcleo</label><input class="input" name="nucleus" value="'+esc(plan?.nucleus||'')+'"></div><div class="field"><label>Eixo</label><input class="input" name="axis" value="'+esc(plan?.axis||'')+'"></div></div>';
+    html+='<div class="form-grid"><div class="field"><label>Nº de jovens previsto</label><input class="input" type="number" name="expected_participants" min="0" value="'+esc(plan?.expected_participants??'')+'"></div><div class="field"><label>Duração prevista (h)</label><input class="input" type="number" step="0.25" name="planned_duration_hours" min="0" value="'+esc(plan?.planned_duration_hours??'')+'"></div></div>';
+    html+='<div class="form-grid"><div class="field"><label>Data inicial</label><input class="input" type="date" name="planned_start" value="'+esc(plan?.planned_start||month+'-01')+'"></div><div class="field"><label>Data final</label><input class="input" type="date" name="planned_end" value="'+esc(plan?.planned_end||'')+'"></div></div>';
+    html+='<div class="field"><label>Equipe prevista</label><input class="input" name="team_text" value="'+esc(plan?.team_text||'')+'"></div><div class="field"><label>Parceiros</label><input class="input" name="partners" value="'+esc(plan?.partners||'')+'"></div>';
+    html+='<div class="field"><label>Mobilização / divulgação planejada</label><textarea name="mobilization_plan">'+esc(plan?.mobilization_plan||'')+'</textarea></div><div class="field"><label>Ações planejadas</label><textarea name="planned_actions">'+esc(plan?.planned_actions||'')+'</textarea></div><div class="field"><label>Resultados esperados</label><textarea name="expected_results">'+esc(plan?.expected_results||'')+'</textarea></div><div class="field"><label>Recursos necessários</label><textarea name="resources">'+esc(plan?.resources||'')+'</textarea></div><button class="btn primary">'+(plan?'Salvar atualização':'Salvar planejamento CFDH')+'</button></form>';
+    modal(plan?'Editar planejamento CFDH':'Novo planejamento CFDH',html);
+    const form=document.querySelector('#cfdh-plan-form');
+    if(form?.querySelector('[name="plan_type"]'))form.querySelector('[name="plan_type"]').value=plan?.plan_type||'cfdh_estrutural';
+    if(form?.querySelector('[name="workshop_id"]'))form.querySelector('[name="workshop_id"]').value=plan?.workshop_id||'';
+    decorateEduGoalForm(form,plan?.plan_type==='cfdh_transversal'?'cfdh_transversal':'cfdh_estrutural');
+    form?.querySelector('[name="plan_type"]')?.addEventListener('change',e=>decorateEduGoalForm(form,e.target.value==='cfdh_transversal'?'cfdh_transversal':'cfdh_estrutural'));
+    form?.addEventListener('submit',async e=>{e.preventDefault();try{if(plan)await updateEducatorPlan(plan.id,parseForm(e.target));else await createEducatorPlan(parseForm(e.target));document.querySelector('#modal')?.remove();toast('Planejamento CFDH salvo');await render()}catch(err){toast(err.message,'danger')}});
+  };
+  document.querySelector('[data-new-cfdh-plan]')?.addEventListener('click',()=>openPlan());
+  document.querySelectorAll('[data-cfdh-edit-plan]').forEach(btn=>btn.addEventListener('click',()=>{const p=cfdhPlans.find(x=>x.id===btn.dataset.cfdhEditPlan);if(p)openPlan(p)}));
+  document.querySelectorAll('[data-cfdh-report-plan]').forEach(btn=>btn.addEventListener('click',()=>{
+    const p=cfdhPlans.find(x=>x.id===btn.dataset.cfdhReportPlan);if(!p)return;
+    const existing=reports.find(x=>x.plan_id===p.id)||{};
+    let html='<form id="cfdh-report-form" class="stack"><input type="hidden" name="plan_id" value="'+p.id+'"><div class="notice info"><b>'+esc(p.activity_title)+'</b><br>Relatório de execução compartilhado do CFDH.</div>';
+    html+='<div class="field"><label>Situação</label><select name="execution_status"><option value="realizado">Realizado</option><option value="parcial">Parcial</option><option value="nao_realizado">Não realizado</option></select></div>';
+    html+='<div class="field"><label>Descrição do que efetivamente aconteceu</label><textarea name="actual_description" required>'+esc(existing.actual_description||'')+'</textarea></div>';
+    html+='<div class="form-grid"><div class="field"><label>Nº real de jovens</label><input class="input" type="number" name="actual_participants" min="0" value="'+esc(existing.actual_participants??'')+'"></div><div class="field"><label>Duração real (h)</label><input class="input" type="number" step="0.25" name="actual_duration_hours" min="0" value="'+esc(existing.actual_duration_hours??'')+'"></div></div>';
+    html+='<div class="form-grid"><div class="field"><label>Data inicial real</label><input class="input" type="date" name="actual_start" value="'+esc(existing.actual_start||p.planned_start||'')+'"></div><div class="field"><label>Data final real</label><input class="input" type="date" name="actual_end" value="'+esc(existing.actual_end||p.planned_end||p.planned_start||'')+'"></div></div>';
+    html+='<div class="field"><label>Mobilização / divulgação realizada</label><textarea name="mobilization_actual">'+esc(existing.mobilization_actual||'')+'</textarea></div><div class="field"><label>Pontos positivos</label><textarea name="positive_points">'+esc(existing.positive_points||'')+'</textarea></div><div class="field"><label>Pontos negativos</label><textarea name="negative_points">'+esc(existing.negative_points||'')+'</textarea></div><div class="field"><label>Ações realizadas</label><textarea name="actions_performed">'+esc(existing.actions_performed||'')+'</textarea></div><div class="field"><label>Justificativa</label><textarea name="justification">'+esc(existing.justification||'')+'</textarea></div><div class="field"><label>Evidências</label><input class="input" name="evidence_ref" value="'+esc(existing.evidence_ref||'')+'"></div><button class="btn primary">Salvar relatório de execução CFDH</button></form>';
+    modal('Relatório de execução CFDH',html);
+    const form=document.querySelector('#cfdh-report-form');if(form?.querySelector('[name="execution_status"]'))form.querySelector('[name="execution_status"]').value=existing.execution_status||'realizado';
+    decorateEduGoalForm(form,p.plan_type==='cfdh_transversal'?'cfdh_transversal':'cfdh_estrutural');
+    form?.addEventListener('submit',async e=>{e.preventDefault();try{await createEducatorReport(parseForm(e.target));document.querySelector('#modal')?.remove();toast('Relatório de execução CFDH salvo');await render()}catch(err){toast(err.message,'danger')}});
+  }));
+}
+
 async function bindEducatorPageV2(){
   const monthEl=document.querySelector('[data-educator-filter-month]'),userEl=document.querySelector('[data-educator-filter-user]'),view=route().params.get('view')||'responsabilidades';if(!monthEl&&!document.querySelector('[data-educator-new]')&&!document.querySelector('[data-new-educator-plan]'))return;
   const apply=()=>{const p=new URLSearchParams();if(monthEl?.value)p.set('month',monthEl.value);if(userEl?.value)p.set('user',userEl.value);p.set('view',view);nav('educador?'+p.toString())};monthEl?.addEventListener('change',apply);userEl?.addEventListener('change',apply);
