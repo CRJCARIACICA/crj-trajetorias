@@ -16,9 +16,10 @@ export async function listWorkshops(){
 }
 function workshopPayload(row){
   const out={};
-  for(const k of ['name','category','workshop_type','schedule_mode','planned_start_date','planned_end_date','location_type','location_other','planning_notes','start_time','end_time','oficineiro_user_id','educator_user_id','active']){
+  for(const k of ['name','category','workshop_type','schedule_mode','planned_start_date','planned_end_date','location_type','location_other','planning_notes','start_time','end_time','oficineiro_user_id','educator_user_id']){
     if(row[k]!==undefined) out[k]=row[k]===''?null:row[k];
   }
+  if(row.active!==undefined) out.active=row.active===true||row.active==='true'||row.active==='1'||row.active==='on';
   const weekdays=row.fixed_weekdays;
   out.fixed_weekdays=Array.isArray(weekdays)?weekdays.map(Number).filter(n=>Number.isInteger(n)&&n>=0&&n<=6):weekdays===''||weekdays==null?[]:[Number(weekdays)].filter(n=>Number.isInteger(n)&&n>=0&&n<=6);
   const dayNames=['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
@@ -81,7 +82,12 @@ export async function generateWorkshopFixedCalendar(workshop,horizonDays=90){
       });
     }
   }
-  if(mode==='mock'){const out=[];for(const row of rows)out.push(await createWorkshopCalendarEntry(row));return out;}
+  if(mode==='mock'){
+    const s=mock();s.workshopCalendar=(s.workshopCalendar||[]).filter(x=>!(x.workshop_id===workshop.id&&x.source==='regra_fixa'&&x.status==='planejada'));
+    save(s);const out=[];for(const row of rows)out.push(await createWorkshopCalendarEntry(row));return out;
+  }
+  const {error:clearError}=await supabase.from('workshop_calendar').delete().eq('workshop_id',workshop.id).eq('source','regra_fixa').eq('status','planejada');
+  if(clearError)throw clearError;
   if(!rows.length)return [];
   const {data,error}=await supabase.from('workshop_calendar').upsert(rows,{onConflict:'workshop_id,scheduled_date,start_time',ignoreDuplicates:true}).select('*');if(error)throw error;return data||[];
 }
