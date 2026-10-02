@@ -33,21 +33,10 @@ async function pageWorkshopDetailV2(id){
     </div></div>`:''}
   ${session&&sheet?`<div class="card attendance-sheet-card" style="margin-top:16px">
     <div class="page-head" style="margin-bottom:10px">
-      <div><h3 style="margin:0">Lista de Presença e Contato · documento vivo</h3><p>Atualizada pelos registros desta aula e pronta para evidência oficial.</p></div>
-      <div class="actions"><span class="pill success" data-sheet-count>${Number(sheet.participant_count||0)} participante(s)</span><button class="btn" data-refresh-sheet>Atualizar</button><button class="btn primary" data-sheet-pdf>PDF</button><button class="btn secondary" data-sheet-docx>DOC</button><button class="btn" data-sheet-print>Imprimir</button></div>
+      <div><h3 style="margin:0">Lista de Presença e Contato · Anexo 2</h3><p>Pré-visualização oficial atualizada automaticamente a partir dos registros desta aula.</p></div>
+      <div class="actions"><span class="pill success" data-sheet-count>${Number(sheet.participant_count||0)} participante(s)</span><button class="btn" data-refresh-sheet>Atualizar</button><button class="btn secondary" data-open-sheet-preview>Ampliar prévia</button><button class="btn primary" data-sheet-pdf>PDF</button><button class="btn secondary" data-sheet-docx>DOC</button><button class="btn" data-sheet-print>Imprimir</button></div>
     </div>
-    <div class="attendance-sheet-meta">
-      <div><b>Nome da oficina</b><span>${esc(sheet.workshop_name||w.name||'')}</span></div>
-      <div><b>Oficineiro(a)</b><span>${esc(sheet.officineiro||'—')}</span></div>
-      <div><b>Educador(a)</b><span>${esc(sheet.educator||'—')}</span></div>
-      <div><b>Data</b><span>${fmtDate(sheet.date)}</span></div>
-      <div><b>Início</b><span>${esc(String(sheet.start_time||'').slice(0,5))}</span></div>
-      <div><b>Término</b><span>${esc(String(sheet.end_time||'').slice(0,5))}</span></div>
-    </div>
-    <div class="table-wrap"><table class="table attendance-official-table">
-      <thead><tr><th>#</th><th>Nome</th><th>Assinatura</th><th>Data de nascimento</th><th>CPF</th><th>Telefone</th><th>E-mail</th></tr></thead>
-      <tbody data-sheet-body>${attendanceSheetRowsHtmlV2(sheet)}</tbody>
-    </table></div>
+    <div data-sheet-preview>${workshopAttendancePreviewHtmlV2(sheet)}</div>
   </div>`:''}
   <div class="card" style="margin-top:16px"><h3>Historico de aulas</h3>${sessions.map(s=>`<div class="agenda-row"><div><b>${fmtDate(s.session_date)} · ${String(s.start_time||'').slice(0,5)}–${String(s.end_time||'').slice(0,5)}</b><span>${esc(s.content||'Sem conteudo registrado')} · ${Number(s.duration_hours||0)}h · CFDH ${Number(s.cfdh_minutes||0)}min ${eduGoalInfo('aula')}</span></div><button class="btn" data-nav="oficina/${id}?session=${s.id}">Abrir</button></div>`).join('')||'<div class="empty">Nenhuma aula registrada.</div>'}</div>`;
 }
@@ -88,6 +77,13 @@ async function bindWorkshopDetailV2(id){
   document.querySelectorAll('[data-remove-guest]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('Remover apenas esta visita da aula?'))return;try{await removeWorkshopGuestParticipation(b.dataset.removeGuest);toast('Visita removida');await render()}catch(err){toast(err.message,'danger')}}));
   document.querySelector('[data-open-checkin]')?.addEventListener('click',async b=>{try{const x=await openWorkshopCheckin(b.currentTarget.dataset.openCheckin),url=new URL('checkin.html',location.href);url.searchParams.set('token',x.public_token);modal('Lista virtual aberta',`<div class="stack"><div class="notice success">A lista individual foi aberta. Ela verifica a situação da trajetória de cada jovem e mostra somente a próxima etapa necessária antes de registrar a presença.</div><input class="input" value="${esc(url.href)}" readonly data-checkin-url><div class="actions"><button class="btn primary" data-copy-checkin>Copiar link</button><a class="btn secondary" href="${esc(url.href)}" target="_blank">Abrir lista</a></div></div>`);document.querySelector('[data-copy-checkin]')?.addEventListener('click',async()=>{await navigator.clipboard.writeText(url.href);toast('Link copiado')})}catch(err){toast(err.message,'danger')}});
   document.querySelector('[data-refresh-sheet]')?.addEventListener('click',async()=>{try{const latest=await getWorkshopAttendanceSheet(session.id);updateAttendanceSheetDomV2(latest)}catch(err){toast(err.message,'danger')}});
+  document.querySelector('[data-open-sheet-preview]')?.addEventListener('click',async()=>{
+    try{
+      const latest=await getWorkshopAttendanceSheet(session.id);
+      modal('Pré-visualização · Anexo 2',`<div class="methodology-preview-modal">${workshopAttendancePreviewHtmlV2(latest)}</div>`);
+      document.querySelector('#modal .modal')?.classList.add('modal-wide');
+    }catch(err){toast(err.message,'danger')}
+  });
   if(window.__crjAttendanceSheetPoll){
     clearInterval(window.__crjAttendanceSheetPoll);
     window.__crjAttendanceSheetPoll=null;
