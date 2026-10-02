@@ -160,6 +160,52 @@ function buildInstructorDashboard(profiles,workshops,sessions,attendance,guests,
     };
   }).sort((a,b)=>String(a.display_name).localeCompare(String(b.display_name),'pt-BR'));
 }
+
+export async function createWorkshopInstructorAccount(row){
+  if(mode==='mock'){
+    const s=mock();s.workshopInstructorProfiles||=[];
+    const id=uid('ofiuser');
+    const member={id,display_name:row.name,role:'oficineiro',team:'Oficineiros',active:true};
+    s.team.push(member);
+    s.workshopInstructorProfiles.push({user_id:id,email:row.email||'',cpf:row.cpf||'',phone:row.phone||'',specialty:row.specialty||'',contracted_weekly_hours:Number(row.contracted_weekly_hours||0),notes:row.notes||''});
+    save(s);return member;
+  }
+  const sessionData=(await supabase.auth.getSession()).data;
+  const token=sessionData.session?.access_token;
+  if(!token)throw new Error('Sessão expirada. Entre novamente.');
+  const res=await fetch(CONFIG.supabaseUrl+'/functions/v1/crj-register',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':CONFIG.supabasePublishableKey},
+    body:JSON.stringify({internal_instructor:true,name:row.name,email:row.email,password:row.password,cpf:row.cpf||null,phone:row.phone||null,specialty:row.specialty||null,contracted_weekly_hours:row.contracted_weekly_hours||null,notes:row.notes||null})
+  });
+  const body=await res.json().catch(()=>({}));
+  if(!res.ok)throw new Error(body.error||'Não foi possível criar o cadastro do oficineiro.');
+  return body.user;
+}
+export async function listWorkshopInstructorProfiles(){
+  if(mode==='mock'){
+    const s=mock(),ext=new Map((s.workshopInstructorProfiles||[]).map(x=>[x.user_id,x]));
+    return (s.team||[]).filter(x=>x.role==='oficineiro').map(x=>({...x,...(ext.get(x.id)||{})}));
+  }
+  const pq=await supabase.from('profiles').select('id,display_name,role,team,active').eq('role','oficineiro').order('display_name');
+  const eq=await supabase.from('workshop_instructor_profiles').select('*');
+  if(pq.error)throw pq.error;if(eq.error)throw eq.error;
+  const ext=new Map((eq.data||[]).map(x=>[x.user_id,x]));
+  return (pq.data||[]).map(x=>({...x,...(ext.get(x.id)||{})}));
+}
+export async function updateWorkshopInstructorProfile(userId,row){
+  const payload={updated_at:now()};
+  for(const k of ['email','cpf','phone','specialty','contracted_weekly_hours','notes'])if(row[k]!==undefined)payload[k]=row[k]===''?null:row[k];
+  if(mode==='mock'){
+    const s=mock();s.workshopInstructorProfiles||=[];
+    let r=s.workshopInstructorProfiles.find(x=>x.user_id===userId);
+    if(!r){r={user_id:userId};s.workshopInstructorProfiles.push(r)}
+    Object.assign(r,payload);save(s);return r;
+  }
+  const q=await supabase.from('workshop_instructor_profiles').upsert({user_id:userId,...payload},{onConflict:'user_id'}).select('*').single();
+  if(q.error)throw q.error;return q.data;
+}
+
 export async function enrollYouth(workshopId,youthId){
   if(mode==='mock'){ const s=mock(); if(!s.enrollments.some(x=>x.workshop_id===workshopId&&x.youth_id===youthId&&x.status==='ativo')) s.enrollments.push({id:uid('en'),workshop_id:workshopId,youth_id:youthId,status:'ativo',enrolled_at:now()}); s.journey.push({id:uid('ev'),youth_id:youthId,event_type:'oficina',title:'Inscrição em oficina',details:s.workshops.find(w=>w.id===workshopId)?.name||'',visibility:'general',event_date:now(),created_by:s.currentUser.id}); save(s); return; }
   const {error}=await supabase.from('workshop_enrollments').insert({workshop_id:workshopId,youth_id:youthId}); if(error) throw error;
