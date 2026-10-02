@@ -49,6 +49,7 @@ jobs:
           node --input-type=module --check < _site/src/api.js
           node --input-type=module --check < _site/src/forms.js
           node --input-type=module --check < _site/src/agenda.js
+          node --input-type=module --check < _site/src/checkin.js
           test -s _site/index.html
           test -s _site/src/app.js
           test -s _site/src/api.js
