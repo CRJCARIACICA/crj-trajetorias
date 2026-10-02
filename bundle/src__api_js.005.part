@@ -26,6 +26,37 @@ export async function createEducatorReport(row){
   if(mode==='mock'){const st=mock();st.educatorReports||=[];const rec={id:uid('rpt'),...payload,educator_user_id:st.currentUser.id,created_at:now(),updated_at:now()};st.educatorReports.push(rec);save(st);return rec;}
   const {data,error}=await supabase.from('educator_reports').upsert(payload,{onConflict:'plan_id'}).select('*').single();if(error)throw error;return data;
 }
+
+export async function listWorkshopMonthlyReports(){
+  if(mode==='mock'){const st=mock();return st.workshopMonthlyReports||[];}
+  const {data,error}=await supabase.from('workshop_monthly_reports').select('*').order('report_date',{ascending:false}).order('created_at',{ascending:false});
+  if(error)throw error;return data||[];
+}
+export async function saveWorkshopMonthlyReport(row){
+  const payload={
+    plan_id:row.plan_id,
+    report_date:row.report_date||new Date().toISOString().slice(0,10),
+    execution_status:row.execution_status||'realizado',
+    actual_description:row.actual_description||null,
+    actual_participants:row.actual_participants===''||row.actual_participants==null?null:Number(row.actual_participants),
+    actual_duration_hours:row.actual_duration_hours===''||row.actual_duration_hours==null?null:Number(row.actual_duration_hours),
+    positive_points:row.positive_points||null,
+    difficulties:row.difficulties||null,
+    actions_performed:row.actions_performed||null,
+    justification:row.justification||null,
+    evidence_ref:row.evidence_ref||null,
+    updated_at:now()
+  };
+  if(mode==='mock'){
+    const st=mock();st.workshopMonthlyReports||=[];
+    let rec=st.workshopMonthlyReports.find(x=>x.plan_id===row.plan_id);
+    if(rec)Object.assign(rec,payload);else{rec={id:uid('wrpt'),...payload,educator_user_id:st.currentUser.id,created_at:now()};st.workshopMonthlyReports.push(rec)}
+    save(st);return rec;
+  }
+  const {data,error}=await supabase.from('workshop_monthly_reports').upsert(payload,{onConflict:'plan_id'}).select('*').single();
+  if(error)throw error;return data;
+}
+
 export async function listEducatorReferralReceipts(){
   if(mode==='mock')return [];
   const {data,error}=await supabase.from('educator_referral_receipts').select('*').order('created_at',{ascending:false}).limit(200);
