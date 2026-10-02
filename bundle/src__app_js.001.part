@@ -14,6 +14,138 @@ function fieldHtml(f,value){
   return `<div class="field ${f.full?'full':''}"><label>${esc(f.label)}</label><input class="input" name="${f.key}" type="${f.type||'text'}" value="${esc(v)}" ${req}>${help}</div>`;
 }
 function parseForm(form){const fd=new FormData(form),out={}; for(const [k,v] of fd.entries()){if(out[k]!==undefined) out[k]=Array.isArray(out[k])?[...out[k],v]:[out[k],v]; else out[k]=v;} form.querySelectorAll('input[type=checkbox]').forEach(i=>{if(!out[i.name])out[i.name]=[]}); return out;}
+const METHODOLOGY_HEADER_DATA='data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA4KCw0LCQ4NDA0QDw4RFiQXFhQUFiwgIRokNC43NjMuMjI6QVNGOj1OPjIySGJJTlZYXV5dOEVmbWVabFNbXVn/2wBDAQ8QEBYTFioXFypZOzI7WVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVn/wAARCAA4AUADASIAAhEBAxEB/8QAGwABAAIDAQEAAAAAAAAAAAAAAAEFAgQGAwf/xAA2EAABBAEDAgMFBwIHAAAAAAABAAIDEQQFEiExQRNRYRQiMnGBBmKRobHR4RVSIyWCksHw8f/EABgBAQEBAQEAAAAAAAAAAAAAAAABAgME/8QAHhEBAQACAgMBAQAAAAAAAAAAAAECEQMhEjFBBFH/2gAMAwEAAhEDEQA/APpKIiAiIgKEK0tQ1LH0+HxJyfRrRZKslt1Etkm63UVJF9pMOXDbkNZINz/D2Ec3V/hS2Zdc0+DYJpwzeLBIND5lZysxur7Tymt7WSlVJz5f6tFEDD7JJGHMfuFyH0/JWo6JLK3pKIiqCIiAiIgIiICKFBKCUVRl61HBqTMJsbpJHAcN9f4XnJqeTJPkjDZHIzGcQ9pu3UOa+pSdszKXqLtStDTtRhzQ9scjXyRUJNoNAnyW8jW9pREQEREBERARQiCUUIglFCIJREQEREBERAREQQVxGuTCbXJI5HUGHY0f6f5Xblcp9qdAnzZm5uBRnaAHMut1dCPVduHKY5brz/o47yYajz1rEi03SMaKJv8AjFxdv9SOT+irNH+y+Rn478nIyTHHMbHG5xHn9VYwwatqGjEajjObPA+mAgBz21zx/wBtTqmBq0uFp4ia8xRxbZYWGju7EjvwvHy788rZtrj4sc7Jeow1ZuLBmYeJius4sWw83tHa/VdfA4ugjc7qWgn8FzWDo8kz4XzxGJrDbtwpxFdF1DRTQufB5W3PKa29vLcZMccfjJERepwa2Y+VkBdCCXWOgsgd+O6rxk6kdpEJG7ggs+G+h9fVWGbEZsctDg3kH3unBWn7BIY3N8ffdcuv3qN8/og8XZepBgcIj8Fncyve8llHlag6BznxOa+hx4d7ee3nxyspNNfJI8nILQSSGt7Egd/ooj0tzAd2RYsEHyq7QT7Tn+HITEd4AoBnTkdPPiz6KXZGf4j6jcWtcQPc+IbePzWTsOTw42tyGska8uHcURXA/NeI0t4LS/Lc5jWhtH06Hr1QScnUdwHhOHA3VHdGuo87Kx13MEOmOY522Z7Nxa08tHc+oHdb+JAccO3yBwdVfv8AMrW1uF8mMPBYXSOOzigSD1s+SM5enPYOpY0GPva9k8gFBhbT93QGzyscM5ujSB8zI3h5Mj494389fotfIx48vAflvLTk48lENIADWjjkdVGVPiZGK8mB7pnN96Qkmh378rfzpzxt1LI9cGbKOqxzabjPw8aZzd8bnAB5B5pd01fOIzHn52nY2LNLGxrWtIN+64f2+tfovo0bQxoaOgFLN9tcdl9M0RQo6JUJaqjn5bJHt9n3NBNOoji/2SdixnlETC4gn5LXbnxngh1+gWi3PzWm5IA4eW0jnhemNlZHvtkxwwNa5wIaet8BLjWdttua08Frr9OV6xZDZXENuwL5VY3PzABeHZHXgg9Ft4eRLM9wlhEdNBBF82mrCUzM12PkRxMYHFzS42enIA/Mrc7cqlkka/V5HyOpjHNjs/dFn8yFvzZUc0L48eVjpntcGC+ppPpK0W6tlSDdHBFsN7bc66vgmgt3Cy5ZyBKxjDRNNJ8/VVLo2RhsXjeH4IokPcDYAB6K10uZ80T2yuD5IX7C8D4h1B/AqpjasERFGxERAREQEREELltW1MYuoSRNyMx1fEI62tcbpvTrwuqUUg4t+tStNf5jw1zT8N7mkA0K5Nmvosf6vNtbI6TUGtdWzlpLiRYFVwV21DySgg4ga/I6Mlpzhta55Nt8wKBrn/1dnA4OgjcCSC0Gz34XpQ8giCUREGnqYYcN7ZCQ1xA92rsnjqqdj8BsjicichxshwvpzV9l0L42yN2vaHDyIsLHwIu8TP8AaEFBjw4T5GMZkz7n3w4DnjufoovBdjOjdkZAa5wdyOTx0XQDHiBsRMB8w0IceEmzEwnz2hBQl+CYmsGVMA2Mxk7bNE2SvSHBxs6SQR5Mx2/E2gBz/wAq5GPCOkUYJ+6FmyJkfwMa2/7RSCum0hksMcbp5QGX0rqVOoiWDT2sgtwZQJ70FZIRY5RZ1XJ5OnDOxWMx5mNx2EOdGOHHm3X6d1nNE+LHwsXHjZBHK/YxxYHWKsh3PzVxPpMUkm+Nzonfd6LV1DQTnRmM5UkbWEGLaKMfFO+drUv9Zykk3i5fUMaDTB4GFMX6lJMC3wTdN7N9OV3uIZXY0ZnaGylo3gdAe6r9K0DC0s74WF83eV/Lv4VsFcrL1GMMPHtKg9FKhYdFVMdR9reYgPCsBt1VI8Zxjxn04yNveAQAfIn9la0lK7TSlB1UtaXCiK4AHK9WjUJIJWye64tbscKBBvlWtJSbNKZh1UNohl8da8j3+a28I5Zc72oDbtbRoDnut6kpN7NK86Tjl73B87S9xcQ2ZwFleAwpGZ8ZYHCJu4by6yLaAD+KuFFKGo51+JqDZjcbZXce8Nu11dzYsHzpW+n4xxoCHkOle7e8jpfp6LbpFbdkiURFFEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQf/9k=';
+const OFFICIAL_FORM_TITLES={
+  'formulario-inicial':'FORMULÁRIO INICIAL',
+  'lista-presenca-contato':'LISTA DE PRESENÇA E CONTATO',
+  'acompanhamento':'FORMULÁRIO DE ACOMPANHAMENTO',
+  'pvida':'PLANEJAMENTO DE VIDA (PVIDA)',
+  'outras-demandas':'OUTRAS DEMANDAS - ACOMPANHAMENTO',
+  'ptrampo':'PLANEJAMENTO DE TRABALHO INDIVIDUAL OU COLETIVO - PTRAMPO',
+  'avaliacao-atividades':'AVALIAÇÃO DAS ATIVIDADES - JOVENS',
+  'relatorio-mobilizacao':'RELATÓRIO DE MOBILIZAÇÃO DOS JOVENS',
+  'emprestimo':'FORMULÁRIO DE EMPRÉSTIMO DE EQUIPAMENTO E/OU ESPAÇO FÍSICO',
+  'emprestimo-canhoto':'CANHOTO - EMPRÉSTIMO DE EQUIPAMENTO OU ESPAÇO FÍSICO',
+  'cfdh-planejamento':'PLANEJAMENTO DO CIRCUITO FORMATIVO EM DIREITOS HUMANOS',
+  'cfdh-avaliacao-jovens':'AVALIAÇÃO FINAL DO CIRCUITO - JOVENS',
+  'cfdh-avaliacao-equipe':'AVALIAÇÃO FINAL DO CIRCUITO - EDUCADORES SOCIAIS E OFICINEIROS'
+};
+const OFFICIAL_ANNEX_TITLES={
+  'formulario-inicial':'ANEXO 1 - Formulário Inicial',
+  'lista-presenca-contato':'ANEXO 2 - Formulário Lista de Presença e Contato',
+  'acompanhamento':'ANEXO 3 - Formulário Acompanhamento',
+  'pvida':'ANEXO 4 - Formulário PVIDA',
+  'outras-demandas':'ANEXO 5 - Formulário Outras Demandas',
+  'ptrampo':'ANEXO 6 - Formulário PTrampo',
+  'avaliacao-atividades':'ANEXO 7 - Formulário de Avaliação das Atividades',
+  'relatorio-mobilizacao':'ANEXO 8 - Formulário Relatório de Mobilização',
+  'emprestimo':'ANEXO 9 - Formulário Empréstimo',
+  'emprestimo-canhoto':'ANEXO 10 - Formulário Empréstimo (Canhoto)',
+  'cfdh-planejamento':'ANEXO 11 - Formulário CFDH Planejamento',
+  'cfdh-avaliacao-jovens':'ANEXO 12 - Formulário CFDH Avaliação Jovens',
+  'cfdh-avaliacao-equipe':'ANEXO 13 - Formulário CFDH Avaliação Educadores e Oficineiros'
+};
+function officialPreviewValue(f,value){
+  if(value===null||value===undefined||value==='')return '';
+  if(f?.type==='date')return fmtDate(String(value));
+  if(Array.isArray(value))return value.join(', ');
+  return String(value);
+}
+function officialPreviewHeader(form){
+  return '<div class="methodology-annex-title">'+esc(OFFICIAL_ANNEX_TITLES[form.slug]||form.annex||'')+'</div>'+
+    '<div class="methodology-institutional-header"><img src="'+METHODOLOGY_HEADER_DATA+'" alt="Cabeçalho institucional da Metodologia dos CRJs"></div>'+
+    '<div class="methodology-inner-title">'+esc(OFFICIAL_FORM_TITLES[form.slug]||form.title||'FORMULÁRIO')+'</div>';
+}
+function officialPreviewField(f,value){
+  const val=officialPreviewValue(f,value);
+  if(f.type==='select'||f.type==='multiselect'){
+    const selected=Array.isArray(value)?value:(value?[String(value)]:[]);
+    return '<div class="methodology-row methodology-options"><b>'+esc(f.label)+'</b>'+
+      '<div class="methodology-option-list">'+(f.options||[]).map(function(o){return '<span>( '+(selected.includes(o)?'X':'&nbsp;')+' ) '+esc(o)+'</span>';}).join('')+'</div></div>';
+  }
+  if(f.type==='textarea'){
+    return '<div class="methodology-row methodology-row-tall"><b>'+esc(f.label)+'</b><div class="methodology-answer methodology-lines">'+(val?esc(val).replace(/\n/g,'<br>'):'&nbsp;<br>&nbsp;<br>&nbsp;')+'</div></div>';
+  }
+  return '<div class="methodology-row"><b>'+esc(f.label)+'</b><span class="methodology-inline-answer">'+(val?esc(val):'&nbsp;')+'</span></div>';
+}
+function officialSectionLabel(form,section){
+  const t=String(section?.title||'');
+  if(/^bloco/i.test(t))return t.toUpperCase();
+  if(form.slug==='formulario-inicial'&&t==='Onde você mora?')return t;
+  if(form.slug==='emprestimo'&&(t==='Solicitação'||t==='Devolução'))return t.toUpperCase();
+  if(form.slug==='ptrampo'&&t==='Anexo para monitoramento')return 'PLANEJAMENTO TRABALHO (PTRAMPO) - ANEXO PARA O MONITORAMENTO';
+  return '';
+}
+function normalizePresencePreviewRows(value){
+  if(Array.isArray(value))return value;
+  if(!value)return [];
+  return String(value).split(/\r?\n/).filter(Boolean).map(function(line){
+    const x=line.split(/\s*[|;]\s*/);
+    return {name:x[0]||'',birth_date:x[1]||'',cpf:x[2]||'',contact:x[3]||'',neighborhood:x[4]||''};
+  });
+}
+function methodologyAttendancePreviewHtml(values){
+  const rows=normalizePresencePreviewRows(values.participants);
+  const count=Math.max(9,rows.length);
+  let body='';
+  for(let i=0;i<count;i++){
+    const r=rows[i]||{};
+    const name=String(r.display_name||r.name||r.full_name||'');
+    const contact=String(r.contact||[r.phone,r.email].filter(Boolean).join(' / ')||'');
+    const signature=r.signature_data?'<img class="methodology-signature" src="'+esc(r.signature_data)+'" alt="Assinatura digital">':'';
+    body+='<tr><td>'+(i+1)+'</td><td><div>'+esc(name)+'</div>'+signature+'</td><td>'+esc(r.birth_date?fmtDate(String(r.birth_date)):'')+'</td><td>'+esc(r.cpf||'')+'</td><td>'+esc(contact)+'</td><td>'+esc(r.neighborhood||'')+'</td></tr>';
+  }
+  const complement=[values.officineiro?'Oficineiro(a): '+values.officineiro:'',values.educator_reference?'Educador(a): '+values.educator_reference:'',(values.start_time||values.end_time)?'Horário: '+String(values.start_time||'').slice(0,5)+(values.end_time?' às '+String(values.end_time).slice(0,5):''):''].filter(Boolean).join(' · ');
+  return '<div class="methodology-paper methodology-paper-landscape">'+
+    officialPreviewHeader(FORM_MAP['lista-presenca-contato'])+
+    '<div class="methodology-row"><b>1. Atividade:</b><span class="methodology-inline-answer">'+esc(values.activity||'')+'</span></div>'+
+    '<div class="methodology-row"><b>2. Local de realização da atividade:</b><span class="methodology-inline-answer">'+esc(values.location||'')+'</span></div>'+
+    '<div class="methodology-row"><b>3. Data:</b><span class="methodology-inline-answer">'+esc(values.date?fmtDate(String(values.date)):'')+'</span></div>'+
+    '<table class="methodology-presence-table"><thead><tr><th>Nº</th><th>Nome</th><th>Data de nascimento</th><th>CPF</th><th>Contato (telefone, E-mail...)</th><th>Bairro</th></tr></thead><tbody>'+body+'</tbody></table>'+
+    (complement?'<div class="methodology-system-note"><b>Dados complementares do registro digital:</b> '+esc(complement)+'</div>':'')+
+    '</div>';
+}
+function methodologyRatingMatrix(fields,values){
+  return '<table class="methodology-rating-table"><thead><tr><th>O que você achou / avaliação</th>'+RATING_OPTIONS.map(function(o){return '<th>'+esc(o.replace('/Boa',''))+'</th>';}).join('')+'</tr></thead><tbody>'+
+    fields.map(function(f){return '<tr><td>'+esc(f.label)+'</td>'+RATING_OPTIONS.map(function(o){return '<td>( '+(String(values[f.key]||'')===o?'X':'&nbsp;')+' )</td>';}).join('')+'</tr>';}).join('')+
+    '</tbody></table>';
+}
+function methodologyPlanningMatrix(value){
+  let rows=String(value||'').split(/\r?\n/).filter(Boolean).map(function(line){return line.split(/\s*\|\s*/);});
+  while(rows.length<8)rows.push(['','','','','']);
+  return '<table class="methodology-planning-table"><thead><tr><th>7. Tema</th><th>8. Objetivo</th><th>9. Atividades propostas</th><th>10. Recursos necessários</th><th>11. Carga horária</th></tr></thead><tbody>'+
+    rows.map(function(r){return '<tr>'+[0,1,2,3,4].map(function(i){return '<td>'+esc(r[i]||'')+'</td>';}).join('')+'</tr>';}).join('')+
+    '</tbody></table>';
+}
+function methodologyPreviewHtml(form,values){
+  values=values||{};
+  if(!form)return '';
+  if(form.slug==='lista-presenca-contato')return methodologyAttendancePreviewHtml(values);
+  const fields=form.sections.flatMap(function(s){return s.fields||[];});
+  let body='';
+  if(fields.some(function(f){return f.type==='rating';})){
+    const first=fields.findIndex(function(f){return f.type==='rating';});
+    let last=first;while(last+1<fields.length&&fields[last+1].type==='rating')last++;
+    fields.slice(0,first).forEach(function(f){body+=officialPreviewField(f,values[f.key]);});
+    body+=methodologyRatingMatrix(fields.slice(first,last+1),values);
+    fields.slice(last+1).forEach(function(f){body+=officialPreviewField(f,values[f.key]);});
+  }else if(form.slug==='cfdh-planejamento'){
+    const topicIndex=fields.findIndex(function(f){return f.key==='topics';});
+    fields.slice(0,topicIndex).forEach(function(f){body+=officialPreviewField(f,values[f.key]);});
+    body+=methodologyPlanningMatrix(values.topics);
+    fields.slice(topicIndex+1).forEach(function(f){body+=officialPreviewField(f,values[f.key]);});
+  }else{
+    form.sections.forEach(function(section){
+      const sectionLabel=officialSectionLabel(form,section);
+      if(sectionLabel)body+='<div class="methodology-section-title">'+esc(sectionLabel)+'</div>';
+      (section.fields||[]).forEach(function(f){body+=officialPreviewField(f,values[f.key]);});
+    });
+  }
+  const paper='<div class="methodology-paper">'+officialPreviewHeader(form)+body+'</div>';
+  if(form.slug==='emprestimo-canhoto')return paper.replace('</div>','</div>')+'<div class="methodology-cut-line">recorte aqui</div>'+paper;
+  return paper;
+}
+
 
 async function pageDashboard(){
   const [st,inds]=await Promise.all([dashboardStats(),getIndicators(currentMonth())]); const main=inds.filter(x=>['M2.1_ATENDIMENTOS','M6.1_OFICINAS_HORAS','M6.2_PVIDA_JOVENS','M6.4_PTRAMPO_JOVENS'].includes(x.code));
