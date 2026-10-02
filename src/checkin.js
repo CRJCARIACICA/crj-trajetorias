@@ -42,14 +42,20 @@ function shell(title,body,step='2'){
 
 async function showRegisteredSearch(){
   shell('Pesquisar cadastro',
-    '<div class="field"><label>Nome ou CPF</label><input class="input" data-youth-search autocomplete="off" placeholder="Digite pelo menos 3 letras do nome ou 4 dígitos do CPF"></div>'+
-    '<div class="checkin-results" data-search-results><div class="empty">Digite para pesquisar.</div></div>');
+    '<div class="form-grid"><div class="field"><label>Pesquisar por nome</label><input class="input" data-youth-name autocomplete="off" placeholder="Digite pelo menos 3 letras"></div><div class="field"><label>Pesquisar por CPF</label><input class="input" data-youth-cpf inputmode="numeric" autocomplete="off" placeholder="Digite pelo menos 4 dígitos"></div></div>'+
+    '<div class="checkin-results" data-search-results><div class="empty">Digite o nome ou CPF para pesquisar.</div></div>');
   backButton();
-  const input=app.querySelector('[data-youth-search]'),box=app.querySelector('[data-search-results]');
+  const nameInput=app.querySelector('[data-youth-name]'),cpfInput=app.querySelector('[data-youth-cpf]'),box=app.querySelector('[data-search-results]');
   let timer=null,seq=0;
-  input.addEventListener('input',()=>{
-    clearTimeout(timer);const q=input.value.trim(),digits=onlyDigits(q),my=++seq;
-    if(q.length<3&&digits.length<4){box.innerHTML='<div class="empty">Digite pelo menos 3 letras do nome ou 4 dígitos do CPF.</div>';return}
+  const search=async(source)=>{
+    clearTimeout(timer);
+    if(source==='name'&&nameInput.value)cpfInput.value='';
+    if(source==='cpf'&&cpfInput.value)nameInput.value='';
+    const q=(source==='cpf'?cpfInput.value:nameInput.value).trim(),digits=onlyDigits(q),my=++seq;
+    if((source==='name'&&q.length<3)||(source==='cpf'&&digits.length<4)){
+      box.innerHTML='<div class="empty">'+(source==='cpf'?'Digite pelo menos 4 dígitos do CPF.':'Digite pelo menos 3 letras do nome.')+'</div>';
+      return;
+    }
     timer=setTimeout(async()=>{
       box.innerHTML='<div class="empty">Pesquisando...</div>';
       const {data,error}=await db.rpc('workshop_checkin_lookup',{p_token:token,p_query:q});
@@ -60,7 +66,9 @@ async function showRegisteredSearch(){
       box.querySelectorAll('[data-candidate]').forEach(b=>b.addEventListener('click',()=>resolveCandidate(b.dataset.candidate)));
       box.querySelector('[data-go-cpf]')?.addEventListener('click',showCpfCheck);
     },220);
-  });
+  };
+  nameInput.addEventListener('input',()=>search('name'));
+  cpfInput.addEventListener('input',()=>search('cpf'));
 }
 async function showCpfCheck(){
   shell('Confirmar pelo CPF',
