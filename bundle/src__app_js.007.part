@@ -10,7 +10,8 @@ function educatorExecutionTypeLabel(t){
     mediacao_convivencia:'Mediação / convivência',
     ficaadica_orientacao:'#FicaAdica / orientação',
     outra_acao_educativa:'Outra ação educativa',
-    estudo_caso:'Estudo de caso'
+    estudo_caso:'Estudo de caso',
+    aula_extra:'Aula / atividade extra da oficina'
   })[t]||eduTypeLabel(t)||t;
 }
 function workshopReportSnapshot(bundle){
