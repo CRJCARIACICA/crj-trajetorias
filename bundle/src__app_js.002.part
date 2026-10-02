@@ -269,6 +269,72 @@ function workshopInstructorEvidencePreviewHtml(i,month){
     '<div class="methodology-system-note">Documento operacional preparado para futura geração de evidência. A carga horária comprovada considera aulas com ao menos um registro nominal em lista de presença.</div>'+
   '</div>';
 }
+
+function workshopLessonDurationHours(l){
+  if(!l?.start_time||!l?.end_time)return 0;
+  const a=String(l.start_time).slice(0,5).split(':').map(Number),b=String(l.end_time).slice(0,5).split(':').map(Number);
+  return Math.max(0,((b[0]*60+b[1])-(a[0]*60+a[1]))/60);
+}
+function workshopPlanPreviewHtml(bundle,workshop,teamMap){
+  const plan=bundle?.plan||{},lessons=(bundle?.lessons||[]).filter(x=>x.included!==false);
+  const month=String(plan.plan_month||'').slice(0,7).split('-').reverse().join('/');
+  const instructor=teamMap?.get(plan.instructor_user_id)||'Não definido';
+  const educator=teamMap?.get(plan.educator_user_id)||'Não definido';
+  const rows=lessons.map(l=>{
+    const loc=workshopLocationLabel({location_type:l.location_type,location_other:l.location_other});
+    return '<tr>'+
+      '<td><b>Aula '+Number(l.lesson_number||0)+'</b><br>'+esc(fmtDate(l.scheduled_date))+'<br>'+esc(String(l.start_time||'').slice(0,5))+'–'+esc(String(l.end_time||'').slice(0,5))+'<br><small>'+esc(loc)+'</small></td>'+
+      '<td>'+esc(l.theme||('Aula '+l.lesson_number))+'</td>'+
+      '<td>'+esc(l.objective||'')+'</td>'+
+      '<td>'+esc(l.proposed_activities||'')+'</td>'+
+      '<td>'+esc(l.resources||'')+'</td>'+
+      '<td>'+workshopLessonDurationHours(l).toLocaleString('pt-BR')+'h</td>'+
+      '<td>'+esc(l.cfdh_transversal||'')+'</td>'+
+    '</tr>';
+  }).join('');
+  return '<div class="methodology-paper methodology-paper-landscape workshop-plan-paper">'+
+    '<div class="methodology-annex-title">CRJ CARIACICA · PLANEJAMENTO MENSAL DE OFICINA</div>'+
+    '<div class="methodology-institutional-header"><img src="'+METHODOLOGY_HEADER_DATA+'" alt="Cabeçalho institucional"></div>'+
+    '<div class="methodology-inner-title">PLANEJAMENTO DA OFICINA</div>'+
+    '<div class="methodology-row"><b>Oficina:</b><span class="methodology-inline-answer">'+esc(workshop?.name||'')+'</span></div>'+
+    '<div class="methodology-row"><b>Mês de referência:</b><span class="methodology-inline-answer">'+esc(month)+'</span></div>'+
+    '<div class="methodology-row"><b>Oficineiro(a):</b><span class="methodology-inline-answer">'+esc(instructor)+'</span></div>'+
+    '<div class="methodology-row"><b>Educador(a) de referência:</b><span class="methodology-inline-answer">'+esc(educator)+'</span></div>'+
+    '<div class="methodology-row methodology-row-tall"><b>Objetivo geral:</b><div class="methodology-answer">'+esc(plan.general_objective||'')+'</div></div>'+
+    '<div class="methodology-row methodology-row-tall"><b>Metodologia geral:</b><div class="methodology-answer">'+esc(plan.general_methodology||'')+'</div></div>'+
+    '<table class="methodology-planning-table workshop-plan-table"><thead><tr><th>Aula / data / horário / local</th><th>Tema</th><th>Objetivo</th><th>Atividades propostas</th><th>Recursos necessários</th><th>Carga horária</th><th>CFDH transversal</th></tr></thead><tbody>'+(rows||'<tr><td colspan="7">Nenhuma aula prevista no calendário deste mês.</td></tr>')+'</tbody></table>'+
+    '<div class="methodology-row methodology-row-tall"><b>Resultados esperados:</b><div class="methodology-answer">'+esc(plan.expected_results||'')+'</div></div>'+
+    '<div class="methodology-row methodology-row-tall"><b>Recursos gerais:</b><div class="methodology-answer">'+esc(plan.general_resources||'')+'</div></div>'+
+    '<div class="methodology-row methodology-row-tall"><b>Observações:</b><div class="methodology-answer">'+esc(plan.observations||'')+'</div></div>'+
+    '<div class="methodology-system-note">As datas, horários e locais são vinculados ao calendário da oficina. Conteúdo pedagógico pode ser complementado sem romper esse vínculo.</div>'+
+  '</div>';
+}
+function workshopPlanEditorHtml(bundle,workshop,teamMap){
+  const plan=bundle.plan,lessons=(bundle.lessons||[]).filter(x=>x.included!==false);
+  const lessonCards=lessons.map(l=>{
+    const loc=workshopLocationLabel({location_type:l.location_type,location_other:l.location_other});
+    return '<div class="card workshop-plan-lesson" data-plan-lesson="'+l.id+'">'+
+      '<div class="page-head compact"><div><span class="pill info">Aula '+l.lesson_number+'</span><h4>'+esc(fmtDate(l.scheduled_date))+' · '+esc(String(l.start_time||'').slice(0,5))+'–'+esc(String(l.end_time||'').slice(0,5))+'</h4><p>'+esc(loc)+' · '+workshopLessonDurationHours(l).toLocaleString('pt-BR')+'h</p></div></div>'+
+      '<div class="field"><label>Tema</label><input class="input" name="theme" value="'+esc(l.theme||('Aula '+l.lesson_number))+'"></div>'+
+      '<div class="field"><label>Objetivo</label><textarea name="objective">'+esc(l.objective||'')+'</textarea></div>'+
+      '<div class="field"><label>Atividades propostas</label><textarea name="proposed_activities">'+esc(l.proposed_activities||'')+'</textarea></div>'+
+      '<div class="form-grid"><div class="field"><label>Recursos necessários</label><textarea name="resources">'+esc(l.resources||'')+'</textarea></div><div class="field"><label>CFDH transversal / tema de direitos humanos</label><textarea name="cfdh_transversal">'+esc(l.cfdh_transversal||'')+'</textarea></div></div>'+
+      '<div class="field"><label>Observações da aula planejada</label><textarea name="observations">'+esc(l.observations||'')+'</textarea></div>'+
+    '</div>';
+  }).join('');
+  return '<div class="page-head"><div><h2>Planejamento · '+esc(workshop.name)+'</h2><p>'+esc(String(plan.plan_month||'').slice(0,7).split('-').reverse().join('/'))+' · '+lessons.length+' aula(s) prevista(s) a partir do calendário.</p></div><div class="actions"><button class="btn secondary" data-sync-workshop-plan="'+plan.id+'" data-workshop="'+workshop.id+'">Sincronizar com calendário</button><button class="btn" data-nav="oficinas?view=planejamento&month='+esc(String(plan.plan_month||'').slice(0,7))+'">Voltar</button></div></div>'+
+    '<form id="workshop-plan-form" data-plan-id="'+plan.id+'" data-workshop-id="'+workshop.id+'">'+
+      '<div class="methodology-form-workspace preview-open" data-workshop-plan-workspace>'+
+        '<div class="methodology-form-editor stack">'+
+          '<div class="card"><div class="form-grid"><div class="field"><label>Objetivo geral da oficina no mês</label><textarea name="general_objective">'+esc(plan.general_objective||'')+'</textarea></div><div class="field"><label>Metodologia geral</label><textarea name="general_methodology">'+esc(plan.general_methodology||'')+'</textarea></div></div><div class="form-grid"><div class="field"><label>Resultados esperados</label><textarea name="expected_results">'+esc(plan.expected_results||'')+'</textarea></div><div class="field"><label>Recursos gerais</label><textarea name="general_resources">'+esc(plan.general_resources||'')+'</textarea></div></div><div class="field"><label>Observações gerais</label><textarea name="observations">'+esc(plan.observations||'')+'</textarea></div></div>'+
+          (lessonCards||'<div class="notice warn">O calendário desta oficina não possui aulas previstas neste mês. Adicione datas no calendário e sincronize novamente.</div>')+
+          '<div class="card"><div class="actions"><select name="status"><option value="rascunho">Rascunho</option><option value="finalizado">Finalizado</option></select><button class="btn primary">Salvar planejamento</button></div></div>'+
+        '</div>'+
+        '<aside class="methodology-preview-pane"><div class="methodology-preview-toolbar"><div><b>Pré-visualização do planejamento</b><span>Atualização em tempo real</span></div><button type="button" class="btn ghost" data-toggle-workshop-plan-preview>Ocultar</button></div><div class="methodology-preview-scroll" data-workshop-plan-preview>'+workshopPlanPreviewHtml(bundle,workshop,teamMap)+'</div></aside>'+
+      '</div>'+
+    '</form>';
+}
+
 async function pageWorkshops(){
   const view=route().params.get('view')||'oficinas';
   if(view==='calendario'){
