@@ -1,0 +1,37 @@
+
+export async function updateWorkshopAttendanceEntry(id,{present=true,notes=''}) {
+  if(mode==='mock'){
+    const st=mock(),r=(st.attendance||[]).find(x=>x.id===id);
+    if(!r)throw new Error('Presença não encontrada');
+    r.present=Boolean(present);r.notes=notes||'';save(st);return r;
+  }
+  const {data,error}=await supabase.from('attendance').update({present:Boolean(present),notes:notes||null}).eq('id',id).select('*').single();
+  if(error)throw error;return data;
+}
+export async function removeWorkshopAttendanceEntry(id){
+  if(mode==='mock'){
+    const st=mock();st.attendance=(st.attendance||[]).filter(x=>x.id!==id);save(st);return;
+  }
+  const {error}=await supabase.from('attendance').delete().eq('id',id);
+  if(error)throw error;
+}
+export async function updateProvisionalPerson(id,patch){
+  const allowed={updated_at:now()};
+  for(const k of ['full_name','birth_date','cpf','email','phone','neighborhood']){
+    if(patch[k]!==undefined) allowed[k]=patch[k]||null;
+  }
+  if(mode==='mock'){
+    const st=mock(),p=(st.provisionalPeople||[]).find(x=>x.id===id);
+    if(!p)throw new Error('Visitante não encontrado');
+    Object.assign(p,allowed);save(st);return p;
+  }
+  const {data,error}=await supabase.from('provisional_people').update(allowed).eq('id',id).select('*').single();
+  if(error)throw error;return data;
+}
+export async function removeWorkshopGuestParticipation(id){
+  if(mode==='mock'){
+    const st=mock();st.guestParticipations=(st.guestParticipations||[]).filter(x=>x.id!==id);save(st);return;
+  }
+  const {error}=await supabase.from('workshop_guest_participations').delete().eq('id',id);
+  if(error)throw error;
+}
