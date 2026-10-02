@@ -223,3 +223,45 @@ function decorateMethodologyFormGoals(form){
   const key=map[slug];
   if(key)decorateEduGoalForm(form,key);
 }
+
+
+function printAttendanceSheetV2(sheet){
+  if(!sheet)return;
+  const win=window.open('','_blank','noopener,noreferrer,width=1200,height=800');
+  if(!win){toast('O navegador bloqueou a janela de impressão.','danger');return}
+  const rows=(sheet.participants||[]).map((r,i)=>`<tr>
+    <td>${i+1}</td>
+    <td>${esc(r.display_name||r.full_name||'')}</td>
+    <td>${r.signature_data?`<img src="${esc(r.signature_data)}" alt="Assinatura">`:'—'}</td>
+    <td>${fmtDate(r.birth_date)}</td>
+    <td>${esc(r.cpf||'—')}</td>
+    <td>${esc(r.phone||'—')}</td>
+    <td>${esc(r.email||'—')}</td>
+  </tr>`).join('');
+  const html=`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Lista de Presença - ${esc(sheet.workshop_name||'CRJ')}</title>
+  <style>
+    @page{size:A4 landscape;margin:10mm}
+    *{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:11px}
+    h1{text-align:center;font-size:18px;margin:0 0 10px}
+    .meta{display:grid;grid-template-columns:2fr 1.5fr 1.5fr 1fr 1fr 1fr;border:1px solid #111;margin-bottom:8px}
+    .meta div{padding:7px;border-right:1px solid #111}.meta div:last-child{border-right:0}.meta b{display:block;font-size:9px;text-transform:uppercase;margin-bottom:2px}
+    table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #111;padding:5px;vertical-align:middle;word-wrap:break-word}
+    th{font-size:9px;text-transform:uppercase}td:nth-child(1){width:4%;text-align:center}td:nth-child(2){width:21%}td:nth-child(3){width:20%}td:nth-child(4){width:13%}td:nth-child(5){width:13%}td:nth-child(6){width:13%}td:nth-child(7){width:16%}
+    img{max-width:120px;max-height:34px;display:block;margin:auto}
+    .count{margin:6px 0;font-weight:bold}
+  </style></head><body>
+  <h1>LISTA DE PRESENÇA E CONTATO</h1>
+  <div class="meta">
+    <div><b>Nome da oficina</b>${esc(sheet.workshop_name||'—')}</div>
+    <div><b>Oficineiro(a)</b>${esc(sheet.officineiro||'—')}</div>
+    <div><b>Educador(a)</b>${esc(sheet.educator||'—')}</div>
+    <div><b>Data</b>${fmtDate(sheet.date)}</div>
+    <div><b>Início</b>${esc(String(sheet.start_time||'').slice(0,5))}</div>
+    <div><b>Término</b>${esc(String(sheet.end_time||'').slice(0,5))}</div>
+  </div>
+  <div class="count">Quantidade de participantes: ${Number(sheet.participant_count||0)}</div>
+  <table><thead><tr><th>#</th><th>Nome</th><th>Assinatura</th><th>Data de nascimento</th><th>CPF</th><th>Telefone</th><th>E-mail</th></tr></thead><tbody>${rows||'<tr><td colspan="7">Nenhuma presença registrada.</td></tr>'}</tbody></table>
+  <script>window.addEventListener('load',()=>setTimeout(()=>window.print(),150));<\/script>
+  </body></html>`;
+  win.document.open();win.document.write(html);win.document.close();
+}
