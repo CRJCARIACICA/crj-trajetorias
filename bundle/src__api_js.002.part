@@ -286,8 +286,11 @@ export async function saveWorkshopMonthlyPlan(planId,header={},lessons=[]){
   }
   const p=await supabase.from('workshop_monthly_plans').update(planPatch).eq('id',planId).select('*').single();if(p.error)throw p.error;
   if(lessons.length){
-    const payload=lessons.map(row=>({id:row.id,plan_id:planId,theme:row.theme||'',objective:row.objective||null,proposed_activities:row.proposed_activities||null,resources:row.resources||null,cfdh_transversal:row.cfdh_transversal||null,observations:row.observations||null,updated_at:now()}));
-    const l=await supabase.from('workshop_plan_lessons').upsert(payload,{onConflict:'id'});if(l.error)throw l.error;
+    for(const row of lessons){
+      const patch={theme:row.theme||'',objective:row.objective||null,proposed_activities:row.proposed_activities||null,resources:row.resources||null,cfdh_transversal:row.cfdh_transversal||null,observations:row.observations||null,updated_at:now()};
+      const l=await supabase.from('workshop_plan_lessons').update(patch).eq('id',row.id).eq('plan_id',planId);
+      if(l.error)throw l.error;
+    }
   }
   return getWorkshopMonthlyPlan(planId);
 }
