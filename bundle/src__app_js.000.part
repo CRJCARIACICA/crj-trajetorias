@@ -17,7 +17,7 @@ function nav(h){location.hash=h;}
 function route(){const raw=(location.hash||'#dashboard').slice(1);const [path,q='']=raw.split('?');return {parts:path.split('/').filter(Boolean),params:new URLSearchParams(q)}}
 function permitted(p){return can(state.user?.role,p)}
 
-function icon(name){const map={dashboard:'◫',jovens:'◎',forms:'▤',oficinas:'◇',agenda:'▦',metas:'▥',geral:'＋',educador:'✦',tecnica:'✚',equipe:'♙',logout:'↪'};return map[name]||'•'}
+function icon(name){const map={dashboard:'◫',jovens:'◎',forms:'▤',oficinas:'◇',agenda:'▦',metas:'▥',geral:'＋',educador:'✦',cfdh:'◆',tecnica:'✚',equipe:'♙',logout:'↪'};return map[name]||'•'}
 function sidebarLink(hash,label,perm,key){if(perm&&!permitted(perm))return '';const active=location.hash.startsWith(`#${hash}`)||(!location.hash&&hash==='dashboard');return `<a class="${active?'active':''}" href="#${hash}"><span>${icon(key)}</span><span>${label}</span></a>`}
 function layout(content){
   const u=state.user;
@@ -27,6 +27,7 @@ function layout(content){
     ${sidebarLink('formularios','Formulários','forms_operacionais','forms')}
     ${sidebarLink('oficinas','Oficinas e presenças','oficinas','oficinas')}
     ${sidebarLink('educador','Área do Educador','educador_area','educador')}
+    ${sidebarLink('cfdh','CFDH compartilhado','cfdh_shared','cfdh')}
     ${sidebarLink('equipe-tecnica','Equipe Técnica','technical_area','tecnica')}
     ${sidebarLink('agenda',state.agendaUnread?`Agenda (${state.agendaUnread})`:'Agenda','agenda','agenda')}
     ${sidebarLink('metas','Metas e indicadores','metas','metas')}
