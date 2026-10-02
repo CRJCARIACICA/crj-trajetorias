@@ -283,7 +283,7 @@ async function pageWorkshops(){
   }
   if(view==='oficineiros'){
     const month=route().params.get('month')||currentMonth();
-    const dashboards=await listWorkshopInstructorDashboard(month);
+    let dashboards=await listWorkshopInstructorDashboard(month);if(state.user?.role==='oficineiro')dashboards=dashboards.filter(i=>i.id===state.user.id);
     return '<div class="page-head"><div><h2>Oficinas e presenças</h2><p>Desempenho operacional, carga horária comprovada, aulas executadas, solicitações e informações relevantes dos oficineiros.</p></div></div>'+
       workshopTabs(view)+
       '<div class="toolbar"><label class="field month-filter"><span>Período</span><input class="input" type="month" data-workshop-month value="'+esc(month)+'"></label><span class="notice info compact">Horas comprovadas = aulas do período com pelo menos um registro na lista de presença.</span></div>'+
