@@ -279,3 +279,33 @@ d);font-size:12px;margin:16px 0}.divider:before,.divider:after{content:"";height
 @media(max-width:620px){
   .instructor-kpis{grid-template-columns:1fr}
 }
+
+
+/* Planejamento mensal e cadastro dos oficineiros */
+.instructor-registry{margin-bottom:16px}
+.instructor-profile-card{display:grid;gap:6px;border:1px solid var(--line);border-radius:12px;padding:12px;background:#fafcfb}
+.instructor-profile-card>div{display:grid;gap:2px}
+.instructor-profile-card span,.instructor-profile-card small{color:var(--muted)}
+.workshop-planning-grid{align-items:stretch}
+.workshop-plan-summary{display:flex;flex-direction:column;gap:10px}
+.workshop-plan-summary .actions:last-child{margin-top:auto}
+.workshop-plan-lesson{display:grid;gap:12px}
+.workshop-plan-lesson .page-head.compact{margin-bottom:0}
+.workshop-plan-lesson h4{margin:5px 0 2px}
+.workshop-plan-lesson p{margin:0;color:var(--muted)}
+.workshop-plan-paper{max-width:1180px}
+.workshop-plan-table{font-size:8px}
+.workshop-plan-table th:nth-child(1){width:14%}
+.workshop-plan-table th:nth-child(2){width:13%}
+.workshop-plan-table th:nth-child(3){width:16%}
+.workshop-plan-table th:nth-child(4){width:20%}
+.workshop-plan-table th:nth-child(5){width:14%}
+.workshop-plan-table th:nth-child(6){width:8%}
+.workshop-plan-table th:nth-child(7){width:15%}
+.workshop-plan-table td{vertical-align:top;min-height:48px;white-space:pre-wrap}
+[data-workshop-plan-workspace].preview-open{grid-template-columns:minmax(0,1fr) minmax(520px,1.05fr)}
+[data-workshop-plan-workspace] .methodology-preview-pane{position:sticky;top:88px}
+@media(max-width:1180px){
+  [data-workshop-plan-workspace].preview-open{grid-template-columns:1fr}
+  [data-workshop-plan-workspace] .methodology-preview-pane{position:static}
+}
