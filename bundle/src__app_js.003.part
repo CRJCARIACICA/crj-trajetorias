@@ -94,6 +94,7 @@ async function bindRoute(){
       modal('Documento salvo',`<div class="stack">
         <div class="notice success">O registro foi salvo. A evidência usa o modelo do anexo oficial da Metodologia dos CRJs, com cabeçalho, campos preenchidos e protocolo eletrônico.</div>
         <div><strong>${esc(FORM_MAP[slug]?.annex||'Anexo')}</strong><br><span class="muted">${esc(FORM_MAP[slug]?.title||slug)}</span></div>
+        ${saved?.payload?.request_number?`<div class="notice info"><b>Solicitação nº ${esc(saved.payload.request_number)}</b><br><small>Padrão mensal 000/MM-AAAA.</small></div>`:''}
         <div class="actions">
           <button class="btn primary" data-evidence-download="${saved.id}" data-format="pdf">Baixar PDF</button>
           <button class="btn secondary" data-evidence-download="${saved.id}" data-format="docx">Baixar DOCX</button>
