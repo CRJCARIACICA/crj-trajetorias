@@ -228,7 +228,7 @@ function decorateMethodologyFormGoals(form){
 function workshopAttendancePreviewHtmlV2(sheet){
   return methodologyAttendancePreviewHtml({
     activity:sheet?.workshop_name||'',
-    location:'CRJ Cariacica',
+    location:sheet?.location||'CRJ Cariacica',
     date:sheet?.date||'',
     start_time:String(sheet?.start_time||'').slice(0,5),
     end_time:String(sheet?.end_time||'').slice(0,5),
