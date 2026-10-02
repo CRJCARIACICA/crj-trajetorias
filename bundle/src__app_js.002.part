@@ -374,10 +374,14 @@ async function pageWorkshops(){
 
   if(view==='oficineiros'){
     const month=route().params.get('month')||currentMonth();
-    let dashboards=await listWorkshopInstructorDashboard(month);if(state.user?.role==='oficineiro')dashboards=dashboards.filter(i=>i.id===state.user.id);
+    let [dashboards,profiles]=await Promise.all([listWorkshopInstructorDashboard(month),listWorkshopInstructorProfiles()]);
+    const management=['coordenacao_geral','coordenacao_articulacao','articulador','educador','administrativo','monitoramento'].includes(state.user?.role);
+    if(state.user?.role==='oficineiro'){dashboards=dashboards.filter(i=>i.id===state.user.id);profiles=profiles.filter(i=>i.id===state.user.id)}
+    const profilesHtml='<div class="card instructor-registry"><div class="page-head compact"><div><h3>Cadastro dos oficineiros</h3><p>Dados profissionais e referência de carga horária.</p></div>'+(management?'<button class="btn primary" data-new-instructor-account>+ Cadastrar oficineiro</button>':'')+'</div><div class="grid three">'+profiles.map(p=>'<div class="instructor-profile-card"><div><b>'+esc(p.display_name)+'</b><span>'+esc(p.specialty||'Especialidade não informada')+'</span></div><small>'+esc(p.phone||'Sem telefone')+' · '+esc(p.email||'Sem e-mail')+'</small><small>Referência semanal: '+(p.contracted_weekly_hours==null?'—':Number(p.contracted_weekly_hours).toLocaleString('pt-BR')+'h')+'</small>'+(management?'<button class="btn ghost" data-edit-instructor-profile="'+p.id+'">Editar cadastro</button>':'')+'</div>').join('')||'<div class="empty">Nenhum oficineiro cadastrado.</div>'+'</div></div>';
     return '<div class="page-head"><div><h2>Oficinas e presenças</h2><p>Desempenho operacional, carga horária comprovada, aulas executadas, solicitações e informações relevantes dos oficineiros.</p></div></div>'+
       workshopTabs(view)+
-      '<div class="toolbar"><label class="field month-filter"><span>Período</span><input class="input" type="month" data-workshop-month value="'+esc(month)+'"></label><span class="notice info compact">Horas comprovadas = aulas do período com pelo menos um registro na lista de presença.</span></div>'+
+      profilesHtml+
+      '<div class="toolbar" style="margin-top:16px"><label class="field month-filter"><span>Período</span><input class="input" type="month" data-workshop-month value="'+esc(month)+'"></label><span class="notice info compact">Horas comprovadas = aulas do período com pelo menos um registro na lista de presença.</span></div>'+
       '<div class="stack instructor-dashboard">'+dashboards.map(i=>{
         const m=i.metrics||{};
         const open=(i.records||[]).filter(r=>r.status==='aberta'||r.status==='em_analise').length;
