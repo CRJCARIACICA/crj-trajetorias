@@ -33,8 +33,10 @@ export async function createWorkshop(row){
 }
 export async function updateWorkshop(id,row){
   const payload={...workshopPayload(row),updated_at:now()};
-  if(mode==='mock'){const s=mock(),w=s.workshops.find(x=>x.id===id);if(!w)throw new Error('Oficina não encontrada');Object.assign(w,payload);save(s);return w;}
-  const {data,error}=await supabase.from('workshops').update(payload).eq('id',id).select('*').single();if(error)throw error;return data;
+  if(mode==='mock'){const s=mock(),w=s.workshops.find(x=>x.id===id);if(!w)throw new Error('Oficina não encontrada');Object.assign(w,payload);if(w.schedule_mode!=='semanal_fixa')s.workshopCalendar=(s.workshopCalendar||[]).filter(x=>!(x.workshop_id===id&&x.source==='regra_fixa'&&x.status==='planejada'));save(s);return w;}
+  const {data,error}=await supabase.from('workshops').update(payload).eq('id',id).select('*').single();if(error)throw error;
+  if(data.schedule_mode!=='semanal_fixa'){const {error:ce}=await supabase.from('workshop_calendar').delete().eq('workshop_id',id).eq('source','regra_fixa').eq('status','planejada');if(ce)throw ce;}
+  return data;
 }
 export async function listWorkshopCalendar(fromDate=null,toDate=null,workshopId=null){
   if(mode==='mock'){
@@ -69,10 +71,11 @@ export async function generateWorkshopFixedCalendar(workshop,horizonDays=90){
   if(!workshop||workshop.schedule_mode!=='semanal_fixa')return [];
   const weekdays=(workshop.fixed_weekdays||[]).map(Number);
   if(!weekdays.length||!workshop.planned_start_date)return [];
-  const start=new Date(workshop.planned_start_date+'T12:00:00Z');
+  let start=new Date(workshop.planned_start_date+'T12:00:00Z');
+  const today=new Date();today.setUTCHours(12,0,0,0);
+  if(workshop.workshop_type==='permanente'&&!workshop.planned_end_date&&today>start)start=new Date(today);
   let end=workshop.planned_end_date?new Date(workshop.planned_end_date+'T12:00:00Z'):new Date(start.getTime()+Number(horizonDays||90)*86400000);
   if(workshop.workshop_type==='pontual')end=new Date(start);
-  const today=new Date();today.setUTCHours(12,0,0,0);
   const rows=[];
   for(let d=new Date(start);d<=end;d.setUTCDate(d.getUTCDate()+1)){
     if(weekdays.includes(d.getUTCDay())){
