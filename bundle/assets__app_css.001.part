@@ -171,3 +171,63 @@ d);font-size:12px;margin:16px 0}.divider:before,.divider:after{content:"";height
   .attendance-sheet-meta>div{border-bottom:1px solid var(--line)}
   .attendance-sheet-meta>div:nth-child(even){border-right:0}
 }
+
+
+/* Pré-visualização dos anexos oficiais da Metodologia dos CRJs */
+.methodology-form-workspace{display:block}
+.methodology-form-workspace.preview-open{display:grid;grid-template-columns:minmax(0,1fr) minmax(430px,.92fr);gap:18px;align-items:start}
+.methodology-form-editor{min-width:0}
+.methodology-preview-pane{display:none;min-width:0}
+.methodology-form-workspace.preview-open .methodology-preview-pane{display:block;position:sticky;top:88px;max-height:calc(100vh - 112px);overflow:hidden;border:1px solid var(--line);border-radius:16px;background:#edf1f0;box-shadow:var(--shadow)}
+.methodology-preview-toolbar{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 14px;background:white;border-bottom:1px solid var(--line)}
+.methodology-preview-toolbar>div{display:grid;gap:2px}
+.methodology-preview-toolbar span:not(.pill){font-size:11px;color:var(--muted)}
+.methodology-preview-scroll{overflow:auto;max-height:calc(100vh - 170px);padding:18px}
+.methodology-paper{width:100%;max-width:760px;margin:0 auto;background:white;color:#111;border:1px solid #d5d5d5;padding:28px 34px 36px;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.28;box-shadow:0 8px 30px rgba(0,0,0,.08)}
+.methodology-paper-landscape{max-width:980px;padding:24px 28px 30px}
+.methodology-annex-title{text-align:center;font-weight:700;font-size:12px;margin-bottom:22px}
+.methodology-institutional-header{text-align:center;margin:0 auto 13px}
+.methodology-institutional-header img{display:block;width:min(330px,80%);height:auto;margin:auto}
+.methodology-inner-title{text-align:center;font-size:10px;font-weight:800;border:1px solid #222;padding:5px 7px;margin-bottom:-1px}
+.methodology-row{border:1px solid #222;margin-top:-1px;min-height:28px;padding:7px 9px;display:block}
+.methodology-row b{font-size:10px}
+.methodology-inline-answer{margin-left:6px;white-space:pre-wrap}
+.methodology-row-tall{min-height:70px}
+.methodology-answer{margin-top:7px;white-space:pre-wrap;font-weight:400}
+.methodology-lines{min-height:42px;background:repeating-linear-gradient(to bottom,transparent 0,transparent 17px,#c9c9c9 18px)}
+.methodology-options{min-height:52px}
+.methodology-option-list{display:grid;gap:3px;margin-top:6px;padding-left:14px}
+.methodology-option-list span{display:block}
+.methodology-section-title{text-align:center;font-weight:800;font-style:italic;border:1px solid #222;margin-top:-1px;padding:6px 8px;background:#fafafa}
+.methodology-presence-table,.methodology-rating-table,.methodology-planning-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9px}
+.methodology-presence-table th,.methodology-presence-table td,.methodology-rating-table th,.methodology-rating-table td,.methodology-planning-table th,.methodology-planning-table td{border:1px solid #222;padding:5px 4px;vertical-align:middle;text-align:left}
+.methodology-presence-table th,.methodology-rating-table th,.methodology-planning-table th{font-weight:800;text-align:center}
+.methodology-presence-table th:nth-child(1){width:5%}
+.methodology-presence-table th:nth-child(2){width:27%}
+.methodology-presence-table th:nth-child(3){width:15%}
+.methodology-presence-table th:nth-child(4){width:15%}
+.methodology-presence-table th:nth-child(5){width:23%}
+.methodology-presence-table th:nth-child(6){width:15%}
+.methodology-presence-table td{height:31px}
+.methodology-signature{display:block;max-width:92px;max-height:25px;object-fit:contain;margin:3px auto 0}
+.methodology-system-note{font-size:8px;margin-top:8px;color:#555;border-top:1px solid #aaa;padding-top:5px}
+.methodology-rating-table{margin-top:-1px}
+.methodology-rating-table th:first-child,.methodology-rating-table td:first-child{width:48%;text-align:left}
+.methodology-rating-table th:not(:first-child),.methodology-rating-table td:not(:first-child){text-align:center}
+.methodology-planning-table{margin-top:-1px}
+.methodology-planning-table td{height:34px}
+.methodology-cut-line{max-width:760px;margin:20px auto;border-top:1px dashed #777;text-align:center;color:#777;font-size:9px;padding-top:3px}
+.methodology-preview-modal{background:#edf1f0;padding:18px;border-radius:12px;max-height:76vh;overflow:auto}
+.modal.modal-wide{width:min(1180px,94vw);max-width:none}
+.attendance-sheet-card [data-sheet-preview]{background:#edf1f0;border:1px solid var(--line);border-radius:12px;padding:16px;overflow:auto}
+.attendance-sheet-card [data-sheet-preview] .methodology-paper{min-width:780px}
+@media(max-width:1180px){
+  .methodology-form-workspace.preview-open{grid-template-columns:1fr}
+  .methodology-form-workspace.preview-open .methodology-preview-pane{position:static;max-height:none}
+  .methodology-preview-scroll{max-height:none}
+}
+@media(max-width:720px){
+  .methodology-paper{padding:18px 16px;min-width:620px}
+  .methodology-preview-scroll{padding:10px}
+  .methodology-preview-pane{overflow:auto}
+}
