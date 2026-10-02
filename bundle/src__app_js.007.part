@@ -1,4 +1,156 @@
 
+
+function educatorExecutionTypeLabel(t){
+  return ({
+    mobilizacao:'Mobilização',
+    evento_programacao:'Evento / programação',
+    mostra:'Mostra',
+    acompanhamento_oficina:'Acompanhamento de oficina',
+    trampo_labpoca:'Trampo Coletivo / LABPoca',
+    mediacao_convivencia:'Mediação / convivência',
+    ficaadica_orientacao:'#FicaAdica / orientação',
+    outra_acao_educativa:'Outra ação educativa',
+    estudo_caso:'Estudo de caso'
+  })[t]||eduTypeLabel(t)||t;
+}
+function workshopReportSnapshot(bundle){
+  return {
+    metrics:bundle?.metrics||{},
+    lesson_execution:bundle?.lesson_execution||[],
+    complementary_actions:bundle?.complementary_actions||[]
+  };
+}
+function workshopReportDraft(bundle,form=null){
+  const base=bundle?.report||{},get=name=>form?.querySelector('[name="'+name+'"]')?.value;
+  const v=name=>form?get(name):(base[name]??'');
+  return {
+    ...base,
+    plan_id:bundle?.plan?.id||base.plan_id||'',
+    report_date:v('report_date')||new Date().toISOString().slice(0,10),
+    execution_status:v('execution_status')||'realizado',
+    actual_description:v('actual_description')||'',
+    actual_participants:Number(bundle?.metrics?.unique_participants||0),
+    actual_duration_hours:Number(bundle?.metrics?.executed_hours||0),
+    methodology_applied:v('methodology_applied')||'',
+    results_achieved:v('results_achieved')||'',
+    resources_used:v('resources_used')||'',
+    actions_performed:v('actions_performed')||'',
+    unplanned_actions:v('unplanned_actions')||'',
+    youth_feedback:v('youth_feedback')||'',
+    positive_points:v('positive_points')||'',
+    difficulties:v('difficulties')||'',
+    next_steps:v('next_steps')||'',
+    justification:v('justification')||'',
+    evidence_ref:v('evidence_ref')||'',
+    observations:v('observations')||'',
+    execution_snapshot:workshopReportSnapshot(bundle)
+  };
+}
+function workshopReportPreviewHtml(bundle,draft=null){
+  const r=draft||workshopReportDraft(bundle),p=bundle?.plan||{},w=bundle?.workshop||{},m=bundle?.metrics||{};
+  const teamMap=new Map((bundle?.team||[]).map(x=>[x.id,x.display_name]));
+  const educator=teamMap.get(p.educator_user_id)||'Não definido';
+  const instructor=teamMap.get(p.instructor_user_id)||'Não definido';
+  const month=String(p.plan_month||'').slice(0,7).split('-').reverse().join('/');
+  const lessonRows=(bundle?.lesson_execution||[]).map(x=>{
+    const planned=esc((x.planned_theme||'')+(x.planned_objective?'\nObjetivo: '+x.planned_objective:''));
+    const executed=x.executed
+      ?esc((x.actual_content||'Execução registrada')+(x.actual_notes?'\nObs.: '+x.actual_notes:''))
+      :'<span class="muted">Não executada / ainda não registrada</span>';
+    const actualWhen=x.executed
+      ?esc(fmtDate(x.actual_date)+' · '+String(x.actual_start||'').slice(0,5)+'–'+String(x.actual_end||'').slice(0,5)+' · '+Number(x.actual_hours||0).toLocaleString('pt-BR')+'h')
+      :esc(fmtDate(x.planned_date)+' · '+String(x.planned_start||'').slice(0,5)+'–'+String(x.planned_end||'').slice(0,5));
+    return '<tr><td><b>Aula '+esc(x.lesson_number)+'</b><br>'+actualWhen+'</td><td>'+planned.replace(/\n/g,'<br>')+'</td><td>'+String(executed).replace(/\n/g,'<br>')+'</td><td>'+Number(x.participant_count||0)+'</td><td>'+esc(x.educator_name||educator)+'</td><td>'+Number(x.cfdh_minutes||0)+' min</td></tr>';
+  }).join('');
+  const actionRows=(bundle?.complementary_actions||[]).map(a=>'<tr><td>'+esc(fmtDate(a.date))+'</td><td>'+esc(educatorExecutionTypeLabel(a.type))+'</td><td><b>'+esc(a.title||'')+'</b>'+(a.description?'<br>'+esc(a.description):'')+'</td><td>'+Number(a.duration_hours||0).toLocaleString('pt-BR')+'h</td><td>'+(a.participants_count??'—')+'</td></tr>').join('');
+  const pair=(plannedLabel,plannedValue,actualLabel,actualValue)=>
+    '<div class="methodology-report-pair"><div><b>'+esc(plannedLabel)+'</b><p>'+esc(plannedValue||'—')+'</p></div><div><b>'+esc(actualLabel)+'</b><p>'+esc(actualValue||'—')+'</p></div></div>';
+  return '<div class="methodology-paper methodology-paper-landscape workshop-report-paper">'+
+    '<div class="methodology-annex-title">CRJ CARIACICA · RELATÓRIO MENSAL DE EXECUÇÃO</div>'+
+    '<div class="methodology-institutional-header"><img src="'+METHODOLOGY_HEADER_DATA+'" alt="Cabeçalho institucional"></div>'+
+    '<div class="methodology-inner-title">RELATÓRIO DE EXECUÇÃO DA OFICINA</div>'+
+    '<div class="methodology-row"><b>Oficina:</b><span class="methodology-inline-answer">'+esc(w.name||'')+'</span></div>'+
+    '<div class="methodology-row"><b>Mês de referência:</b><span class="methodology-inline-answer">'+esc(month)+'</span></div>'+
+    '<div class="methodology-row"><b>Oficineiro(a):</b><span class="methodology-inline-answer">'+esc(instructor)+'</span></div>'+
+    '<div class="methodology-row"><b>Educador(a) de referência:</b><span class="methodology-inline-answer">'+esc(educator)+'</span></div>'+
+    '<div class="methodology-row"><b>Data do relatório:</b><span class="methodology-inline-answer">'+esc(fmtDate(r.report_date))+'</span> <b style="margin-left:18px">Situação:</b><span class="methodology-inline-answer">'+esc(r.execution_status||'')+'</span></div>'+
+    '<table class="methodology-planning-table report-kpi-table"><thead><tr><th>Aulas previstas</th><th>Aulas executadas</th><th>CH prevista</th><th>CH executada</th><th>Participações</th><th>Jovens/participantes únicos</th><th>CFDH transversal</th></tr></thead><tbody><tr><td>'+Number(m.planned_lessons||0)+'</td><td>'+Number(m.executed_lessons||0)+'</td><td>'+Number(m.planned_hours||0).toLocaleString('pt-BR')+'h</td><td>'+Number(m.executed_hours||0).toLocaleString('pt-BR')+'h</td><td>'+Number(m.participation_records||0)+'</td><td>'+Number(m.unique_participants||0)+'</td><td>'+Number(m.cfdh_minutes||0)+' min</td></tr></tbody></table>'+
+    '<div class="methodology-section-title">AULAS · PLANEJADO × EXECUTADO</div>'+
+    '<table class="methodology-planning-table workshop-report-table"><thead><tr><th>Aula / execução</th><th>Planejado</th><th>Executado</th><th>Participantes</th><th>Educador acompanhando</th><th>CFDH</th></tr></thead><tbody>'+(lessonRows||'<tr><td colspan="6">Nenhuma aula prevista neste planejamento.</td></tr>')+'</tbody></table>'+
+    '<div class="methodology-section-title">AÇÕES, ATIVIDADES, PASSEIOS E EVENTOS REGISTRADOS NO MÊS</div>'+
+    '<table class="methodology-planning-table workshop-report-actions"><thead><tr><th>Data</th><th>Tipo</th><th>Registro</th><th>Duração</th><th>Participantes</th></tr></thead><tbody>'+(actionRows||'<tr><td colspan="5">Nenhuma ação complementar registrada para o Educador no mês.</td></tr>')+'</tbody></table>'+
+    pair('Objetivo geral planejado',p.general_objective,'Síntese do que foi executado',r.actual_description)+
+    pair('Metodologia planejada',p.general_methodology,'Metodologia aplicada / adaptações',r.methodology_applied)+
+    pair('Resultados esperados',p.expected_results,'Resultados alcançados',r.results_achieved)+
+    pair('Recursos previstos',p.general_resources,'Recursos efetivamente utilizados',r.resources_used)+
+    '<div class="methodology-row methodology-row-tall"><b>Ações realizadas / ajustes durante a execução:</b><div class="methodology-answer">'+esc(r.actions_performed||'')+'</div></div>'+
+    '<div class="methodology-row methodology-row-tall"><b>Ações, atividades, passeios ou eventos não previstos / complementação:</b><div class="methodology-answer">'+esc(r.unplanned_actions||'')+'</div></div>'+
+    '<div class="methodology-row methodology-row-tall"><b>Retorno, participação e percepção dos jovens:</b><div class="methodology-answer">'+esc(r.youth_feedback||'')+'</div></div>'+
+    pair('Pontos positivos','', 'Pontos positivos observados',r.positive_points)+
+    pair('Dificuldades','', 'Dificuldades encontradas',r.difficulties)+
+    '<div class="methodology-row methodology-row-tall"><b>Próximos passos / encaminhamentos:</b><div class="methodology-answer">'+esc(r.next_steps||'')+'</div></div>'+
+    '<div class="methodology-row methodology-row-tall"><b>Justificativa para execução parcial, alteração ou não realização:</b><div class="methodology-answer">'+esc(r.justification||'')+'</div></div>'+
+    '<div class="methodology-row methodology-row-tall"><b>Evidências / referências:</b><div class="methodology-answer">'+esc(r.evidence_ref||'')+'</div></div>'+
+    '<div class="methodology-row methodology-row-tall"><b>Observações finais:</b><div class="methodology-answer">'+esc(r.observations||'')+'</div></div>'+
+    '<div class="methodology-system-note">Dados quantitativos de aulas, carga horária e participações são preenchidos a partir dos registros do sistema. O relatório responde ao planejamento mensal e registra diferenças entre o previsto e o executado.</div>'+
+  '</div>';
+}
+function workshopReportEditorHtml(bundle,canWrite=true){
+  const r=bundle?.report||{},m=bundle?.metrics||{},p=bundle?.plan||{},w=bundle?.workshop||{};
+  const value=(k,fallback='')=>r[k]??fallback;
+  const status=value('execution_status','realizado');
+  return '<div class="page-head"><div><h2>Relatório · '+esc(w.name||'Oficina')+'</h2><p>Responda ao planejamento de '+esc(String(p.plan_month||'').slice(0,7).split('-').reverse().join('/'))+' com base na execução efetivamente registrada.</p></div><div class="actions"><button class="btn" data-nav="educador?view=relatorios&month='+esc(String(p.plan_month||'').slice(0,7))+'">Voltar aos relatórios</button></div></div>'+
+    '<form id="workshop-monthly-report-form" data-plan-id="'+esc(p.id||'')+'" data-report-id="'+esc(r.id||'')+'">'+
+    '<div class="methodology-form-workspace preview-open" data-workshop-report-workspace>'+
+      '<div class="methodology-form-editor stack">'+
+        '<div class="card"><div class="notice info"><b>Execução capturada automaticamente</b><br>'+Number(m.executed_lessons||0)+' de '+Number(m.planned_lessons||0)+' aula(s) executada(s) · '+Number(m.executed_hours||0).toLocaleString('pt-BR')+'h de '+Number(m.planned_hours||0).toLocaleString('pt-BR')+'h previstas · '+Number(m.unique_participants||0)+' participante(s) único(s). Esses totais não são digitados manualmente.</div>'+
+          '<div class="form-grid"><div class="field"><label>Data do relatório</label><input class="input" type="date" name="report_date" value="'+esc(value('report_date',new Date().toISOString().slice(0,10)))+'" required '+(canWrite?'':'disabled')+'></div><div class="field"><label>Situação geral da execução</label><select name="execution_status" '+(canWrite?'':'disabled')+'><option value="realizado" '+(status==='realizado'?'selected':'')+'>Realizado</option><option value="parcial" '+(status==='parcial'?'selected':'')+'>Parcial</option><option value="nao_realizado" '+(status==='nao_realizado'?'selected':'')+'>Não realizado</option></select></div></div>'+
+          '<div class="field"><label>Síntese do que foi executado</label><textarea name="actual_description" required '+(canWrite?'':'disabled')+'>'+esc(value('actual_description'))+'</textarea><small>Descreva o resultado geral da oficina no período, respondendo ao objetivo do planejamento.</small></div>'+
+          '<div class="field"><label>Metodologia aplicada e adaptações realizadas</label><textarea name="methodology_applied" '+(canWrite?'':'disabled')+'>'+esc(value('methodology_applied'))+'</textarea></div>'+
+          '<div class="field"><label>Resultados alcançados</label><textarea name="results_achieved" '+(canWrite?'':'disabled')+'>'+esc(value('results_achieved'))+'</textarea></div>'+
+          '<div class="field"><label>Recursos efetivamente utilizados</label><textarea name="resources_used" '+(canWrite?'':'disabled')+'>'+esc(value('resources_used'))+'</textarea></div>'+
+          '<div class="field"><label>Ações realizadas / ajustes durante a execução</label><textarea name="actions_performed" '+(canWrite?'':'disabled')+'>'+esc(value('actions_performed'))+'</textarea></div>'+
+          '<div class="field"><label>Ações, atividades, passeios e eventos não previstos / complementação</label><textarea name="unplanned_actions" '+(canWrite?'':'disabled')+'>'+esc(value('unplanned_actions'))+'</textarea><small>Use somente para complementar o que não foi capturado nos registros automáticos exibidos abaixo.</small></div>'+
+          '<div class="field"><label>Retorno, participação e percepção dos jovens</label><textarea name="youth_feedback" '+(canWrite?'':'disabled')+'>'+esc(value('youth_feedback'))+'</textarea></div>'+
+          '<div class="form-grid"><div class="field"><label>Pontos positivos</label><textarea name="positive_points" '+(canWrite?'':'disabled')+'>'+esc(value('positive_points'))+'</textarea></div><div class="field"><label>Dificuldades encontradas</label><textarea name="difficulties" '+(canWrite?'':'disabled')+'>'+esc(value('difficulties'))+'</textarea></div></div>'+
+          '<div class="field"><label>Próximos passos / encaminhamentos</label><textarea name="next_steps" '+(canWrite?'':'disabled')+'>'+esc(value('next_steps'))+'</textarea></div>'+
+          '<div class="field"><label>Justificativa para execução parcial, alteração ou não realização</label><textarea name="justification" '+(canWrite?'':'disabled')+'>'+esc(value('justification'))+'</textarea></div>'+
+          '<div class="field"><label>Evidências / referências</label><textarea name="evidence_ref" '+(canWrite?'':'disabled')+'>'+esc(value('evidence_ref'))+'</textarea><small>Ex.: listas de presença, registros fotográficos, formulários, links, atas ou outros meios de verificação.</small></div>'+
+          '<div class="field"><label>Observações finais</label><textarea name="observations" '+(canWrite?'':'disabled')+'>'+esc(value('observations'))+'</textarea></div>'+
+        '</div>'+
+        '<div class="card"><div class="page-head compact"><div><h3>Aulas executadas a partir do planejamento</h3><p>Leitura automática das aulas, presenças e responsável pelo acompanhamento.</p></div><span class="pill success">'+Number(m.executed_lessons||0)+' executada(s)</span></div>'+
+          '<div class="educator-planned-lists">'+(bundle.lesson_execution||[]).map(x=>'<div class="educator-planned-list-row"><div><b>Aula '+esc(x.lesson_number)+' · '+esc(fmtDate(x.planned_date))+'</b><span>'+esc(x.planned_theme||'')+'</span><small>'+(x.executed?esc('Executada em '+fmtDate(x.actual_date)+' · '+Number(x.participant_count||0)+' participação(ões) · '+Number(x.actual_hours||0).toLocaleString('pt-BR')+'h'):'Ainda não registrada como executada')+'</small></div><span class="pill '+(x.executed?'success':'warn')+'">'+(x.executed?'Executada':'Pendente')+'</span></div>').join('')+'</div></div>'+
+        '<div class="card"><div class="page-head compact"><div><h3>Outras ações do Educador no período</h3><p>Registros que podem compor o relatório: atividades, mobilizações, eventos, mostras e acompanhamentos.</p></div></div>'+
+          '<div class="educator-planned-lists">'+(bundle.complementary_actions||[]).map(a=>'<div class="educator-planned-list-row"><div><b>'+esc(fmtDate(a.date))+' · '+esc(educatorExecutionTypeLabel(a.type))+'</b><span>'+esc(a.title||'')+'</span><small>'+esc(a.description||'')+'</small></div><span class="pill info">'+Number(a.duration_hours||0).toLocaleString('pt-BR')+'h</span></div>').join('')+'</div></div>'+
+        (canWrite?'<div class="card"><div class="actions"><button class="btn primary" type="submit">Salvar relatório</button></div></div>':'<div class="notice info">Este relatório pertence a outro Educador e está disponível somente para consulta.</div>')+
+      '</div>'+
+      '<aside class="methodology-preview-pane"><div class="methodology-preview-toolbar"><div><b>Pré-visualização do relatório</b><span>Atualização em tempo real</span></div><div class="actions"><button type="button" class="btn ghost" data-toggle-workshop-report-preview>Ocultar</button></div></div><div class="methodology-preview-scroll" data-workshop-report-preview>'+workshopReportPreviewHtml(bundle)+'</div></aside>'+
+    '</div></form>';
+}
+function educatorReferralPreviewHtml(rec,receipts,teamMap,youthMap,workshopMap){
+  const youth=youthMap.get(rec.youth_id),workshop=workshopMap.get(rec.workshop_id),from=teamMap.get(rec.educator_user_id);
+  const recipientRows=(receipts||[]).filter(x=>x.educator_record_id===rec.id).map(x=>{
+    const p=teamMap.get(x.recipient_user_id);
+    return '<tr><td>'+esc(p?.display_name||'Colaborador')+'</td><td>'+esc(roleLabel(p?.role))+'</td><td>'+esc(x.status==='ciente'?'Ciente':'Pendente')+'</td><td>'+esc(x.viewed_at?fmtDateTime(x.viewed_at):'—')+'</td></tr>';
+  }).join('');
+  return '<div class="methodology-paper educator-referral-paper">'+
+    '<div class="methodology-annex-title">CRJ CARIACICA · ENCAMINHAMENTO INTERNO</div>'+
+    '<div class="methodology-institutional-header"><img src="'+METHODOLOGY_HEADER_DATA+'" alt="Cabeçalho institucional"></div>'+
+    '<div class="methodology-inner-title">REGISTRO DE ENCAMINHAMENTO DO EDUCADOR</div>'+
+    '<div class="methodology-row"><b>Data:</b><span class="methodology-inline-answer">'+esc(fmtDate(rec.record_date))+'</span></div>'+
+    '<div class="methodology-row"><b>Educador responsável:</b><span class="methodology-inline-answer">'+esc(from?.display_name||'')+'</span></div>'+
+    '<div class="methodology-row"><b>Jovem / participante:</b><span class="methodology-inline-answer">'+esc(youth?.preferred_name||youth?.full_name||'Não vinculado')+'</span></div>'+
+    '<div class="methodology-row"><b>Oficina / atividade relacionada:</b><span class="methodology-inline-answer">'+esc(workshop?.name||'Não vinculada')+'</span></div>'+
+    '<div class="methodology-row methodology-row-tall"><b>Título / síntese:</b><div class="methodology-answer">'+esc(rec.title||educatorExecutionTypeLabel(rec.record_type))+'</div></div>'+
+    '<div class="methodology-row methodology-row-tall"><b>Descrição da demanda / motivo:</b><div class="methodology-answer">'+esc(rec.description||'')+'</div></div>'+
+    '<div class="methodology-row"><b>Destino do encaminhamento:</b><span class="methodology-inline-answer">'+esc(rec.referral_target||'')+'</span></div>'+
+    '<div class="methodology-row methodology-row-tall"><b>Observações:</b><div class="methodology-answer">'+esc(rec.notes||'')+'</div></div>'+
+    '<div class="methodology-row methodology-row-tall"><b>Evidência / referência:</b><div class="methodology-answer">'+esc(rec.evidence_ref||'')+'</div></div>'+
+    '<div class="methodology-section-title">CIÊNCIA DOS DESTINATÁRIOS</div>'+
+    '<table class="methodology-planning-table"><thead><tr><th>Profissional</th><th>Função</th><th>Situação</th><th>Data/hora da ciência</th></tr></thead><tbody>'+(recipientRows||'<tr><td colspan="4">Nenhum destinatário nominal registrado.</td></tr>')+'</tbody></table>'+
+  '</div>';
+}
+
 function openPrintableDocument(title,html){
   const win=window.open('','_blank','noopener,noreferrer,width=1200,height=850');
   if(!win){toast('O navegador bloqueou a janela de impressão.','danger');return}
