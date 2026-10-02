@@ -143,18 +143,44 @@ function signatureBlock(){
   return '<div class="field"><label>Assinatura manuscrita</label><canvas class="signature-pad public-signature" data-signature></canvas><div class="actions"><button type="button" class="btn ghost" data-clear-signature>Limpar assinatura</button></div></div>';
 }
 function bindSignature(form){
-  const canvas=form.querySelector('[data-signature]');if(!canvas)return()=>null;
-  const ratio=Math.max(window.devicePixelRatio||1,1),rect=canvas.getBoundingClientRect();
-  canvas.width=Math.max(600,Math.round((rect.width||600)*ratio));canvas.height=Math.round(180*ratio);
-  const g=canvas.getContext('2d');g.scale(ratio,ratio);g.lineWidth=2;g.lineCap='round';g.strokeStyle='#17201e';
-  let drawing=false,moved=false;
-  const point=e=>{const r=canvas.getBoundingClientRect();return{x:(e.clientX-r.left),y:(e.clientY-r.top)}};
-  canvas.addEventListener('pointerdown',e=>{drawing=true;moved=true;const p=point(e);g.beginPath();g.moveTo(p.x,p.y);canvas.setPointerCapture?.(e.pointerId)});
-  canvas.addEventListener('pointermove',e=>{if(!drawing)return;const p=point(e);g.lineTo(p.x,p.y);g.stroke()});
-  canvas.addEventListener('pointerup',()=>drawing=false);canvas.addEventListener('pointercancel',()=>drawing=false);
-  form.querySelector('[data-clear-signature]')?.addEventListener('click',()=>{g.clearRect(0,0,canvas.width/ratio,canvas.height/ratio);moved=false});
-  return()=>moved?canvas.toDataURL('image/png'):null;
+  const canvas=form?.querySelector('[data-signature]');
+  if(!canvas)return()=>null;
+  let moved=false,g=null,ratio=1;
+  try{
+    ratio=Math.max(window.devicePixelRatio||1,1);
+    const rect=canvas.getBoundingClientRect();
+    canvas.width=Math.max(600,Math.round((rect.width||600)*ratio));
+    canvas.height=Math.round(180*ratio);
+    g=canvas.getContext('2d');
+    if(!g)throw new Error('Canvas indisponível');
+    g.scale(ratio,ratio);
+    g.lineWidth=2;g.lineCap='round';g.strokeStyle='#17201e';
+    let drawing=false;
+    const point=e=>{const r=canvas.getBoundingClientRect();return{x:(e.clientX-r.left),y:(e.clientY-r.top)}};
+    canvas.addEventListener('pointerdown',e=>{drawing=true;moved=true;const p=point(e);g.beginPath();g.moveTo(p.x,p.y);try{canvas.setPointerCapture?.(e.pointerId)}catch{}});
+    canvas.addEventListener('pointermove',e=>{if(!drawing)return;const p=point(e);g.lineTo(p.x,p.y);g.stroke()});
+    canvas.addEventListener('pointerup',()=>drawing=false);
+    canvas.addEventListener('pointercancel',()=>drawing=false);
+    form.querySelector('[data-clear-signature]')?.addEventListener('click',()=>{g.clearRect(0,0,canvas.width/ratio,canvas.height/ratio);moved=false});
+  }catch(err){
+    console.error('Falha ao iniciar assinatura:',err);
+    form?.insertAdjacentHTML('afterbegin',notice('danger','Assinatura indisponível','Recarregue a página para tentar novamente.'));
+  }
+  return()=>{
+    if(!moved||!g)return null;
+    try{return canvas.toDataURL('image/png')}catch{return null}
+  };
 }
+async function rpcWithTimeout(name,args,ms=20000){
+  let timer;
+  try{
+    return await Promise.race([
+      db.rpc(name,args),
+      new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('A operação demorou mais do que o esperado. Verifique a conexão e tente novamente.')),ms)})
+    ]);
+  }finally{clearTimeout(timer)}
+}
+
 function showEnrollmentForm(state,prefix=''){
   const extraCpf=!state.has_cpf?'<div class="field"><label>CPF completo</label><input class="input" name="cpf" inputmode="numeric" required></div>':'';
   const extraEmail=!state.has_email?'<div class="field"><label>E-mail</label><input class="input" name="email" type="email" required></div>':'';
@@ -180,48 +206,71 @@ function showEnrollmentForm(state,prefix=''){
   });
 }
 function showProvisionalForm(prefill={}){
-  shell('Inscrição provisória',
-    '<div class="notice warn"><b>Este cadastro ainda não substitui o Formulário Inicial completo.</b><br>Vamos criar um Formulário Inicial provisório, registrar sua inscrição na oficina e deixar as pendências visíveis até a conclusão do cadastro.</div>'+
-    '<form id="provisional-form" class="stack"><div class="field"><label>Nome completo</label><input class="input" name="full_name" value="'+esc(prefill.full_name||'')+'" required></div>'+
+  shell('Formulário Inicial parcial',
+    '<div class="notice warn"><b>Este é o próprio Formulário Inicial do CRJ, salvo parcialmente.</b><br>Os dados coletados agora ficam no Anexo 1 do jovem. O restante será complementado depois e as pendências continuarão visíveis no cadastro.</div>'+
+    '<form id="provisional-form" class="stack" novalidate><div class="field"><label>Nome completo</label><input class="input" name="full_name" value="'+esc(prefill.full_name||'')+'" required></div>'+
     '<div class="form-grid"><div class="field"><label>Data de nascimento</label><input class="input" type="date" name="birth_date" value="'+esc(prefill.birth_date||'')+'" required></div><div class="field"><label>CPF</label><input class="input" name="cpf" inputmode="numeric" value="'+esc(prefill.cpf||lastCpf||'')+'" required></div></div>'+
     '<div class="field"><label>E-mail</label><input class="input" name="email" type="email" required></div><div class="field"><label>Bairro</label><input class="input" name="neighborhood" required></div>'+
     '<div class="field"><label>Criar senha da oficina</label><input class="input" name="secret" type="password" minlength="4" maxlength="32" required></div>'+signatureBlock()+
-    '<button class="btn primary">Criar inscrição provisória e confirmar presença</button></form>','4');
+    '<div data-action-status></div><button class="btn primary" type="button" data-provisional-save>Salvar Formulário Inicial parcial e confirmar presença</button></form>','4');
   backButton(showCpfCheck);
-  const form=app.querySelector('#provisional-form'),getSignature=bindSignature(form);
-  form.addEventListener('submit',async e=>{
-    e.preventDefault();const sig=getSignature();if(!sig){form.insertAdjacentHTML('afterbegin',notice('danger','Assinatura obrigatória','Assine antes de continuar.'));return}
-    const fd=new FormData(form),btn=form.querySelector('button[type="submit"]');btn.disabled=true;btn.textContent='Criando...';
-    const {data,error}=await db.rpc('workshop_checkin_create_provisional',{
-      p_token:token,p_full_name:fd.get('full_name'),p_birth_date:fd.get('birth_date'),p_cpf:fd.get('cpf'),
-      p_email:fd.get('email'),p_neighborhood:fd.get('neighborhood'),p_signature_data:sig,p_secret:fd.get('secret')
-    });
-    if(error){btn.disabled=false;btn.textContent='Criar inscrição provisória e confirmar presença';form.querySelector('.notice.danger')?.remove();const msg=error.message==='CPF_JA_CADASTRADO'?'Este CPF já possui cadastro. Volte e pesquise o cadastro existente.':error.message;form.insertAdjacentHTML('afterbegin',notice('danger','Não foi possível concluir',msg));return}
-    showSuccess('Inscrição provisória criada','Sua presença também foi confirmada nesta aula.',data);
-  });
+  const form=app.querySelector('#provisional-form');
+  const btn=form?.querySelector('[data-provisional-save]');
+  const status=form?.querySelector('[data-action-status]');
+  const getSignature=bindSignature(form);
+  const run=async()=>{
+    status.innerHTML='';
+    if(!form.reportValidity())return;
+    const sig=getSignature();
+    if(!sig){status.innerHTML=notice('danger','Assinatura obrigatória','Assine no quadro antes de continuar.');return}
+    const fd=new FormData(form);
+    btn.disabled=true;btn.textContent='Salvando cadastro e presença...';
+    status.innerHTML=notice('info','Registrando','Estamos salvando o Formulário Inicial parcial, a inscrição e a presença desta aula.');
+    try{
+      const result=await rpcWithTimeout('workshop_checkin_create_provisional',{
+        p_token:token,
+        p_full_name:String(fd.get('full_name')||'').trim(),
+        p_birth_date:fd.get('birth_date'),
+        p_cpf:fd.get('cpf'),
+        p_email:String(fd.get('email')||'').trim(),
+        p_neighborhood:String(fd.get('neighborhood')||'').trim(),
+        p_signature_data:sig,
+        p_secret:fd.get('secret')
+      });
+      if(result?.error)throw result.error;
+      const data=result?.data||{};
+      showSuccess('Cadastro parcial e presença registrados','O mesmo Formulário Inicial poderá ser completado depois. Sua presença já entrou na lista desta aula.',data);
+    }catch(err){
+      btn.disabled=false;btn.textContent='Salvar Formulário Inicial parcial e confirmar presença';
+      const msg=String(err?.message||err)==='CPF_JA_CADASTRADO'?'Este CPF já possui trajetória no CRJ. Volte e pesquise o cadastro existente.':(err?.message||String(err));
+      status.innerHTML=notice('danger','Não foi possível concluir',msg);
+    }
+  };
+  btn?.addEventListener('click',run);
+  form?.addEventListener('submit',e=>{e.preventDefault();run()});
 }
 function showVisitorForm(prefill={}){
-  shell('Entrada como visitante',
-    '<div class="notice"><b>Modo visitante</b><br>Registra somente esta visita. Na 3ª visita o sistema exige a criação de uma inscrição provisória para continuar o ciclo.</div>'+
-    '<form id="visitor-form" class="stack"><div class="field"><label>Nome completo</label><input class="input" name="full_name" value="'+esc(prefill.full_name||'')+'" required></div>'+
+  shell('Participação sem inscrição',
+    '<div class="notice"><b>Visitante</b><br>Esta opção registra a participação diretamente na lista desta aula sem criar inscrição na oficina. Na 3ª ocorrência o sistema solicita o início do Formulário Inicial parcial.</div>'+
+    '<form id="visitor-form" class="stack" novalidate><div class="field"><label>Nome completo</label><input class="input" name="full_name" value="'+esc(prefill.full_name||'')+'" required></div>'+
     '<div class="form-grid"><div class="field"><label>Data de nascimento</label><input class="input" type="date" name="birth_date" value="'+esc(prefill.birth_date||'')+'" required></div><div class="field"><label>CPF</label><input class="input" name="cpf" inputmode="numeric" value="'+esc(prefill.cpf||lastCpf||'')+'" required></div></div>'+
     '<div class="field"><label>Bairro</label><input class="input" name="neighborhood" required></div>'+signatureBlock()+
-    '<button class="btn primary" type="submit">Registrar visita</button></form>','4');
+    '<div data-action-status></div><button class="btn primary" type="button" data-visitor-save>Registrar participação sem inscrição</button></form>','4');
   backButton(showCpfCheck);
-  const form=app.querySelector('#visitor-form'),getSignature=bindSignature(form);
-  form.addEventListener('submit',async e=>{
-    e.preventDefault();
-    const btn=form.querySelector('button[type="submit"]');
-    form.querySelectorAll('.notice.danger').forEach(x=>x.remove());
+  const form=app.querySelector('#visitor-form');
+  const btn=form?.querySelector('[data-visitor-save]');
+  const status=form?.querySelector('[data-action-status]');
+  const getSignature=bindSignature(form);
+  const run=async()=>{
+    status.innerHTML='';
+    if(!form.reportValidity())return;
+    const sig=getSignature();
+    if(!sig){status.innerHTML=notice('danger','Assinatura obrigatória','Assine antes de registrar a participação.');return}
+    const fd=new FormData(form);
+    btn.disabled=true;btn.textContent='Registrando participação...';
+    status.innerHTML=notice('info','Registrando','A participação será incluída imediatamente na lista desta aula.');
     try{
-      const sig=getSignature();
-      if(!sig){
-        form.insertAdjacentHTML('afterbegin',notice('danger','Assinatura obrigatória','Assine antes de registrar a visita.'));
-        return;
-      }
-      const fd=new FormData(form);
-      btn.disabled=true;btn.textContent='Registrando visita...';
-      const result=await db.rpc('workshop_checkin_guest',{
+      const result=await rpcWithTimeout('workshop_checkin_guest',{
         p_token:token,
         p_full_name:String(fd.get('full_name')||'').trim(),
         p_birth_date:fd.get('birth_date'),
@@ -229,29 +278,29 @@ function showVisitorForm(prefill={}){
         p_neighborhood:String(fd.get('neighborhood')||'').trim(),
         p_signature_data:sig
       });
-      if(result.error)throw result.error;
-      const data=result.data||{};
+      if(result?.error)throw result.error;
+      const data=result?.data||{};
       if(data.existing_youth){
         await resolveCandidate(data.candidate_id,'Este CPF já possui trajetória no CRJ.');
         return;
       }
       if(data.must_provisional){
         visitorSnapshot={...data,cpf:onlyDigits(fd.get('cpf')),birth_date:fd.get('birth_date'),display_name:fd.get('full_name')};
-        shell('3ª visita registrada',
-          '<div class="notice warn"><b>Sua visita foi registrada.</b><br>Você atingiu 3 visitas como visitante. Para continuar participando depois deste registro, conclua a inscrição provisória.</div>'+
-          '<div class="actions"><button class="btn primary" data-force-provisional>Continuar inscrição provisória</button><button class="btn secondary" data-next-person>Próxima pessoa</button></div>','5');
-        app.querySelector('[data-force-provisional]').addEventListener('click',()=>showProvisionalForm({cpf:visitorSnapshot.cpf,full_name:visitorSnapshot.display_name,birth_date:visitorSnapshot.birth_date}));
-        app.querySelector('[data-next-person]').addEventListener('click',mainButtons);
+        app.innerHTML='<div class="checkin-success"><div class="success-mark">✓</div><h2>Participação registrada</h2><p>Esta foi a '+esc(data.visits||3)+'ª ocorrência como visitante e já entrou na lista desta aula.</p><div class="notice warn"><b>Próxima etapa</b><br>Agora é necessário iniciar o Formulário Inicial parcial para continuar o vínculo.</div><div class="actions"><button class="btn primary" data-force-provisional>Iniciar Formulário Inicial parcial</button><button class="btn secondary" data-next-person>Próxima pessoa</button></div></div>';
+        app.querySelector('[data-force-provisional]')?.addEventListener('click',()=>showProvisionalForm({cpf:visitorSnapshot.cpf,full_name:visitorSnapshot.display_name,birth_date:visitorSnapshot.birth_date}));
+        app.querySelector('[data-next-person]')?.addEventListener('click',mainButtons);
         return;
       }
-      app.innerHTML='<div class="checkin-success"><div class="success-mark">✓</div><h2>Visita registrada</h2><p>Visita '+esc(data.visits||1)+' de 3 registrada na lista desta aula.</p><div class="notice success"><b>Registro concluído.</b><br>A lista oficial da aula já foi atualizada.</div><button class="btn primary" data-next-person>Registrar próxima pessoa</button></div>';
-      app.querySelector('[data-next-person]').addEventListener('click',mainButtons);
-      setTimeout(()=>{if(app.querySelector('[data-next-person]'))mainButtons()},4500);
+      app.innerHTML='<div class="checkin-success"><div class="success-mark">✓</div><h2>Participação registrada</h2><p>Registro '+esc(data.visits||1)+' de 3 como visitante. A lista oficial da aula já foi atualizada.</p><button class="btn primary" data-next-person>Registrar próxima pessoa</button></div>';
+      app.querySelector('[data-next-person]')?.addEventListener('click',mainButtons);
+      setTimeout(()=>{if(app.querySelector('[data-next-person]'))mainButtons()},2200);
     }catch(err){
-      btn.disabled=false;btn.textContent='Registrar visita';
-      form.insertAdjacentHTML('afterbegin',notice('danger','Não foi possível registrar a visita',err?.message||String(err)));
+      btn.disabled=false;btn.textContent='Registrar participação sem inscrição';
+      status.innerHTML=notice('danger','Não foi possível registrar',err?.message||String(err));
     }
-  });
+  };
+  btn?.addEventListener('click',run);
+  form?.addEventListener('submit',e=>{e.preventDefault();run()});
 }
 function showSuccess(title,text,state={}){
   app.innerHTML='<div class="checkin-success"><div class="success-mark">✓</div><h2>'+esc(title)+'</h2><p>'+esc(text)+'</p>'+
