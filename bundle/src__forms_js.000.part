@@ -51,7 +51,7 @@ export const FORMS = [
   },
   {
     slug:'lista-presenca-contato', title:'Lista de Presença e Contato', annex:'Anexo 2', sensitivity:'operacional', youthRequired:false,
-    description:'Registro de participação. No sistema, a lista pode ser preenchida nominalmente ou como lançamento geral.',
+    description:'Registro nominal de participação para oficinas, atividades e uso livre, preservando a estrutura oficial do Anexo 2.',
     sections:[{title:'Atividade',fields:[
       {key:'activity',label:'1. Atividade',type:'text',required:true},
       {key:'officineiro',label:'Oficineiro(a)',type:'text'},
@@ -60,7 +60,7 @@ export const FORMS = [
       {key:'date',label:'3. Data',type:'date',required:true},
       {key:'start_time',label:'Horário início',type:'time'},
       {key:'end_time',label:'Horário final',type:'time'},
-      {key:'participants',label:'Participantes / contatos',type:'textarea',help:'Quando possível, gere esta lista diretamente pela aula da oficina para preencher automaticamente os dados nominais.'}
+      {key:'participants',label:'Participantes / contatos',type:'textarea',help:'Para uso livre ou atividade manual, informe uma pessoa por linha no formato: Nome | Data de nascimento | CPF | Telefone/E-mail | Bairro. Nas oficinas, prefira a lista automática da aula.'}
     ]}]
   },
   {
