@@ -185,24 +185,29 @@ function showEnrollmentForm(state,prefix=''){
   const extraCpf=!state.has_cpf?'<div class="field"><label>CPF completo</label><input class="input" name="cpf" inputmode="numeric" required></div>':'';
   const extraEmail=!state.has_email?'<div class="field"><label>E-mail</label><input class="input" name="email" type="email" required></div>':'';
   const extraBairro=!state.has_neighborhood?'<div class="field"><label>Bairro</label><input class="input" name="neighborhood" required></div>':'';
+  const reuse=Boolean(state.has_reusable_signature);
+  const signatureHtml=reuse
+    ?notice('success','Assinatura já registrada','A mesma assinatura usada em outra oficina será reutilizada automaticamente nesta inscrição.')
+    :signatureBlock();
   shell('Inscrição na oficina',
     (prefix?notice('success','Cadastro localizado',prefix):'')+candidateCard(state)+pendingBox(state)+
     '<div class="notice"><b>Próxima etapa:</b> fazer a inscrição nesta oficina. Os dados já existentes no CRJ serão reutilizados sem expor CPF completo, e-mail ou endereço nesta tela.</div>'+
     '<form id="enroll-existing-form" class="stack">'+extraCpf+extraEmail+extraBairro+
     '<div class="field"><label>Criar senha da oficina</label><input class="input" name="secret" type="password" minlength="4" maxlength="32" required><small>Guarde esta senha. Ela será usada nas próximas presenças e não será enviada em texto por e-mail.</small></div>'+
-    signatureBlock()+'<button class="btn primary">Assinar, inscrever e confirmar presença</button></form>','3');
+    signatureHtml+'<button class="btn primary">'+(reuse?'Inscrever e confirmar presença':'Assinar, inscrever e confirmar presença')+'</button></form>','3');
   backButton(showRegisteredSearch);
-  const form=app.querySelector('#enroll-existing-form'),getSignature=bindSignature(form);
+  const form=app.querySelector('#enroll-existing-form'),getSignature=reuse?(()=>null):bindSignature(form);
   form.addEventListener('submit',async e=>{
-    e.preventDefault();const sig=getSignature();if(!sig){form.insertAdjacentHTML('afterbegin',notice('danger','Assinatura obrigatória','Assine no quadro antes de continuar.'));return}
+    e.preventDefault();const sig=getSignature();
+    if(!reuse&&!sig){form.insertAdjacentHTML('afterbegin',notice('danger','Assinatura obrigatória','Assine no quadro antes de continuar.'));return}
     const btn=form.querySelector('button[type="submit"]');btn.disabled=true;btn.textContent='Registrando...';
     const fd=new FormData(form);
     const {data,error}=await db.rpc('workshop_checkin_enroll_existing',{
       p_token:token,p_youth_id:state.candidate_id,p_signature_data:sig,p_secret:fd.get('secret'),
       p_cpf_if_missing:fd.get('cpf')||null,p_email_if_missing:fd.get('email')||null,p_neighborhood_if_missing:fd.get('neighborhood')||null
     });
-    if(error){btn.disabled=false;btn.textContent='Assinar, inscrever e confirmar presença';form.querySelector('.notice.danger')?.remove();form.insertAdjacentHTML('afterbegin',notice('danger','Não foi possível concluir',error.message));return}
-    showSuccess('Inscrição e presença confirmadas','Você já está inscrito nesta oficina.',data);
+    if(error){btn.disabled=false;btn.textContent=reuse?'Inscrever e confirmar presença':'Assinar, inscrever e confirmar presença';form.querySelector('.notice.danger')?.remove();form.insertAdjacentHTML('afterbegin',notice('danger','Não foi possível concluir',error.message));return}
+    showSuccess('Inscrição e presença confirmadas',reuse?'Sua assinatura já registrada foi reutilizada nesta oficina.':'Você já está inscrito nesta oficina.',data);
   });
 }
 function showProvisionalForm(prefill={}){
