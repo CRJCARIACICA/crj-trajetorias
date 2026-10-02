@@ -35,7 +35,7 @@ function isCfdhSharedForm(slug){
   return ['cfdh-planejamento','cfdh-avaliacao-jovens'].includes(slug);
 }
 function isWorkshopEducationForm(slug){
-  return ['avaliacao-atividades','cfdh-avaliacao-equipe'].includes(slug);
+  return slug==='cfdh-avaliacao-equipe';
 }
 function canWriteMethodologyForm(slug){
   if(isTechnicalForm(slug))return technicalWriter();
