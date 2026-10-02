@@ -200,8 +200,111 @@ async function pageForms(){
   }).join('')}</div>`;
 }
 
-async function pageWorkshops(){
-  const ws=await listWorkshops(); return `<div class="page-head"><div><h2>Oficinas e presenças</h2><p>Cada aula registra carga horária e cada presença nominal entra na trajetória e nos indicadores correspondentes.</p></div><div class="actions"><button class="btn primary" data-action="new-workshop">+ Nova oficina ${eduGoalInfo('planejamento_oficina')}</button></div></div><div class="grid three">${ws.map(w=>`<div class="card"><div class="pill success">${w.active?'Ativa':'Inativa'}</div><h3 style="margin-top:12px">${esc(w.name)}</h3><p class="muted">${esc(w.category||'')} · ${esc(w.days||'')}</p><p>${esc(w.start_time||'')} ${w.end_time?`– ${esc(w.end_time)}`:''}</p><div class="actions"><button class="btn primary" data-nav="oficina/${w.id}">Acompanhar turma ${eduGoalInfo('acompanhamento_oficina')}</button><button class="btn" data-action="session" data-workshop="${w.id}">Registrar aula ${eduGoalInfo('aula')}</button><button class="btn secondary" data-action="attendance" data-workshop="${w.id}">Presença ${eduGoalInfo('presenca')}</button></div></div>`).join('')||'<div class="card empty">Nenhuma oficina.</div>'}</div>`;
+
+const WORKSHOP_WEEKDAYS=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+function workshopTypeLabel(v){return ({permanente:'Permanente',temporaria:'Temporária',pontual:'Pontual'})[v]||'Não definido'}
+function workshopScheduleLabel(w){
+  if(w?.schedule_mode==='semanal_fixa'){
+    const days=(w.fixed_weekdays||[]).map(n=>WORKSHOP_WEEKDAYS[Number(n)]).filter(Boolean).join(', ');
+    return 'Semanal fixa'+(days?' · '+days:'');
+  }
+  return 'Calendário flexível';
 }
+function workshopLocationLabel(w){
+  if(!w)return 'Local não definido';
+  if((w.location_type==='Outro'||w.location_type==='Externa')&&w.location_other)return w.location_type==='Externa'?'Externa · '+w.location_other:w.location_other;
+  return w.location_type||'Local não definido';
+}
+function workshopPeriodLabel(w){
+  if(w.workshop_type==='pontual')return w.planned_start_date?fmtDate(w.planned_start_date):'Data ainda não definida';
+  if(w.planned_start_date&&w.planned_end_date)return fmtDate(w.planned_start_date)+' a '+fmtDate(w.planned_end_date);
+  if(w.planned_start_date)return 'A partir de '+fmtDate(w.planned_start_date);
+  return 'Período não definido';
+}
+function workshopTabs(view){
+  return '<div class="tabs workshop-tabs">'+[
+    ['oficinas','Oficinas'],['calendario','Calendário'],['oficineiros','Oficineiros']
+  ].map(x=>'<button class="tab '+(view===x[0]?'active':'')+'" data-nav="oficinas?view='+x[0]+'">'+x[1]+'</button>').join('')+'</div>';
+}
+function workshopCalendarGrid(entries,month){
+  const [y,m]=month.split('-').map(Number);
+  const first=new Date(Date.UTC(y,m-1,1)),last=new Date(Date.UTC(y,m,0));
+  const mondayIndex=(first.getUTCDay()+6)%7;
+  const cells=[];
+  for(let i=0;i<mondayIndex;i++)cells.push('<div class="calendar-day outside"></div>');
+  const byDate=new Map();
+  for(const e of entries){
+    const arr=byDate.get(e.scheduled_date)||[];arr.push(e);byDate.set(e.scheduled_date,arr);
+  }
+  for(let d=1;d<=last.getUTCDate();d++){
+    const ds=y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    const list=byDate.get(ds)||[];
+    cells.push('<div class="calendar-day"><div class="calendar-day-number">'+d+'</div>'+
+      list.map(e=>{
+        const w=e.workshops||{};
+        const loc=workshopLocationLabel({location_type:e.location_type||w.location_type,location_other:e.location_other||w.location_other});
+        const cls=e.status==='realizada'?'done':e.status==='cancelada'?'cancelled':'planned';
+        return '<div class="calendar-event '+cls+'"><b>'+esc(String(e.start_time||'').slice(0,5))+' '+esc(w.name||'Oficina')+'</b><span>'+esc(loc)+'</span><small>'+esc(e.status||'planejada')+'</small><div class="calendar-event-actions">'+
+          (e.status==='planejada'?'<button class="btn ghost" data-calendar-session="'+e.id+'" data-workshop="'+e.workshop_id+'">Registrar aula</button><button class="btn ghost danger" data-calendar-cancel="'+e.id+'">Cancelar</button>':'')+
+        '</div></div>';
+      }).join('')+'</div>');
+  }
+  return '<div class="calendar-week-head">'+['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'].map(x=>'<div>'+x+'</div>').join('')+'</div><div class="calendar-month-grid">'+cells.join('')+'</div>';
+}
+function workshopInstructorEvidencePreviewHtml(i,month){
+  const m=i.metrics||{};
+  const rows=(i.recent_classes||[]).map(s=>'<tr><td>'+esc(fmtDate(s.session_date))+'</td><td>'+esc(s.workshop_name||'')+'</td><td>'+esc(String(s.start_time||'').slice(0,5))+'–'+esc(String(s.end_time||'').slice(0,5))+'</td><td>'+Number(s.duration_hours||0).toLocaleString('pt-BR')+'h</td><td>'+(s.confirmed?'Sim':'Não')+'</td><td>'+Number(s.attendance_count||0)+'</td></tr>').join('');
+  const rec=(i.records||[]).slice(0,12).map(r=>'<div class="methodology-row"><b>'+esc(r.record_type==='solicitacao'?'Solicitação':r.record_type==='observacao_desempenho'?'Observação de desempenho':'Informação relevante')+' · '+esc(fmtDate(r.record_date))+'</b><div class="methodology-answer">'+esc(r.description||'')+(r.response?'<br><b>Retorno:</b> '+esc(r.response):'')+'</div></div>').join('');
+  return '<div class="methodology-paper instructor-evidence-paper">'+
+    '<div class="methodology-annex-title">CRJ CARIACICA · CONTROLE OPERACIONAL DE OFICINEIRO(A)</div>'+
+    '<div class="methodology-institutional-header"><img src="'+METHODOLOGY_HEADER_DATA+'" alt="Cabeçalho institucional"></div>'+
+    '<div class="methodology-inner-title">RESUMO DE EXECUÇÃO DE OFICINEIRO(A)</div>'+
+    '<div class="methodology-row"><b>1. Oficineiro(a):</b><span class="methodology-inline-answer">'+esc(i.display_name||'')+'</span></div>'+
+    '<div class="methodology-row"><b>2. Período:</b><span class="methodology-inline-answer">'+esc(month.split('-').reverse().join('/'))+'</span></div>'+
+    '<div class="methodology-row"><b>3. Oficinas vinculadas:</b><span class="methodology-inline-answer">'+esc((i.workshops||[]).map(w=>w.name).join(', ')||'Nenhuma')+'</span></div>'+
+    '<table class="methodology-planning-table instructor-kpi-table"><thead><tr><th>Aulas registradas</th><th>Aulas com lista</th><th>Horas registradas</th><th>Horas comprovadas</th><th>Registros de participação</th><th>Acompanhamentos</th></tr></thead><tbody><tr><td>'+Number(m.classes_registered||0)+'</td><td>'+Number(m.classes_with_attendance||0)+'</td><td>'+Number(m.hours_registered||0).toLocaleString('pt-BR')+'h</td><td>'+Number(m.hours_confirmed||0).toLocaleString('pt-BR')+'h</td><td>'+Number(m.participation_records||0)+'</td><td>'+Number(m.workshop_followups||0)+'</td></tr></tbody></table>'+
+    '<div class="methodology-section-title">RESUMO DE AULAS EXECUTADAS</div>'+
+    '<table class="methodology-planning-table"><thead><tr><th>Data</th><th>Oficina</th><th>Horário</th><th>Carga</th><th>Lista</th><th>Participações</th></tr></thead><tbody>'+(rows||'<tr><td colspan="6">Nenhuma aula no período.</td></tr>')+'</tbody></table>'+
+    '<div class="methodology-section-title">SOLICITAÇÕES E INFORMAÇÕES RELEVANTES</div>'+(rec||'<div class="methodology-row">Sem registros no período.</div>')+
+    '<div class="methodology-system-note">Documento operacional preparado para futura geração de evidência. A carga horária comprovada considera aulas com ao menos um registro nominal em lista de presença.</div>'+
+  '</div>';
+}
+async function pageWorkshops(){
+  const view=route().params.get('view')||'oficinas';
+  if(view==='calendario'){
+    const month=route().params.get('month')||currentMonth();
+    const [yy,mm]=month.split('-').map(Number),start=month+'-01',end=new Date(Date.UTC(yy,mm,1)).toISOString().slice(0,10);
+    const [ws,entries]=await Promise.all([listWorkshops(),listWorkshopCalendar(start,end)]);
+    return '<div class="page-head"><div><h2>Oficinas e presenças</h2><p>Calendário planejado das oficinas, separado das aulas efetivamente executadas.</p></div><div class="actions"><button class="btn primary" data-new-calendar-entry>+ Adicionar data</button></div></div>'+
+      workshopTabs(view)+
+      '<div class="toolbar"><label class="field month-filter"><span>Mês</span><input class="input" type="month" data-workshop-month value="'+esc(month)+'"></label><span class="muted">'+entries.length+' atividade(s) planejada(s) no mês</span></div>'+
+      '<div class="card workshop-calendar-card">'+workshopCalendarGrid(entries,month)+'</div>'+
+      '<div class="card" style="margin-top:16px"><h3>Regras fixas cadastradas</h3>'+ws.filter(w=>w.schedule_mode==='semanal_fixa').map(w=>'<div class="agenda-row"><div><b>'+esc(w.name)+'</b><span>'+esc(workshopScheduleLabel(w))+' · '+esc(workshopPeriodLabel(w))+' · '+esc(String(w.start_time||'').slice(0,5))+(w.end_time?'–'+esc(String(w.end_time).slice(0,5)):'')+'</span></div><button class="btn" data-generate-workshop-calendar="'+w.id+'">Gerar / atualizar calendário</button></div>').join('')||'<div class="empty">Nenhuma oficina com semana fixa.</div>'+'</div>';
+  }
+  if(view==='oficineiros'){
+    const month=route().params.get('month')||currentMonth();
+    const dashboards=await listWorkshopInstructorDashboard(month);
+    return '<div class="page-head"><div><h2>Oficinas e presenças</h2><p>Desempenho operacional, carga horária comprovada, aulas executadas, solicitações e informações relevantes dos oficineiros.</p></div></div>'+
+      workshopTabs(view)+
+      '<div class="toolbar"><label class="field month-filter"><span>Período</span><input class="input" type="month" data-workshop-month value="'+esc(month)+'"></label><span class="notice info compact">Horas comprovadas = aulas do período com pelo menos um registro na lista de presença.</span></div>'+
+      '<div class="stack instructor-dashboard">'+dashboards.map(i=>{
+        const m=i.metrics||{};
+        const open=(i.records||[]).filter(r=>r.status==='aberta'||r.status==='em_analise').length;
+        return '<div class="card instructor-card"><div class="page-head instructor-head"><div><h3>'+esc(i.display_name)+'</h3><p>'+esc((i.workshops||[]).map(w=>w.name).join(' · ')||'Sem oficina vinculada')+'</p></div><div class="actions"><span class="pill '+(open?'warn':'success')+'">'+open+' pendência(s)</span><button class="btn" data-instructor-evidence="'+i.id+'">Prévia de evidência</button><button class="btn primary" data-instructor-record="'+i.id+'">+ Solicitação / informação</button></div></div>'+
+          '<div class="grid cards instructor-kpis"><div class="kpi"><div class="label">Aulas registradas</div><div class="value">'+m.classes_registered+'</div><div class="meta">'+m.classes_with_attendance+' com lista</div></div><div class="kpi"><div class="label">Horas registradas</div><div class="value">'+Number(m.hours_registered||0).toLocaleString('pt-BR')+'h</div><div class="meta">sessões lançadas</div></div><div class="kpi"><div class="label">Horas comprovadas</div><div class="value">'+Number(m.hours_confirmed||0).toLocaleString('pt-BR')+'h</div><div class="meta">com lista nominal</div></div><div class="kpi"><div class="label">Participações</div><div class="value">'+m.participation_records+'</div><div class="meta">'+m.workshop_followups+' acompanhamento(s) de oficina</div></div></div>'+
+          '<div class="grid two" style="margin-top:14px"><div><h4>Últimas aulas do período</h4>'+(i.recent_classes||[]).slice(0,6).map(s=>'<div class="agenda-row"><div><b>'+esc(fmtDate(s.session_date))+' · '+esc(s.workshop_name)+'</b><span>'+Number(s.duration_hours||0).toLocaleString('pt-BR')+'h · '+Number(s.attendance_count||0)+' participação(ões)</span></div><span class="pill '+(s.confirmed?'success':'warn')+'">'+(s.confirmed?'Lista registrada':'Sem lista')+'</span></div>').join('')||'<div class="empty">Nenhuma aula registrada no mês.</div>'+'</div><div><h4>Solicitações e informações</h4>'+(i.records||[]).slice(0,8).map(r=>'<div class="instructor-record-row"><div><b>'+esc(r.record_type==='solicitacao'?'Solicitação':r.record_type==='observacao_desempenho'?'Desempenho':'Informação relevante')+'</b><span>'+esc(fmtDate(r.record_date))+' · '+esc(r.description||'')+'</span></div><button class="btn ghost" data-instructor-record-edit="'+r.id+'" data-instructor="'+i.id+'">'+esc(r.status||'aberta')+'</button></div>').join('')||'<div class="empty">Nenhum registro.</div>'+'</div></div>'+
+        '</div>';
+      }).join('')||'<div class="card empty">Nenhum oficineiro cadastrado ou vinculado a oficinas.</div>'+'</div>';
+  }
+
+  const [ws,team]=await Promise.all([listWorkshops(),listTeam()]);
+  const names=new Map(team.map(x=>[x.id,x.display_name]));
+  return '<div class="page-head"><div><h2>Oficinas e presenças</h2><p>Cadastro, planejamento, execução, calendário, responsáveis e listas de presença.</p></div><div class="actions"><button class="btn primary" data-action="new-workshop">+ Nova oficina '+eduGoalInfo('planejamento_oficina')+'</button></div></div>'+
+    workshopTabs(view)+
+    '<div class="grid three">'+ws.map(w=>'<div class="card workshop-card"><div class="actions"><span class="pill '+(w.active?'success':'danger')+'">'+(w.active?'Ativa':'Inativa')+'</span><span class="pill info">'+esc(workshopTypeLabel(w.workshop_type))+'</span></div><h3 style="margin-top:12px">'+esc(w.name)+'</h3><p class="muted">'+esc(w.category||'Sem categoria')+'</p>'+
+      '<div class="workshop-card-meta"><span><b>Agenda</b>'+esc(workshopScheduleLabel(w))+'</span><span><b>Período</b>'+esc(workshopPeriodLabel(w))+'</span><span><b>Horário</b>'+esc(String(w.start_time||'').slice(0,5))+(w.end_time?'–'+esc(String(w.end_time).slice(0,5)):'Não definido')+'</span><span><b>Local</b>'+esc(workshopLocationLabel(w))+'</span><span><b>Oficineiro(a)</b>'+esc(names.get(w.oficineiro_user_id)||'Não vinculado')+'</span><span><b>Educador(a)</b>'+esc(names.get(w.educator_user_id)||'Não vinculado')+'</span></div>'+
+      '<div class="actions" style="margin-top:14px"><button class="btn primary" data-nav="oficina/'+w.id+'">Acompanhar turma '+eduGoalInfo('acompanhamento_oficina')+'</button><button class="btn" data-edit-workshop="'+w.id+'">Editar cadastro</button><button class="btn" data-action="session" data-workshop="'+w.id+'">Registrar aula '+eduGoalInfo('aula')+'</button>'+(w.schedule_mode==='semanal_fixa'?'<button class="btn secondary" data-generate-workshop-calendar="'+w.id+'">Gerar calendário</button>':'')+'</div></div>').join('')||'<div class="card empty">Nenhuma oficina.</div>'+'</div>';
+}
+
 
 async function pageGoals(){const inds=await getIndicators(currentMonth());return `<div class="page-head"><div><h2>Metas e indicadores</h2><p>Dados identificados e lançamentos agregados aparecem separados. Os snapshots consolidados são enviados automaticamente ao projeto de Metas e Etapas.</p></div><div class="actions"><button class="btn secondary" data-nav="lancamento-geral">+ Lançamento geral</button></div></div><div class="notice">Quando existem dados identificados e agregados no mesmo indicador, o sistema <b>n
