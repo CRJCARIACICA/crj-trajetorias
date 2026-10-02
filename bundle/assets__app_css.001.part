@@ -157,3 +157,17 @@ d);font-size:12px;margin:16px 0}.divider:before,.divider:after{content:"";height
   .choice-grid{grid-template-columns:1fr}
   .session-presence-row{align-items:flex-start;flex-direction:column}
 }
+
+.attendance-sheet-meta{display:grid;grid-template-columns:2fr 1.5fr 1.5fr 1fr 1fr 1fr;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:10px}
+.attendance-sheet-meta>div{padding:9px 10px;border-right:1px solid var(--line);display:grid;gap:3px}
+.attendance-sheet-meta>div:last-child{border-right:0}
+.attendance-sheet-meta b{font-size:.72rem;text-transform:uppercase;color:var(--muted)}
+.attendance-sheet-meta span{font-weight:600}
+.attendance-official-table th{white-space:nowrap;font-size:.75rem}
+.sheet-signature{max-width:120px;max-height:42px;display:block;object-fit:contain}
+.attendance-sheet-card .table-wrap{margin-top:6px}
+@media(max-width:900px){
+  .attendance-sheet-meta{grid-template-columns:1fr 1fr}
+  .attendance-sheet-meta>div{border-bottom:1px solid var(--line)}
+  .attendance-sheet-meta>div:nth-child(even){border-right:0}
+}
