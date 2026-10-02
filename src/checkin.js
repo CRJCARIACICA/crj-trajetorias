@@ -96,8 +96,8 @@ async function showCpfCheck(){
 }
 function showNoCpfMatch(cpf){
   shell('CPF não encontrado',
-    '<div class="notice warn"><b>Não encontramos Formulário Inicial com este CPF.</b><br>Você pode criar uma inscrição provisória agora ou entrar como visitante.</div>'+
-    '<div class="choice-grid"><button class="choice-card" data-create-provisional><b>Fazer inscrição provisória</b><span>Cria Formulário Inicial provisório + inscrição na oficina + senha</span></button><button class="choice-card" data-visitor><b>Entrar como visitante</b><span>Somente nome, CPF, nascimento, bairro e assinatura. Máximo de 3 visitas.</span></button></div>','3');
+    '<div class="notice warn"><b>Não encontramos Formulário Inicial com este CPF.</b><br>Você pode iniciar o Formulário Inicial de forma parcial agora ou registrar somente a participação desta aula, sem inscrição na oficina.</div>'+
+    '<div class="choice-grid"><button type="button" class="choice-card" data-create-provisional><b>Iniciar Formulário Inicial parcial</b><span>É o mesmo Formulário Inicial do CRJ, salvo incompleto e com pendências para complementar depois.</span></button><button type="button" class="choice-card" data-visitor><b>Registrar participação sem inscrição</b><span>Entra imediatamente na lista desta aula, sem criar inscrição na oficina.</span></button></div>','3');
   backButton(showCpfCheck);
   app.querySelector('[data-create-provisional]').addEventListener('click',()=>showProvisionalForm({cpf}));
   app.querySelector('[data-visitor]').addEventListener('click',()=>showVisitorForm({cpf}));
@@ -106,9 +106,9 @@ function showVisitorKnown(data){
   const force=Boolean(data.must_provisional);
   shell(force?'Limite de visitante atingido':'Histórico de visitante',
     '<div class="notice '+(force?'warn':'info')+'"><b>'+esc(data.display_name||'Visitante')+'</b><br>'+
-    Number(data.visits||0)+' visita(s) registrada(s).'+(force?' O ciclo de visitante foi encerrado: agora é necessário criar a inscrição provisória.':' Você pode se cadastrar agora ou continuar como visitante enquanto estiver abaixo do limite.')+'</div>'+
-    (force?'<button class="btn primary" data-create-provisional>Continuar com inscrição provisória</button>':
-      '<div class="choice-grid"><button class="choice-card" data-create-provisional><b>Fazer inscrição provisória</b><span>Recomendado</span></button><button class="choice-card" data-visitor><b>Continuar como visitante</b><span>Visita '+(Number(data.visits||0)+1)+' de 3</span></button></div>'),'3');
+    Number(data.visits||0)+' visita(s) registrada(s).'+(force?' O ciclo de visitante foi encerrado: agora é necessário iniciar o Formulário Inicial parcial.':' Você pode se cadastrar agora ou continuar como visitante enquanto estiver abaixo do limite.')+'</div>'+
+    (force?'<button type="button" class="btn primary" data-create-provisional>Iniciar Formulário Inicial parcial</button>':
+      '<div class="choice-grid"><button type="button" class="choice-card" data-create-provisional><b>Iniciar Formulário Inicial parcial</b><span>O mesmo cadastro inicial, preenchido parcialmente.</span></button><button type="button" class="choice-card" data-visitor><b>Registrar participação sem inscrição</b><span>Visita '+(Number(data.visits||0)+1)+' de 3</span></button></div>'),'3');
   backButton(showCpfCheck);
   app.querySelector('[data-create-provisional]').addEventListener('click',()=>showProvisionalForm({cpf:visitorSnapshot.cpf,full_name:data.display_name,birth_date:data.birth_date}));
   app.querySelector('[data-visitor]')?.addEventListener('click',()=>showVisitorForm({cpf:visitorSnapshot.cpf,full_name:data.display_name,birth_date:data.birth_date}));
@@ -286,12 +286,12 @@ function showVisitorForm(prefill={}){
       }
       if(data.must_provisional){
         visitorSnapshot={...data,cpf:onlyDigits(fd.get('cpf')),birth_date:fd.get('birth_date'),display_name:fd.get('full_name')};
-        app.innerHTML='<div class="checkin-success"><div class="success-mark">✓</div><h2>Participação registrada</h2><p>Esta foi a '+esc(data.visits||3)+'ª ocorrência como visitante e já entrou na lista desta aula.</p><div class="notice warn"><b>Próxima etapa</b><br>Agora é necessário iniciar o Formulário Inicial parcial para continuar o vínculo.</div><div class="actions"><button class="btn primary" data-force-provisional>Iniciar Formulário Inicial parcial</button><button class="btn secondary" data-next-person>Próxima pessoa</button></div></div>';
+        app.innerHTML='<div class="checkin-success"><div class="success-mark">✓</div><h2>Participação registrada</h2><p>Esta foi a '+esc(data.visits||3)+'ª ocorrência como visitante e já entrou na lista desta aula.</p><div class="notice warn"><b>Próxima etapa</b><br>Agora é necessário iniciar o Formulário Inicial parcial para continuar o vínculo.</div><div class="actions"><button type="button" class="btn primary" data-force-provisional>Iniciar Formulário Inicial parcial</button><button type="button" class="btn secondary" data-next-person>Próxima pessoa</button></div></div>';
         app.querySelector('[data-force-provisional]')?.addEventListener('click',()=>showProvisionalForm({cpf:visitorSnapshot.cpf,full_name:visitorSnapshot.display_name,birth_date:visitorSnapshot.birth_date}));
         app.querySelector('[data-next-person]')?.addEventListener('click',mainButtons);
         return;
       }
-      app.innerHTML='<div class="checkin-success"><div class="success-mark">✓</div><h2>Participação registrada</h2><p>Registro '+esc(data.visits||1)+' de 3 como visitante. A lista oficial da aula já foi atualizada.</p><button class="btn primary" data-next-person>Registrar próxima pessoa</button></div>';
+      app.innerHTML='<div class="checkin-success"><div class="success-mark">✓</div><h2>Participação registrada</h2><p>Registro '+esc(data.visits||1)+' de 3 como visitante. A lista oficial da aula já foi atualizada.</p><button type="button" class="btn primary" data-next-person>Registrar próxima pessoa</button></div>';
       app.querySelector('[data-next-person]')?.addEventListener('click',mainButtons);
       setTimeout(()=>{if(app.querySelector('[data-next-person]'))mainButtons()},2200);
     }catch(err){
@@ -307,7 +307,7 @@ function showSuccess(title,text,state={}){
     (state.schedule?'<div class="notice success"><b>Oficina</b><br>'+esc(state.schedule)+'</div>':'')+
     pendingBox(state)+
     (state.email_queued?'<div class="notice info"><b>Confirmação por e-mail</b><br>A confirmação foi colocada na fila de envio. A senha criada não é enviada em texto aberto.</div>':'')+
-    '<button class="btn primary" data-another>Registrar próxima pessoa</button></div>';
+    '<button type="button" class="btn primary" data-another>Registrar próxima pessoa</button></div>';
   app.querySelector('[data-another]').addEventListener('click',mainButtons);
   setTimeout(()=>{if(app.querySelector('[data-another]'))mainButtons()},4500);
 }
