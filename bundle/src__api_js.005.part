@@ -15,6 +15,12 @@ export async function createEducatorPlan(row){
   if(mode==='mock'){const st=mock();st.educatorPlans||=[];const rec={id:uid('plan'),...payload,educator_user_id:st.currentUser.id,status:'planejado',created_at:now(),updated_at:now()};st.educatorPlans.push(rec);save(st);return rec;}
   const {data,error}=await supabase.from('educator_plans').insert(payload).select('*').single();if(error)throw error;return data;
 }
+export async function updateEducatorPlan(id,row){
+  const payload={...row,expected_participants:row.expected_participants===''?null:Number(row.expected_participants||0)||null,planned_duration_hours:row.planned_duration_hours===''?null:Number(row.planned_duration_hours||0)||null,workshop_id:row.workshop_id||null,planned_start:row.planned_start||null,planned_end:row.planned_end||null,start_time:row.start_time||null,end_time:row.end_time||null,updated_at:now()};
+  if(mode==='mock'){const st=mock(),rec=(st.educatorPlans||[]).find(x=>x.id===id);if(!rec)throw new Error('Planejamento não encontrado');Object.assign(rec,payload);save(st);return rec;}
+  const {data,error}=await supabase.from('educator_plans').update(payload).eq('id',id).select('*').single();if(error)throw error;return data;
+}
+
 export async function listEducatorReports(userId=null){
   if(mode==='mock'){const st=mock();return (st.educatorReports||[]).filter(x=>!userId||x.educator_user_id===userId);}
   let q=supabase.from('educator_reports').select('*').order('report_date',{ascending:false});
