@@ -69,6 +69,10 @@ async function pageForm(slug,youthId){
   if(isTechnicalForm(slug)&&!technicalWriter()) return '<div class="notice danger">Este documento é restrito à Equipe Técnica e à Coordenação Geral.</div>';
   if(f.youthRequired&&!youthId)return `<div class="page-head"><div><h2>${esc(f.title)}</h2><p>Este documento precisa estar vinculado a um jovem.</p></div></div><div class="notice">Abra a ficha do jovem em <b>Jovens → Abrir trajetória</b> e utilize uma das ações disponíveis.</div><div class="actions" style="margin-top:16px"><button class="btn primary" data-nav="jovens">Selecionar jovem</button></div>`;
   const values=youthId?await youthPrefill(youthId):{};
+  if(slug==='lista-presenca-contato'&&route().params.get('context')==='uso-livre'){
+    values.activity=values.activity||'Uso livre';
+    values.date=values.date||new Date().toISOString().slice(0,10);
+  }
   return formPageHtml(f,youthId,false,values,false);
 }
 
@@ -190,6 +194,7 @@ async function pageForms(){
     let action='';
     if(f.slug==='formulario-inicial') action='<button class="btn primary" data-nav="novo-jovem">Cadastrar jovem</button>';
     else if(f.youthRequired) action=allowed?'<button class="btn primary" data-nav="jovens">Abrir pela trajetória</button>':'<button class="btn" disabled>Restrito à Equipe Técnica</button>';
+    else if(f.slug==='lista-presenca-contato') action='<div class="actions"><button class="btn primary" data-nav="formulario/lista-presenca-contato">Preencher lista</button><button class="btn secondary" data-nav="formulario/lista-presenca-contato?context=uso-livre">Uso livre</button></div>';
     else action=`<button class="btn primary" data-nav="formulario/${f.slug}">Preencher</button>`;
     return `<div class="card"><div class="actions"><span class="pill">${esc(f.annex)}</span>${technical?'<span class="pill info">Equipe Técnica</span>':''}</div><h3 style="margin-top:12px">${esc(f.title)}</h3><p class="muted">${esc(f.description)}</p>${action}</div>`;
   }).join('')}</div>`;
