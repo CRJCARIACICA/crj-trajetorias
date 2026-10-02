@@ -130,3 +130,30 @@ d);font-size:12px;margin:16px 0}.divider:before,.divider:after{content:"";height
 
 .notification-message{white-space:pre-line}
 .referral-notification{border-left:3px solid var(--brand);padding-left:12px}
+
+
+.choice-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}
+.choice-card{display:grid;gap:6px;text-align:left;padding:18px;border:1px solid var(--line);border-radius:14px;background:var(--card);cursor:pointer}
+.choice-card:hover,.choice-card:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(11,91,76,.08)}
+.choice-card b{font-size:1rem}.choice-card span{color:var(--muted);font-size:.9rem;line-height:1.4}
+.checkin-step-head{display:flex;gap:12px;align-items:flex-start;margin:12px 0 16px}
+.checkin-step-head h2{margin:0 0 2px}.checkin-step-head p{margin:0;color:var(--muted)}
+.step-badge{width:32px;height:32px;display:grid;place-items:center;border-radius:999px;background:var(--primary);color:white;font-weight:700;flex:0 0 auto}
+.checkin-back{margin-bottom:6px}
+.selected-person{display:grid;gap:4px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#f8faf9}
+.selected-person span{color:var(--muted);font-size:.9rem}
+.public-signature{width:100%;height:180px;border:1px solid var(--line);border-radius:10px;background:white;touch-action:none}
+.pending-fields{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.pending-fields span{padding:4px 8px;border-radius:999px;background:rgba(184,112,0,.10);font-size:.78rem}
+.checkin-success{text-align:center;display:grid;gap:14px}
+.success-mark{width:58px;height:58px;border-radius:999px;background:#e5f5ec;color:#137a46;display:grid;place-items:center;font-size:2rem;font-weight:700;margin:0 auto}
+.session-presence-list{display:grid;gap:8px}
+.session-presence-row{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
+.session-presence-row:last-child{border-bottom:0}
+.session-presence-row>div:first-child{display:grid;gap:3px}
+.session-presence-row span,.session-presence-row small{color:var(--muted)}
+.session-presence-row.visitor{background:rgba(184,112,0,.035);padding-left:8px;padding-right:8px;border-radius:10px}
+@media(max-width:760px){
+  .choice-grid{grid-template-columns:1fr}
+  .session-presence-row{align-items:flex-start;flex-direction:column}
+}
