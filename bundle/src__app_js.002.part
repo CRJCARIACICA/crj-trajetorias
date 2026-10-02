@@ -43,7 +43,20 @@ function technicalSystemFields(form,youthId,values={}){
 function formPageHtml(form,youthId,isNew=false,values={},isEdit=false){
   const prefilled=youthId&&!isEdit?'<div class="notice" style="margin-bottom:16px">Os dados compatíveis foram pré-preenchidos a partir do cadastro do jovem. Revise antes de salvar. Alterar este formulário não altera automaticamente o cadastro-base.</div>':'';
   const editInfo=isEdit?'<div class="notice warn" style="margin-bottom:16px">Você está completando o mesmo Formulário Inicial do jovem. Ao salvar, o sistema atualiza a ficha, o Anexo 1 atual e recalcula automaticamente as pendências.</div>':'';
-  return `<div class="page-head"><div><h2>${esc(form.title)} ${form.slug==='formulario-inicial'?eduGoalInfo('cadastro'):''}</h2><p>${esc(form.description)}</p></div><div class="actions"><button class="btn" data-back>Voltar</button></div></div><form id="dynamic-form" data-slug="${form.slug}" data-youth="${youthId||''}" data-new="${isNew?'1':'0'}" data-edit="${isEdit?'1':'0'}" data-provisional="${isNew?(route().params.get('provisional')||''):''}"><div class="card">${prefilled}${editInfo}${technicalSystemFields(form,youthId,values)}${form.sections.map(s=>`<div class="section"><div class="section-title">${esc(s.title)}</div><div class="form-grid">${s.fields.map(f=>fieldHtml(f,values[f.key])).join('')}</div></div>`).join('')}<div class="actions" style="margin-top:22px"><button class="btn primary">${isEdit?'Salvar alterações':'Salvar documento'}</button></div></div></form>`;
+  return `<div class="page-head"><div><h2>${esc(form.title)} ${form.slug==='formulario-inicial'?eduGoalInfo('cadastro'):''}</h2><p>${esc(form.description)}</p></div><div class="actions"><button class="btn secondary" type="button" data-toggle-methodology-preview>Ocultar pré-visualização</button><button class="btn" data-back>Voltar</button></div></div>
+  <form id="dynamic-form" data-slug="${form.slug}" data-youth="${youthId||''}" data-new="${isNew?'1':'0'}" data-edit="${isEdit?'1':'0'}" data-provisional="${isNew?(route().params.get('provisional')||''):''}">
+    <div class="methodology-form-workspace preview-open" data-methodology-workspace>
+      <div class="card methodology-form-editor">
+        ${prefilled}${editInfo}${technicalSystemFields(form,youthId,values)}
+        ${form.sections.map(s=>`<div class="section"><div class="section-title">${esc(s.title)}</div><div class="form-grid">${s.fields.map(f=>fieldHtml(f,values[f.key])).join('')}</div></div>`).join('')}
+        <div class="actions" style="margin-top:22px"><button class="btn primary">${isEdit?'Salvar alterações':'Salvar documento'}</button></div>
+      </div>
+      <aside class="methodology-preview-pane" data-methodology-preview-pane>
+        <div class="methodology-preview-toolbar"><div><b>Pré-visualização do anexo</b><span>Atualização em tempo real</span></div><span class="pill info">${esc(form.annex)}</span></div>
+        <div class="methodology-preview-scroll" data-methodology-preview>${methodologyPreviewHtml(form,values)}</div>
+      </aside>
+    </div>
+  </form>`;
 }
 async function pageEditYouth(id){
   if(!permitted('editar_cadastro')) return '<div class="notice danger">Seu perfil não possui permissão para editar o cadastro-base do jovem.</div>';
