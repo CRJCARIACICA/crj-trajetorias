@@ -86,7 +86,7 @@ async function bindWorkshopDetailV2(id){
   document.querySelector('[data-refresh-sheet]')?.addEventListener('click',async()=>{try{const latest=await getWorkshopAttendanceSheet(session.id);updateAttendanceSheetDomV2(latest)}catch(err){toast(err.message,'danger')}});
   if(session){
     const sheetPoll=setInterval(async()=>{
-      if(!location.hash.includes('oficina/\${id}')){clearInterval(sheetPoll);return}
+      if(!location.hash.includes('oficina/'+id)){clearInterval(sheetPoll);return}
       if(document.querySelector('#modal'))return;
       try{
         const latest=await getWorkshopAttendanceSheet(session.id);
@@ -103,7 +103,7 @@ async function bindWorkshopDetailV2(id){
   }
   document.querySelector('[data-sheet-pdf]')?.addEventListener('click',()=>exportCurrentSheet('pdf'));
   document.querySelector('[data-sheet-docx]')?.addEventListener('click',()=>exportCurrentSheet('docx'));
-  document.querySelector('[data-sheet-print]')?.addEventListener('click',()=>printAttendanceSheetV2(sheet));
-  document.querySelector('[data-generate-attendance]')?.addEventListener('click',async()=>{try{const sub=await createWorkshopAttendanceSubmission(session.id);modal('Lista oficial atualizada',`<div class="stack"><div class="notice success">A Lista de Presença e Contato foi consolidada com ${Number(sheet?.participant_count||0)} participante(s).</div><div class="actions"><button class="btn primary" data-auto-list-pdf>PDF</button><button class="btn secondary" data-auto-list-docx>DOCX</button><button class="btn" data-auto-list-print>Imprimir</button></div></div>`);document.querySelector('[data-auto-list-pdf]')?.addEventListener('click',()=>downloadFormSubmission(sub.id,'pdf'));document.querySelector('[data-auto-list-docx]')?.addEventListener('click',()=>downloadFormSubmission(sub.id,'docx'));document.querySelector('[data-auto-list-print]')?.addEventListener('click',()=>printAttendanceSheetV2(sheet))}catch(err){toast(err.message,'danger')}});
+  document.querySelector('[data-sheet-print]')?.addEventListener('click',async()=>{try{printAttendanceSheetV2(await getWorkshopAttendanceSheet(session.id))}catch(err){toast(err.message,'danger')}});
+  document.querySelector('[data-generate-attendance]')?.addEventListener('click',async()=>{try{const sub=await createWorkshopAttendanceSubmission(session.id);modal('Lista oficial atualizada',`<div class="stack"><div class="notice success">A Lista de Presença e Contato foi consolidada com ${Number(sheet?.participant_count||0)} participante(s).</div><div class="actions"><button class="btn primary" data-auto-list-pdf>PDF</button><button class="btn secondary" data-auto-list-docx>DOCX</button><button class="btn" data-auto-list-print>Imprimir</button></div></div>`);document.querySelector('[data-auto-list-pdf]')?.addEventListener('click',()=>downloadFormSubmission(sub.id,'pdf'));document.querySelector('[data-auto-list-docx]')?.addEventListener('click',()=>downloadFormSubmission(sub.id,'docx'));document.querySelector('[data-auto-list-print]')?.addEventListener('click',async()=>{try{printAttendanceSheetV2(await getWorkshopAttendanceSheet(session.id))}catch(err){toast(err.message,'danger')}})}catch(err){toast(err.message,'danger')}});
 
 }
