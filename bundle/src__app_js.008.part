@@ -88,8 +88,8 @@ async function bindCfdhShared(){
 
   let bundle;
   try{
-    const [b,themes,classification,indicators,monthDashboard,crjCalendar]=await Promise.all([getCfdhPlanBundle(planId),listCfdhThemes(),listMethodologyClassificationCatalog(),listIndicatorCatalog(),listCfdhMonthDashboard(month),listCrjPlanningCalendar(month)]);
-    bundle=b;bundle.themes=themes;bundle.classification=classification;bundle.indicators=indicators;bundle.month_dashboard=monthDashboard;bundle.crj_calendar=crjCalendar;
+    const [b,themes,classification,indicators,monthDashboard,crjCalendar,smartSignals]=await Promise.all([getCfdhPlanBundle(planId),listCfdhThemes(),listMethodologyClassificationCatalog(),listIndicatorCatalog(),listCfdhMonthDashboard(month),listCrjPlanningCalendar(month),getCfdhStructuralDistributionSignals(month)]);
+    bundle=b;bundle.themes=themes;bundle.classification=classification;bundle.indicators=indicators;bundle.month_dashboard=monthDashboard;bundle.crj_calendar=crjCalendar;bundle.smart_signals=smartSignals;
   }catch(err){toast(err.message,'danger');return}
 
   const planForm=document.querySelector('#cfdh-plan-editor');
@@ -481,10 +481,38 @@ async function bindCfdhShared(){
     planForm.querySelector('[data-cfdh-type]')?.addEventListener('change',e=>{
       const structural=e.target.value==='cfdh_estrutural';
       document.querySelector('[data-cfdh-workshops-block]')?.classList.toggle('hidden',structural);
+      document.querySelector('[data-cfdh-structural-smart-block]')?.classList.toggle('hidden',!structural);
       if(structural)planForm.querySelectorAll('[name="cfdh_workshop_id"]').forEach(x=>x.checked=false);
       const actions=collectActions().map(a=>({...a,workshop_id:structural?null:a.workshop_id,schedule_mode:structural?'structural':(a.schedule_mode==='structural'?'workshop_planned':a.schedule_mode),workshop_calendar_id:structural?null:a.workshop_calendar_id}));
       renderActions(actions);
     });
+    planForm.querySelector('[data-cfdh-smart-distribute]')?.addEventListener('click',()=>{
+      if(collectPlan().plan_type!=='cfdh_estrutural'){toast('A distribuição inteligente é específica do CFDH estrutural.','warn');return}
+      const all=collectActions(),locked=all.filter(a=>a.id&&['realizada','parcial'].includes(bundle.actions.find(x=>x.id===a.id)?.execution_status)),pending=all.filter(a=>!locked.some(x=>x.action_number===a.action_number));
+      if(!pending.length){toast('Não há ações estruturais pendentes para distribuir.','warn');return}
+      const draft=draftBundle(),lockedCalendar=locked.filter(a=>a.scheduled_date&&a.start_time&&a.end_time).map(a=>({source:'fixed_current_plan',id:a.id||('locked-'+a.action_number),date:a.scheduled_date,start:a.start_time,end:a.end_time,title:'CFDH já executado · Ação '+a.action_number,location:a.location_other||a.location_type||'CRJ Cariacica'}));
+      const smartBundle={...draft,crj_calendar:[...(bundle.crj_calendar||[]),...lockedCalendar],smart_signals:bundle.smart_signals};
+      const suggestions=cfdhSmartDistribution(smartBundle,pending);
+      if(!suggestions.length){toast('Não encontrei janelas livres suficientes para distribuir as ações neste mês.','danger');return}
+      const missing=pending.length-suggestions.length;
+      modal('Distribuição inteligente · CFDH estrutural',
+        cfdhSmartDistributionModalHtml(smartBundle,suggestions)+
+        (locked.length?'<div class="notice info compact" style="margin-top:10px">'+locked.length+' ação(ões) já executada(s)/parcial(is) foram preservadas e consideradas como horário ocupado.</div>':'')+
+        (missing>0?'<div class="notice danger compact" style="margin-top:10px">Não foi possível encontrar janela sem conflito para '+missing+' ação(ões). Essas ações permanecerão sem alteração.</div>':'')
+      );
+      document.querySelector('[data-cfdh-cancel-smart-distribution]')?.addEventListener('click',()=>document.querySelector('#modal')?.remove());
+      document.querySelector('[data-cfdh-apply-smart-distribution]')?.addEventListener('click',()=>{
+        const byNumber=new Map(suggestions.map(x=>[x.action_number,x]));
+        const updated=collectActions().map(a=>{
+          const s=byNumber.get(a.action_number);if(!s)return a;
+          return {...a,scheduled_date:s.date,start_time:s.start,end_time:s.end,schedule_mode:'structural',workshop_id:null,workshop_calendar_id:null};
+        });
+        document.querySelector('#modal')?.remove();
+        renderActions(updated);
+        toast('Distribuição inteligente aplicada. Datas e horários continuam editáveis manualmente.');
+      });
+    });
+
     planForm.querySelectorAll('[name="cfdh_workshop_id"]').forEach(x=>x.addEventListener('change',()=>{
       const selected=selectedWorkshopIds(),actions=collectActions().map(a=>selected.includes(a.workshop_id)?a:{...a,workshop_id:null,workshop_calendar_id:null,scheduled_date:a.schedule_mode==='atypical'?a.scheduled_date:'',start_time:a.schedule_mode==='atypical'?a.start_time:'',end_time:a.schedule_mode==='atypical'?a.end_time:''});
       renderActions(actions);
