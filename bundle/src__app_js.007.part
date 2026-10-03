@@ -470,20 +470,20 @@ function cfdhSmartDistribution(bundle,actions=[]){
   for(let d=1;d<=last;d++){
     const date=month+'-'+String(d).padStart(2,'0');
     if(month===today.slice(0,7)&&date<today)continue;
-    const dow=new Date(date+'T12:00:00Z').getUTCDay(),entries=cfdhCalendarEntriesForDay(bundle,date,{});
+    const dow=new Date(date+'T12:00:00Z').getUTCDay(),special=cfdhSpecialDayState(bundle,date),win=cfdhStructuralWindow(date);
+    if(!win||special.closed||special.pending)continue;
+    const entries=cfdhCalendarEntriesForDay(bundle,date,{});
     const occupied=entries.reduce((n,x)=>{
-      const a=cfdhTimeMinutes(x.start),b=cfdhTimeMinutes(x.end);return n+(a!=null&&b!=null&&b>a?Math.max(0,Math.min(b,22*60)-Math.max(a,8*60)):0)
+      const a=cfdhTimeMinutes(x.start),b=cfdhTimeMinutes(x.end);return n+(a!=null&&b!=null&&b>a?Math.max(0,Math.min(b,cfdhTimeMinutes(CRJ_OPEN_END))-Math.max(a,cfdhTimeMinutes(CRJ_OPEN_START))):0)
     },0);
-    const capacity=Math.max(0,1-Math.min(1,occupied/(14*60)));
+    const capacity=Math.max(0,1-Math.min(1,occupied/((cfdhTimeMinutes(CRJ_OPEN_END)-cfdhTimeMinutes(CRJ_OPEN_START)))));
     const peopleEvents=entries.filter(x=>x.source==='workshop'||x.source==='evento'||x.source==='cfdh').length;
     let score=capacity*32+(Number(flow[dow]||0)/maxFlow)*20+(Number(successByDow[dow]||0)/maxSuccess)*18+Math.min(8,peopleEvents*2);
     if(signals.free_use_list_available)score+=(Number(freeUse[dow]||0)/maxFreeUse)*28;
     if(dow===0)score-=18;else if(dow===6)score-=3;
-    candidateDates.push({date,dow,entries,occupied,flow:Number(flow[dow]||0),historical:Number(successByDow[dow]||0),baseScore:score});
+    candidateDates.push({date,dow,entries,occupied,flow:Number(flow[dow]||0),historical:Number(successByDow[dow]||0),baseScore:score,window:win});
   }
   const selected=[],usedDates=new Set();
-  const timeCandidates=[];
-  for(let min=9*60;min<=20*60;min+=30)timeCandidates.push(min);
   for(const action of actions){
     const duration=Math.max(.25,Number(action.planned_duration_hours||2)),minutes=Math.round(duration*60);
     let best=null;
@@ -494,8 +494,10 @@ function cfdhSmartDistribution(bundle,actions=[]){
         const dist=cfdhDateDistance(day.date,prev.date);
         if(dist===0)dayScore-=35;else if(dist===1)dayScore-=12;else if(dist===2)dayScore-=5;
       }
+      const timeCandidates=[];
+      for(let min=cfdhTimeMinutes(day.window.start);min<=cfdhTimeMinutes(day.window.end);min+=30)timeCandidates.push(min);
       for(const startMin of timeCandidates){
-        const endMin=startMin+minutes;if(endMin>22*60)continue;
+        const endMin=startMin+minutes;if(endMin>cfdhTimeMinutes(day.window.end))continue;
         const start=cfdhMinutesTime(startMin),end=cfdhMinutesTime(endMin);
         const busy=[...day.entries,...selected.filter(x=>x.date===day.date).map(x=>({start:x.start,end:x.end,title:'Outra ação sugerida'}))];
         if(busy.some(x=>cfdhApiOverlapLocal(start,end,x.start,x.end)))continue;
@@ -544,7 +546,9 @@ function cfdhSmartDistributionModalHtml(bundle,suggestions){
     '<div class="cfdh-smart-criteria"><b>Critérios usados</b><div class="grid two">'+
       '<span>✓ Menor sobrecarga de oficinas e compromissos</span><span>✓ Maior fluxo identificado nos registros disponíveis</span>'+
       '<span>✓ Histórico de CFDHs estruturais executados</span><span>✓ Janelas livres próximas de atividades com público</span>'+
-      '<span>✓ Espaçamento entre as ações</span><span>✓ Ausência de conflito de horário</span></div></div>'+
+      '<span>✓ Espaçamento entre as ações</span><span>✓ Ausência de conflito de horário</span>'+
+      '<span>✓ Funcionamento do CRJ: 10:00–21:00</span><span>✓ Ações estruturais: 14:00–19:00; segunda após 16:30</span>'+
+      '<span>✓ Feriados nacionais/estaduais bloqueados</span><span>✓ Datas municipais/pontos facultativos pendentes não são sugeridos</span></div></div>'+
     '<div class="notice info compact"><b>Base analisada:</b> '+Number(s.attendance||0)+' presença(s) de oficina · '+Number(s.visitors||0)+' registro(s) de visitante · '+Number(s.services||0)+' atendimento(s) · '+Number(s.educator_participants||0)+' participante(s) em registros educativos · '+Number(s.structural_actions||0)+' CFDH(s) estrutural(is) anterior(es).<br>'+
       '<small>'+(bundle?.smart_signals?.free_use_list_available?'O fluxo de <b>uso livre</b> está ativo como um dos critérios da distribuição.':'O indicador específico de <b>uso livre</b> ainda não possui uma lista própria no sistema. Esse peso já está reservado no algoritmo e permanece neutro até a futura lista começar a gerar registros.')+'</small></div>'+
     '<div class="cfdh-smart-suggestions">'+suggestions.map(x=>'<div class="cfdh-smart-suggestion"><div><span class="pill info">Ação '+x.action_number+'</span><b>'+esc(x.title)+'</b></div><strong>'+esc(fmtDate(x.date))+' · '+esc(x.start)+'–'+esc(x.end)+'</strong><small>'+esc(x.duration.toLocaleString('pt-BR'))+'h · '+esc(x.reasons.join(' · '))+'</small><em>pontuação '+x.score.toLocaleString('pt-BR')+'</em></div>').join('')+'</div>'+
