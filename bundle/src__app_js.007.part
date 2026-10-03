@@ -572,6 +572,12 @@ function cfdhPlanAlerts(bundle){
     const hasItems=Boolean((bundle?.classification||[]).find(x=>x.axis_code===a.axis_code&&x.item_code));
     if(hasItems&&!a.item_code)alerts.push('Ação '+a.action_number+': selecione o Item da Metodologia.');
     if(Number(a.planned_duration_hours||0)<CFDH_ACTION_COUNT_MIN_HOURS)alerts.push('Ação '+a.action_number+': duração menor que 2h; ficará registrada, mas não contará na referência mínima deste fluxo.');
+    if(p.plan_type==='cfdh_estrutural'){
+      const scheduleIssue=cfdhStructuralScheduleIssue(bundle,a);
+      if(scheduleIssue)alerts.push('Ação '+a.action_number+': '+scheduleIssue);
+      const special=cfdhSpecialDayState(bundle,a.scheduled_date);
+      if(special.pending)alerts.push('AVISO DE CALENDÁRIO · Ação '+a.action_number+': '+special.day.name+' depende de aprovação para fechamento do CRJ. Enquanto não houver decisão, a data não é considerada fechamento confirmado.');
+    }
     if(p.plan_type==='cfdh_transversal'){
       if(!a.workshop_id)alerts.push('Ação '+a.action_number+': selecione a oficina.');
       if(a.schedule_mode==='workshop_planned'&&!a.workshop_calendar_id)alerts.push('Ação '+a.action_number+': selecione um dia planejado da oficina.');
