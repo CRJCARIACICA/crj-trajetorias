@@ -230,6 +230,11 @@ export async function listCrjPlanningCalendar(month=monthKey()){
     source:'evento',id:x.id,plan_id:x.id,date:x.planned_start,start:String(x.start_time||'').slice(0,5),end:String(x.end_time||'').slice(0,5),
     title:x.activity_title||'Evento / programação',location:'CRJ Cariacica',status:x.status||'planejado'
   });
+  for(let d=new Date(range.start+'T12:00:00Z');d<new Date(range.end+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+1)){
+    if(d.getUTCDay()!==1)continue;
+    const ds=d.toISOString().slice(0,10);
+    rows.push({source:'operating_rule',id:'general-meeting-'+ds,date:ds,start:'13:00',end:'16:30',title:'Reunião geral da equipe',location:'CRJ Cariacica',status:'bloqueio_operacional'});
+  }
   return rows.sort((a,b)=>String(a.date+a.start).localeCompare(String(b.date+b.start)));
 }
 export async function getCfdhPlanBundle(planId){
