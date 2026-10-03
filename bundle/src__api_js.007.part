@@ -122,7 +122,7 @@ function localCalendarParts(iso){
   return {date:get('year')+'-'+get('month')+'-'+get('day'),time:get('hour')+':'+get('minute')};
 }
 export async function getCfdhStructuralDistributionSignals(month=monthKey()){
-  if(mode==='mock')return {weekday_flow:[0,0,0,0,0,0,0],hour_flow:Array(24).fill(0),historical_success:[],samples:{attendance:0,visitors:0,services:0,educator_participants:0,structural_actions:0},free_use_list_available:false};
+  if(mode==='mock')return {weekday_flow:[0,0,0,0,0,0,0],hour_flow:Array(24).fill(0),free_use_weekday:[0,0,0,0,0,0,0],free_use_hour:Array(24).fill(0),historical_success:[],samples:{attendance:0,visitors:0,services:0,educator_participants:0,structural_actions:0,free_use:0},free_use_list_available:false};
   const range=cfdhMonthRange(month),monthStart=new Date(range.start+'T12:00:00Z'),historyStart=new Date(monthStart);historyStart.setUTCMonth(historyStart.getUTCMonth()-6);
   const historyDate=historyStart.toISOString().slice(0,10),historyIso=historyDate+'T00:00:00-03:00';
   const [plansQ,actionsQ,cfdhAttQ,sessionsQ,attQ,visitorsQ,servicesQ,educatorQ]=await Promise.all([
@@ -164,13 +164,16 @@ export async function getCfdhStructuralDistributionSignals(month=monthKey()){
   return {
     weekday_flow:weekdayFlow.map(x=>Number(x.toFixed(2))),
     hour_flow:hourFlow.map(x=>Number(x.toFixed(2))),
+    free_use_weekday:[0,0,0,0,0,0,0],
+    free_use_hour:Array(24).fill(0),
     historical_success:historicalSuccess,
     samples:{
       attendance:(attQ.data||[]).length,
       visitors:(visitorsQ.data||[]).length,
       services:(servicesQ.data||[]).length,
       educator_participants:(educatorQ.data||[]).reduce((n,x)=>n+Number(x.participants_count||0),0),
-      structural_actions:historicalSuccess.length
+      structural_actions:historicalSuccess.length,
+      free_use:0
     },
     free_use_list_available:false,
     history_start:historyDate
