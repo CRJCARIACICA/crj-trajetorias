@@ -209,11 +209,9 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
     if(!responsibleIds.length)throw new Error('Ação '+(i+1)+': selecione ao menos um responsável entre Educadores e Equipe Técnica.');
   }
 
-  const first=actions[0]||{};
   const inheritedTheme=current.month_theme;
-  const editingThemeSource=Boolean(inheritedTheme?.source_action_id&&first.id===inheritedTheme.source_action_id);
-  const themeCode=editingThemeSource?(first.monthly_theme_code?Number(first.monthly_theme_code):null):(inheritedTheme?.theme_code??(first.monthly_theme_code?Number(first.monthly_theme_code):null));
-  const themeCustom=editingThemeSource?(first.monthly_theme_custom||null):(inheritedTheme?.theme_custom??(first.monthly_theme_custom||null));
+  const themeCode=inheritedTheme?.theme_code??plan.cfdh_theme_code??current.plan.cfdh_theme_code??null;
+  const themeCustom=inheritedTheme?.theme_custom??plan.cfdh_theme_custom??current.plan.cfdh_theme_custom??null;
   const parent={
     ...plan,
     plan_type:planType,
@@ -248,20 +246,20 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
       planned_duration_hours:Number(a.planned_duration_hours||0)||0,
       location_type:a.location_type||null,location_other:a.location_other||null,
       title:a.title||('Ação '+(i+1)),
+      action_theme:a.action_theme||null,
       objective:a.objective||null,activities:a.activities||null,resources:a.resources||null,
       nucleus_code:a.nucleus_code||null,axis_code:a.axis_code||null,
       item_code:a.item_code||null,item_label:a.item_label||null,
       classification_group_id:a.classification_group_id||null,
-      monthly_theme_code:a.monthly_theme_code?Number(a.monthly_theme_code):null,
-      monthly_theme_custom:a.monthly_theme_custom||null,
+      monthly_theme_code:null,
+      monthly_theme_custom:null,
       updated_at:now()
     };
     const prior=a.id?existing.find(x=>x.id===a.id):existing.find(x=>x.action_number===i+1);
     let row;
     const structuralChange=prior&&(prior.workshop_id!==payload.workshop_id||prior.schedule_mode!==payload.schedule_mode);
-    const isThemeSource=Boolean(prior&&current.month_theme?.source_action_id===prior.id);
     if(prior&&structuralChange&&['realizada','parcial'].includes(prior.execution_status))throw new Error('Não é possível trocar oficina ou modalidade de agenda de uma ação CFDH já executada.');
-    if(prior&&structuralChange&&!isThemeSource){
+    if(prior&&structuralChange){
       const del=await supabase.rpc('delete_cfdh_action',{p_action_id:prior.id});if(del.error)throw del.error;
       const q=await supabase.from('cfdh_actions').insert(payload).select('*').single();if(q.error)throw q.error;row=q.data;
     }else if(prior){
@@ -283,7 +281,6 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
   for(const old of existing){
     if(!keepIds.has(old.id)){
       if(['realizada','parcial'].includes(old.execution_status))throw new Error('Ação CFDH executada não pode ser removida do planejamento.');
-      if(current.month_theme?.source_action_id===old.id)throw new Error('A primeira ação que define o tema mensal não pode ser removida.');
       const del=await supabase.rpc('delete_cfdh_action',{p_action_id:old.id});if(del.error)throw del.error;
     }
   }
@@ -339,4 +336,37 @@ export async function downloadCfdhPlan(planId,format='pdf'){
 }
 export async function downloadCfdhReport(reportId,format='pdf'){
   return downloadCrjDocumentRequest({cfdh_report_id:reportId,format},'Relatorio_CFDH');
+}
+
+const UI_DRAFT_MOCK_PREFIX='crj_ui_draft_mock_v1:';
+async function draftUserId(){
+  if(mode==='mock')return mock().currentUser?.id||'demo_user';
+  const {data}=await supabase.auth.getSession();
+  return data?.session?.user?.id||null;
+}
+export async function getUiDraft(draftKey){
+  const key=String(draftKey||'').trim();if(!key)return null;
+  if(mode==='mock'){
+    try{return JSON.parse(localStorage.getItem(UI_DRAFT_MOCK_PREFIX+key)||'null')}catch{return null}
+  }
+  const userId=await draftUserId();if(!userId)return null;
+  const {data,error}=await supabase.from('ui_drafts').select('draft_key,payload,updated_at,expires_at').eq('user_id',userId).eq('draft_key',key).maybeSingle();
+  if(error)throw error;
+  if(data?.expires_at&&new Date(data.expires_at).getTime()<Date.now()){await deleteUiDraft(key);return null}
+  return data||null;
+}
+export async function saveUiDraft(draftKey,payload,{route='',form_id=''}={}){
+  const key=String(draftKey||'').trim();if(!key)return null;
+  const record={draft_key:key,payload:payload||{},route:String(route||''),form_id:String(form_id||'')||null,updated_at:now(),expires_at:new Date(Date.now()+30*24*60*60*1000).toISOString()};
+  if(mode==='mock'){localStorage.setItem(UI_DRAFT_MOCK_PREFIX+key,JSON.stringify(record));return record}
+  const userId=await draftUserId();if(!userId)return null;
+  const {data,error}=await supabase.from('ui_drafts').upsert({...record,user_id:userId},{onConflict:'user_id,draft_key'}).select('draft_key,payload,updated_at,expires_at').single();
+  if(error)throw error;return data;
+}
+export async function deleteUiDraft(draftKey){
+  const key=String(draftKey||'').trim();if(!key)return true;
+  if(mode==='mock'){localStorage.removeItem(UI_DRAFT_MOCK_PREFIX+key);return true}
+  const userId=await draftUserId();if(!userId)return true;
+  const {error}=await supabase.from('ui_drafts').delete().eq('user_id',userId).eq('draft_key',key);
+  if(error)throw error;return true;
 }
