@@ -88,8 +88,8 @@ async function bindCfdhShared(){
 
   let bundle;
   try{
-    const [b,themes,classification]=await Promise.all([getCfdhPlanBundle(planId),listCfdhThemes(),listMethodologyClassificationCatalog()]);
-    bundle=b;bundle.themes=themes;bundle.classification=classification;
+    const [b,themes,classification,indicators]=await Promise.all([getCfdhPlanBundle(planId),listCfdhThemes(),listMethodologyClassificationCatalog(),listIndicatorCatalog()]);
+    bundle=b;bundle.themes=themes;bundle.classification=classification;bundle.indicators=indicators;
   }catch(err){toast(err.message,'danger');return}
 
   const planForm=document.querySelector('#cfdh-plan-editor');
@@ -136,6 +136,14 @@ async function bindCfdhShared(){
     const refresh=()=>{
       const d=draftBundle();
       if(preview)preview.innerHTML=cfdhPlanPreviewHtml(d,d);
+      planForm.querySelectorAll('[data-cfdh-action-card]').forEach((card,i)=>{
+        const zone=card.querySelector('[data-cfdh-action-goals]'),action=d.actions[i];
+        if(!zone||!action)return;
+        const links=cfdhActionGoalLinks(d,action);
+        const badge=zone.querySelector('.cfdh-action-goal-badge'),fly=zone.querySelector('.cfdh-action-goal-flyout');
+        if(badge)badge.textContent='Metas e etapas · '+links.length;
+        if(fly)fly.innerHTML=cfdhActionGoalFlyoutContent(d,action,i);
+      });
       if(alertsBox){
         const alerts=cfdhPlanAlerts(d);
         alertsBox.innerHTML=alerts.length?alerts.map(x=>'<div class="notice warn compact">⚠ '+esc(x)+'</div>').join(''):'<div class="notice success compact">Planejamento sem pendências estruturais.</div>';
