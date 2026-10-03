@@ -315,33 +315,29 @@ function workshopPlanPreviewHtml(bundle,workshop,teamMap){
   const month=String(plan.plan_month||'').slice(0,7).split('-').reverse().join('/');
   const instructor=teamMap?.get(plan.instructor_user_id)||'Não definido';
   const educator=teamMap?.get(plan.educator_user_id)||'Não definido';
-  const rows=lessons.map(l=>{
-    const loc=workshopLocationLabel({location_type:l.location_type,location_other:l.location_other});
-    return '<tr>'+
-      '<td><b>Aula '+Number(l.lesson_number||0)+'</b><br>'+esc(fmtDate(l.scheduled_date))+'<br>'+esc(String(l.start_time||'').slice(0,5))+'–'+esc(String(l.end_time||'').slice(0,5))+'<br><small>'+esc(loc)+'</small></td>'+
+  const mainRows=lessons.map(l=>'<tr>'+
       '<td>'+esc(l.theme||('Aula '+l.lesson_number))+'</td>'+
       '<td>'+esc(l.objective||'')+'</td>'+
       '<td>'+esc(l.proposed_activities||'')+'</td>'+
       '<td>'+esc(l.resources||'')+'</td>'+
       '<td>'+workshopLessonDurationHours(l).toLocaleString('pt-BR')+'h</td>'+
-      '<td>'+esc(l.cfdh_transversal||'')+'</td>'+
-    '</tr>';
+    '</tr>').join('');
+  const extraRows=lessons.map(l=>{
+    const loc=workshopLocationLabel({location_type:l.location_type,location_other:l.location_other});
+    return '<tr><td>Aula '+Number(l.lesson_number||0)+'</td><td>'+esc(fmtDate(l.scheduled_date))+'</td><td>'+esc(String(l.start_time||'').slice(0,5))+'–'+esc(String(l.end_time||'').slice(0,5))+'</td><td>'+esc(loc)+'</td><td>'+esc(l.cfdh_transversal||'')+'</td></tr>';
   }).join('');
   return '<div class="methodology-paper methodology-paper-landscape workshop-plan-paper">'+
     '<div class="methodology-annex-title">CRJ CARIACICA · PLANEJAMENTO MENSAL DE OFICINA</div>'+
     '<div class="methodology-institutional-header"><img src="'+METHODOLOGY_HEADER_DATA+'" alt="Cabeçalho institucional"></div>'+
     '<div class="methodology-inner-title">PLANEJAMENTO DA OFICINA</div>'+
-    '<div class="methodology-row"><b>Oficina:</b><span class="methodology-inline-answer">'+esc(workshop?.name||'')+'</span></div>'+
-    '<div class="methodology-row"><b>Mês de referência:</b><span class="methodology-inline-answer">'+esc(month)+'</span></div>'+
-    '<div class="methodology-row"><b>Oficineiro(a):</b><span class="methodology-inline-answer">'+esc(instructor)+'</span></div>'+
-    '<div class="methodology-row"><b>Educador(a) de referência:</b><span class="methodology-inline-answer">'+esc(educator)+'</span></div>'+
-    '<div class="methodology-row methodology-row-tall"><b>Objetivo geral:</b><div class="methodology-answer">'+esc(plan.general_objective||'')+'</div></div>'+
-    '<div class="methodology-row methodology-row-tall"><b>Metodologia geral:</b><div class="methodology-answer">'+esc(plan.general_methodology||'')+'</div></div>'+
-    '<table class="methodology-planning-table workshop-plan-table"><thead><tr><th>Aula / data / horário / local</th><th>Tema</th><th>Objetivo</th><th>Atividades propostas</th><th>Recursos necessários</th><th>Carga horária</th><th>CFDH transversal</th></tr></thead><tbody>'+(rows||'<tr><td colspan="7">Nenhuma aula prevista no calendário deste mês.</td></tr>')+'</tbody></table>'+
-    '<div class="methodology-row methodology-row-tall"><b>Resultados esperados:</b><div class="methodology-answer">'+esc(plan.expected_results||'')+'</div></div>'+
-    '<div class="methodology-row methodology-row-tall"><b>Recursos gerais:</b><div class="methodology-answer">'+esc(plan.general_resources||'')+'</div></div>'+
-    '<div class="methodology-row methodology-row-tall"><b>Observações:</b><div class="methodology-answer">'+esc(plan.observations||'')+'</div></div>'+
-    '<div class="methodology-system-note">As datas, horários e locais são vinculados ao calendário da oficina. Conteúdo pedagógico pode ser complementado sem romper esse vínculo.</div>'+
+    '<table class="methodology-record-table"><thead><tr><th>Oficina</th><th>Mês de referência</th><th>Oficineiro(a)</th><th>Educador(a) de referência</th></tr></thead><tbody><tr><td>'+esc(workshop?.name||'')+'</td><td>'+esc(month)+'</td><td>'+esc(instructor)+'</td><td>'+esc(educator)+'</td></tr></tbody></table>'+
+    '<table class="methodology-record-table"><thead><tr><th>Objetivo geral</th><th>Metodologia geral</th></tr></thead><tbody><tr><td>'+esc(plan.general_objective||'')+'</td><td>'+esc(plan.general_methodology||'')+'</td></tr></tbody></table>'+
+    '<div class="methodology-section-title">ESTRUTURA PRINCIPAL DO PLANEJAMENTO</div>'+
+    '<table class="methodology-planning-table workshop-plan-table"><thead><tr><th>Tema</th><th>Objetivo</th><th>Atividades propostas</th><th>Recursos necessários</th><th>Carga horária</th></tr></thead><tbody>'+(mainRows||'<tr><td colspan="5">Nenhuma aula prevista no calendário deste mês.</td></tr>')+'</tbody></table>'+
+    '<div class="methodology-section-title">CAMPOS ADICIONAIS DO REGISTRO</div>'+
+    '<table class="methodology-record-table workshop-plan-extra-table"><thead><tr><th>Aula</th><th>Data</th><th>Horário</th><th>Local</th><th>CFDH transversal</th></tr></thead><tbody>'+(extraRows||'<tr><td colspan="5">Sem campos adicionais.</td></tr>')+'</tbody></table>'+
+    '<table class="methodology-record-table"><thead><tr><th>Resultados esperados</th><th>Recursos gerais</th><th>Observações</th></tr></thead><tbody><tr><td>'+esc(plan.expected_results||'')+'</td><td>'+esc(plan.general_resources||'')+'</td><td>'+esc(plan.observations||'')+'</td></tr></tbody></table>'+
+    '<div class="methodology-system-note">Os campos pedagógicos principais permanecem em colunas próprias. Data, horário, local e CFDH transversal são campos adicionais independentes e não alteram a estrutura principal.</div>'+
   '</div>';
 }
 function workshopPlanEditorHtml(bundle,workshop,teamMap){
