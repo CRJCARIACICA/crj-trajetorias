@@ -167,13 +167,15 @@ export async function listCfdhMonthDashboard(month=monthKey()){
   const plans=(pq.data||[]).filter(p=>String(p.planned_start||'').slice(0,7)===month);
   const ids=plans.map(x=>x.id);
   if(!ids.length)return {plans:[],actions:[],reports:[],metrics:{planned_hours:0,executed_hours:0,structural_hours:0,countable_executed_hours:0,pending:0}};
-  const [aq,rq,formsQ]=await Promise.all([
+  const [aq,rq,formsQ,monthThemeQ]=await Promise.all([
     supabase.from('cfdh_actions').select('*').in('plan_id',ids).gte('scheduled_date',range.start).lt('scheduled_date',range.end).order('scheduled_date'),
     supabase.from('educator_reports').select('*').in('plan_id',ids),
-    supabase.from('methodology_form_submissions').select('id,form_slug,payload,submitted_at').in('form_slug',['cfdh-avaliacao-jovens','cfdh-avaliacao-equipe']).order('submitted_at',{ascending:false}).limit(500)
+    supabase.from('methodology_form_submissions').select('id,form_slug,payload,submitted_at').in('form_slug',['cfdh-avaliacao-jovens','cfdh-avaliacao-equipe']).order('submitted_at',{ascending:false}).limit(500),
+    supabase.from('cfdh_month_settings').select('*').eq('month_start',range.start).maybeSingle()
   ]);
-  if(aq.error)throw aq.error;if(rq.error)throw rq.error;if(formsQ.error)throw formsQ.error;
-  const actions=aq.data||[],reports=rq.data||[],forms=formsQ.data||[];
+  if(aq.error)throw aq.error;if(rq.error)throw rq.error;if(formsQ.error)throw formsQ.error;if(monthThemeQ.error)throw monthThemeQ.error;
+  const actions=aq.data||[],reports=rq.data||[],forms=formsQ.data||[],month_theme=monthThemeQ.data||null;
+  const resolvedPlans=plans.map(p=>({...p,cfdh_theme_code:month_theme?.theme_code??p.cfdh_theme_code??null,cfdh_theme_custom:month_theme?.theme_custom??p.cfdh_theme_custom??null}));
   const countable=x=>Number(x||0)>=2?Number(x||0):0;
   let pending=0;
   for(const p of plans){
@@ -184,7 +186,7 @@ export async function listCfdhMonthDashboard(month=monthKey()){
     if(!forms.some(x=>x.form_slug==='cfdh-avaliacao-equipe'&&x.payload?._cfdh_plan_id===p.id)&&aa.some(x=>x.execution_status==='realizada'))pending++;
   }
   return {
-    plans,actions,reports,
+    plans:resolvedPlans,actions,reports,month_theme,
     metrics:{
       planned_hours:Number(actions.reduce((n,x)=>n+Number(x.planned_duration_hours||0),0).toFixed(2)),
       countable_planned_hours:Number(actions.reduce((n,x)=>n+countable(x.planned_duration_hours),0).toFixed(2)),
