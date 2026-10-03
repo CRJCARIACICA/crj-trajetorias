@@ -121,6 +121,27 @@ function localCalendarParts(iso){
   const get=t=>p.find(x=>x.type===t)?.value||'';
   return {date:get('year')+'-'+get('month')+'-'+get('day'),time:get('hour')+':'+get('minute')};
 }
+export async function listCrjSpecialDays(year=new Date().getFullYear()){
+  if(mode==='mock')return [];
+  const start=String(year)+'-01-01',end=String(Number(year)+1)+'-01-01';
+  const {data,error}=await supabase.from('crj_calendar_special_days').select('*').gte('calendar_date',start).lt('calendar_date',end).order('calendar_date');
+  if(error)throw error;return data||[];
+}
+export async function decideCrjSpecialDay(id,status,{note='',reference=''}={}){
+  if(mode==='mock')return {id,approval_status:status};
+  if(!['closed','open'].includes(status))throw new Error('Decisão inválida para o calendário operacional.');
+  const {data:userData,error:userError}=await supabase.auth.getUser();if(userError)throw userError;
+  const {data,error}=await supabase.from('crj_calendar_special_days').update({
+    approval_status:status,
+    approval_note:String(note||'').trim()||null,
+    approval_reference:String(reference||'').trim()||null,
+    approved_by:userData.user?.id||null,
+    approved_at:now(),
+    updated_at:now()
+  }).eq('id',id).eq('closure_policy','approval_required').select('*').single();
+  if(error)throw error;return data;
+}
+
 export async function getCfdhStructuralDistributionSignals(month=monthKey()){
   if(mode==='mock')return {weekday_flow:[0,0,0,0,0,0,0],hour_flow:Array(24).fill(0),free_use_weekday:[0,0,0,0,0,0,0],free_use_hour:Array(24).fill(0),historical_success:[],samples:{attendance:0,visitors:0,services:0,educator_participants:0,structural_actions:0,free_use:0},free_use_list_available:false};
   const range=cfdhMonthRange(month),monthStart=new Date(range.start+'T12:00:00Z'),historyStart=new Date(monthStart);historyStart.setUTCMonth(historyStart.getUTCMonth()-6);
