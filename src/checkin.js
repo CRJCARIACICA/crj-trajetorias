@@ -110,9 +110,9 @@ function showNoCpfMatch(cpf){
 }
 function showVisitorKnown(data){
   const force=cfdhMode||Boolean(data.must_provisional);
-  shell(force?'Limite de visitante atingido':'Histórico de visitante',
+  shell(cfdhMode?'Requisito de participação CFDH':(force?'Limite de visitante atingido':'Histórico de visitante'),
     '<div class="notice '+(force?'warn':'info')+'"><b>'+esc(data.display_name||'Visitante')+'</b><br>'+
-    Number(data.visits||0)+' visita(s) registrada(s).'+(force?' O ciclo de visitante foi encerrado: agora é necessário iniciar o Formulário Inicial parcial.':' Você pode se cadastrar agora ou continuar como visitante enquanto estiver abaixo do limite.')+'</div>'+
+    (cfdhMode?'Este CPF possui registro provisório de visitante, mas o CFDH exige ao menos o Formulário Inicial parcial. O sistema irá converter este mesmo registro, sem duplicar a trajetória.':(Number(data.visits||0)+' visita(s) registrada(s).'+(force?' O ciclo de visitante foi encerrado: agora é necessário iniciar o Formulário Inicial parcial.':' Você pode se cadastrar agora ou continuar como visitante enquanto estiver abaixo do limite.')))+'</div>'+
     (force?'<button type="button" class="btn primary" data-create-provisional>Iniciar Formulário Inicial parcial</button>':
       '<div class="choice-grid"><button type="button" class="choice-card" data-create-provisional><b>Iniciar Formulário Inicial parcial</b><span>O mesmo cadastro inicial, preenchido parcialmente.</span></button><button type="button" class="choice-card" data-visitor><b>Registrar participação sem inscrição</b><span>Visita '+(Number(data.visits||0)+1)+' de 3</span></button></div>'),'3');
   backButton(showCpfCheck);
@@ -124,7 +124,7 @@ async function resolveCandidate(id,prefix=''){
   if(error){shell('Cadastro',notice('danger','Não foi possível consultar o cadastro',error.message));backButton();return}
   currentCandidate=data;
   if(data.attendance_already_confirmed){
-    showSuccess('Presença já confirmada','Sua presença já consta nesta aula.',data);
+    showSuccess('Presença já confirmada',cfdhMode?'Sua presença já consta nesta ação do CFDH.':'Sua presença já consta nesta aula.',data);
     return;
   }
   if(data.enrolled){showPinForm(data,prefix);return}
