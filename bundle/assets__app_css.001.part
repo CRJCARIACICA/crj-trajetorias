@@ -183,8 +183,8 @@ d);font-size:12px;margin:16px 0}.divider:before,.divider:after{content:"";height
 .methodology-preview-toolbar>div{display:grid;gap:2px}
 .methodology-preview-toolbar span:not(.pill){font-size:11px;color:var(--muted)}
 .methodology-preview-scroll{overflow:auto;max-height:calc(100vh - 170px);padding:18px}
-.methodology-paper{width:100%;max-width:760px;margin:0 auto;background:white;color:#111;border:1px solid #d5d5d5;padding:28px 34px 36px;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.28;box-shadow:0 8px 30px rgba(0,0,0,.08)}
-.methodology-paper-landscape{max-width:980px;padding:24px 28px 30px}
+.methodology-paper{width:1120px;max-width:none;min-height:792px;margin:0 auto;background:white;color:#111;border:1px solid #d5d5d5;padding:28px 34px 36px;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.28;box-shadow:0 8px 30px rgba(0,0,0,.08);overflow:visible}
+.methodology-paper-landscape{width:1120px;max-width:none;min-height:792px;padding:24px 28px 30px}
 .methodology-annex-title{text-align:center;font-weight:700;font-size:12px;margin-bottom:22px}
 .methodology-institutional-header{text-align:center;margin:0 auto 13px}
 .methodology-institutional-header img{display:block;width:min(330px,80%);height:auto;margin:auto}
@@ -199,9 +199,13 @@ d);font-size:12px;margin:16px 0}.divider:before,.divider:after{content:"";height
 .methodology-option-list{display:grid;gap:3px;margin-top:6px;padding-left:14px}
 .methodology-option-list span{display:block}
 .methodology-section-title{text-align:center;font-weight:800;font-style:italic;border:1px solid #222;margin-top:-1px;padding:6px 8px;background:#fafafa}
-.methodology-presence-table,.methodology-rating-table,.methodology-planning-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9px}
-.methodology-presence-table th,.methodology-presence-table td,.methodology-rating-table th,.methodology-rating-table td,.methodology-planning-table th,.methodology-planning-table td{border:1px solid #222;padding:5px 4px;vertical-align:middle;text-align:left}
-.methodology-presence-table th,.methodology-rating-table th,.methodology-planning-table th{font-weight:800;text-align:center}
+.methodology-presence-table,.methodology-rating-table,.methodology-planning-table,.methodology-record-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9px}
+.methodology-presence-table th,.methodology-presence-table td,.methodology-rating-table th,.methodology-rating-table td,.methodology-planning-table th,.methodology-planning-table td,.methodology-record-table th,.methodology-record-table td{border:1px solid #222;padding:5px 4px;vertical-align:top;text-align:left;overflow-wrap:anywhere;word-break:break-word;white-space:pre-wrap}
+.methodology-presence-table th,.methodology-rating-table th,.methodology-planning-table th,.methodology-record-table th{font-weight:800;text-align:center;background:#f7f7f7}
+.methodology-record-table{margin-top:-1px}
+.methodology-record-table td{min-height:34px;height:34px}
+.methodology-record-table thead,.methodology-planning-table thead,.methodology-presence-table thead,.methodology-rating-table thead{display:table-header-group}
+.methodology-record-table tr,.methodology-planning-table tr,.methodology-presence-table tr,.methodology-rating-table tr{break-inside:avoid;page-break-inside:avoid}
 .methodology-presence-table th:nth-child(1){width:5%}
 .methodology-presence-table th:nth-child(2){width:27%}
 .methodology-presence-table th:nth-child(3){width:15%}
@@ -216,7 +220,7 @@ d);font-size:12px;margin:16px 0}.divider:before,.divider:after{content:"";height
 .methodology-rating-table th:not(:first-child),.methodology-rating-table td:not(:first-child){text-align:center}
 .methodology-planning-table{margin-top:-1px}
 .methodology-planning-table td{height:34px}
-.methodology-cut-line{max-width:760px;margin:20px auto;border-top:1px dashed #777;text-align:center;color:#777;font-size:9px;padding-top:3px}
+.methodology-cut-line{max-width:1120px;margin:20px auto;border-top:1px dashed #777;text-align:center;color:#777;font-size:9px;padding-top:3px}
 .workshop-report-paper{max-width:1180px}
 .report-kpi-table th,.report-kpi-table td{text-align:center}
 .report-kpi-table td{font-weight:800}
@@ -435,3 +439,16 @@ d);font-size:12px;margin:16px 0}.divider:before,.divider:after{content:"";height
 .cfdh-responsible-option span{display:grid;gap:2px}.cfdh-responsible-option small{color:var(--muted)}
 .cfdh-month-theme-source{padding:12px;border:1px solid #b7d9cf;border-radius:12px;background:#f2faf7}
 @media(max-width:760px){.cfdh-responsible-grid{grid-template-columns:1fr}}
+
+/* Padrão A4 horizontal para todos os documentos e prévias */
+.workshop-report-paper,.instructor-evidence-paper,.workshop-plan-paper,.technical-evidence-paper,.cfdh-plan-paper,.cfdh-report-paper,.educator-referral-paper{width:1120px;max-width:none;min-height:792px}
+.methodology-preview-scroll>.methodology-paper+ .methodology-paper{margin-top:18px}
+@media print{
+  @page{size:A4 landscape;margin:10mm}
+  .methodology-paper,.methodology-paper-landscape,.workshop-report-paper,.instructor-evidence-paper,.workshop-plan-paper,.technical-evidence-paper,.cfdh-plan-paper,.cfdh-report-paper,.educator-referral-paper{
+    width:277mm!important;max-width:none!important;min-height:190mm!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important;
+  }
+  .methodology-record-table,.methodology-planning-table,.methodology-presence-table,.methodology-rating-table{font-size:7.5pt}
+  .methodology-record-table thead,.methodology-planning-table thead,.methodology-presence-table thead,.methodology-rating-table thead{display:table-header-group}
+  .methodology-record-table tr,.methodology-planning-table tr,.methodology-presence-table tr,.methodology-rating-table tr{break-inside:avoid;page-break-inside:avoid}
+}
