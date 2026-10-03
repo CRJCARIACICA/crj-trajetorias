@@ -80,3 +80,220 @@ export async function createWorkshopAttendanceSubmission(sessionId){
   };
   return await saveFormSubmission('lista-presenca-contato',null,payload);
 }
+
+
+export async function listMethodologyClassificationCatalog(){
+  if(mode==='mock')return [];
+  const {data,error}=await supabase.from('methodology_classification_catalog')
+    .select('*').order('sort_order');
+  if(error)throw error;return data||[];
+}
+export async function listCfdhThemes(){
+  if(mode==='mock')return [];
+  const {data,error}=await supabase.from('cfdh_theme_catalog')
+    .select('*').eq('active',true).order('code');
+  if(error)throw error;return data||[];
+}
+function cfdhMonthRange(month){
+  const [y,m]=String(month).slice(0,7).split('-').map(Number);
+  return {
+    start:y+'-'+String(m).padStart(2,'0')+'-01',
+    end:new Date(Date.UTC(y,m,1)).toISOString().slice(0,10)
+  };
+}
+export async function getCfdhPlanBundle(planId){
+  if(mode==='mock'){
+    const st=mock(),plan=(st.educatorPlans||[]).find(x=>x.id===planId);
+    if(!plan)throw new Error('Planejamento CFDH não encontrado.');
+    return {plan,workshop_ids:[],actions:[],workshops:st.workshops||[],calendar:[],report:(st.educatorReports||[]).find(x=>x.plan_id===planId)||null,evaluations:[],attendance_counts:{},team:st.team||[]};
+  }
+  const pq=await supabase.from('educator_plans').select('*').eq('id',planId).single();
+  if(pq.error)throw pq.error;
+  const plan=pq.data;
+  if(!['cfdh_estrutural','cfdh_transversal'].includes(plan.plan_type))throw new Error('Este registro não é um planejamento CFDH.');
+  const month=String(plan.planned_start||new Date().toISOString().slice(0,10)).slice(0,7),range=cfdhMonthRange(month);
+  const [linksQ,actionsQ,workshopsQ,calendarQ,reportQ,formsQ,teamQ]=await Promise.all([
+    supabase.from('cfdh_plan_workshops').select('workshop_id').eq('plan_id',planId),
+    supabase.from('cfdh_actions').select('*').eq('plan_id',planId).order('action_number'),
+    supabase.from('workshops').select('*').eq('active',true).order('name'),
+    supabase.from('workshop_calendar').select('*').gte('scheduled_date',range.start).lt('scheduled_date',range.end).neq('status','cancelada').order('scheduled_date').order('start_time'),
+    supabase.from('educator_reports').select('*').eq('plan_id',planId).maybeSingle(),
+    supabase.from('methodology_form_submissions').select('id,form_slug,payload,submitted_at,created_by').in('form_slug',['cfdh-planejamento','cfdh-avaliacao-jovens','cfdh-avaliacao-equipe']).order('submitted_at',{ascending:false}).limit(300),
+    supabase.from('profiles').select('id,display_name,role,active').order('display_name')
+  ]);
+  for(const q of [linksQ,actionsQ,workshopsQ,calendarQ,reportQ,formsQ,teamQ])if(q.error)throw q.error;
+  const actions=actionsQ.data||[],ids=actions.map(x=>x.id);
+  let attendance=[];
+  if(ids.length){
+    const aq=await supabase.from('cfdh_attendance').select('action_id,youth_id,present').in('action_id',ids).eq('present',true);
+    if(aq.error)throw aq.error;attendance=aq.data||[];
+  }
+  const attendance_counts={};
+  for(const a of attendance)attendance_counts[a.action_id]=(attendance_counts[a.action_id]||0)+1;
+  const evaluations=(formsQ.data||[]).filter(x=>x.payload?._cfdh_plan_id===planId);
+  return {
+    plan,
+    workshop_ids:(linksQ.data||[]).map(x=>x.workshop_id),
+    actions,
+    workshops:workshopsQ.data||[],
+    calendar:(calendarQ.data||[]),
+    report:reportQ.data||null,
+    evaluations,
+    attendance_counts,
+    team:teamQ.data||[]
+  };
+}
+export async function listCfdhMonthDashboard(month=monthKey()){
+  if(mode==='mock')return {plans:[],metrics:{planned_hours:0,executed_hours:0,structural_hours:0,countable_executed_hours:0,pending:0}};
+  const range=cfdhMonthRange(month);
+  const pq=await supabase.from('educator_plans').select('*').in('plan_type',['cfdh_estrutural','cfdh_transversal']).order('planned_start');
+  if(pq.error)throw pq.error;
+  const plans=(pq.data||[]).filter(p=>String(p.planned_start||'').slice(0,7)===month);
+  const ids=plans.map(x=>x.id);
+  if(!ids.length)return {plans:[],actions:[],reports:[],metrics:{planned_hours:0,executed_hours:0,structural_hours:0,countable_executed_hours:0,pending:0}};
+  const [aq,rq,formsQ]=await Promise.all([
+    supabase.from('cfdh_actions').select('*').in('plan_id',ids).gte('scheduled_date',range.start).lt('scheduled_date',range.end).order('scheduled_date'),
+    supabase.from('educator_reports').select('*').in('plan_id',ids),
+    supabase.from('methodology_form_submissions').select('id,form_slug,payload,submitted_at').in('form_slug',['cfdh-avaliacao-jovens','cfdh-avaliacao-equipe']).order('submitted_at',{ascending:false}).limit(500)
+  ]);
+  if(aq.error)throw aq.error;if(rq.error)throw rq.error;if(formsQ.error)throw formsQ.error;
+  const actions=aq.data||[],reports=rq.data||[],forms=formsQ.data||[];
+  const countable=x=>Number(x||0)>=2?Number(x||0):0;
+  let pending=0;
+  for(const p of plans){
+    const aa=actions.filter(x=>x.plan_id===p.id);
+    if(!aa.length)pending++;
+    if(!reports.some(r=>r.plan_id===p.id)&&aa.some(x=>['realizada','parcial'].includes(x.execution_status)))pending++;
+    if(!forms.some(x=>x.form_slug==='cfdh-avaliacao-jovens'&&x.payload?._cfdh_plan_id===p.id)&&aa.some(x=>x.execution_status==='realizada'))pending++;
+    if(!forms.some(x=>x.form_slug==='cfdh-avaliacao-equipe'&&x.payload?._cfdh_plan_id===p.id)&&aa.some(x=>x.execution_status==='realizada'))pending++;
+  }
+  return {
+    plans,actions,reports,
+    metrics:{
+      planned_hours:Number(actions.reduce((n,x)=>n+Number(x.planned_duration_hours||0),0).toFixed(2)),
+      countable_planned_hours:Number(actions.reduce((n,x)=>n+countable(x.planned_duration_hours),0).toFixed(2)),
+      executed_hours:Number(actions.reduce((n,x)=>n+Number(x.actual_duration_hours||0),0).toFixed(2)),
+      countable_executed_hours:Number(actions.reduce((n,x)=>n+countable(x.actual_duration_hours),0).toFixed(2)),
+      structural_hours:Number(actions.filter(x=>plans.find(p=>p.id===x.plan_id)?.plan_type==='cfdh_estrutural').reduce((n,x)=>n+countable(x.actual_duration_hours),0).toFixed(2)),
+      pending
+    }
+  };
+}
+export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions=[]}={}){
+  if(mode==='mock')return getCfdhPlanBundle(planId);
+  const current=await getCfdhPlanBundle(planId);
+  const planType=plan.plan_type||current.plan.plan_type;
+  const selected=[...new Set((planType==='cfdh_transversal'?workshop_ids:[]).filter(Boolean))];
+  const parent={
+    ...plan,
+    plan_type:planType,
+    workshop_id:null,
+    cfdh_action_count:actions.length||Number(plan.cfdh_action_count||0)||null,
+    planned_duration_hours:Number(actions.reduce((n,a)=>n+Number(a.planned_duration_hours||0),0).toFixed(2)),
+    planned_start:actions.map(a=>a.scheduled_date).filter(Boolean).sort()[0]||plan.planned_start||current.plan.planned_start,
+    planned_end:actions.map(a=>a.scheduled_date).filter(Boolean).sort().slice(-1)[0]||plan.planned_end||current.plan.planned_end
+  };
+  await updateEducatorPlan(planId,parent);
+
+  const dl=await supabase.from('cfdh_plan_workshops').delete().eq('plan_id',planId);
+  if(dl.error)throw dl.error;
+  if(selected.length){
+    const ins=await supabase.from('cfdh_plan_workshops').insert(selected.map(workshop_id=>({plan_id:planId,workshop_id})));
+    if(ins.error)throw ins.error;
+  }
+
+  const existing=current.actions||[],keepIds=new Set();
+  const saved=[];
+  for(let i=0;i<actions.length;i++){
+    const a=actions[i],payload={
+      plan_id:planId,
+      action_number:i+1,
+      workshop_id:planType==='cfdh_transversal'?(a.workshop_id||null):null,
+      schedule_mode:planType==='cfdh_estrutural'?'structural':(a.schedule_mode||'workshop_planned'),
+      workshop_calendar_id:planType==='cfdh_transversal'?(a.workshop_calendar_id||null):null,
+      scheduled_date:a.scheduled_date,
+      start_time:a.start_time||null,end_time:a.end_time||null,
+      planned_duration_hours:Number(a.planned_duration_hours||0)||0,
+      location_type:a.location_type||null,location_other:a.location_other||null,
+      title:a.title||('Ação '+(i+1)),
+      objective:a.objective||null,activities:a.activities||null,resources:a.resources||null,
+      nucleus_code:a.nucleus_code||null,axis_code:a.axis_code||null,
+      item_code:a.item_code||null,item_label:a.item_label||null,
+      updated_at:now()
+    };
+    const prior=a.id?existing.find(x=>x.id===a.id):existing.find(x=>x.action_number===i+1);
+    let row;
+    const structuralChange=prior&&(prior.workshop_id!==payload.workshop_id||prior.schedule_mode!==payload.schedule_mode);
+    if(prior&&structuralChange&&['realizada','parcial'].includes(prior.execution_status))throw new Error('Não é possível trocar oficina ou modalidade de agenda de uma ação CFDH já executada.');
+    if(prior&&structuralChange){
+      const del=await supabase.rpc('delete_cfdh_action',{p_action_id:prior.id});if(del.error)throw del.error;
+      const q=await supabase.from('cfdh_actions').insert(payload).select('*').single();if(q.error)throw q.error;row=q.data;
+    }else if(prior){
+      const q=await supabase.from('cfdh_actions').update(payload).eq('id',prior.id).select('*').single();if(q.error)throw q.error;row=q.data;
+    }else{
+      const q=await supabase.from('cfdh_actions').insert(payload).select('*').single();if(q.error)throw q.error;row=q.data;
+    }
+    keepIds.add(row.id);saved.push(row);
+    if(planType==='cfdh_transversal'){
+      const sync=await supabase.rpc('sync_cfdh_action_to_workshop',{p_action_id:row.id});if(sync.error)throw sync.error;
+    }
+  }
+  for(const old of existing){
+    if(!keepIds.has(old.id)){
+      if(['realizada','parcial'].includes(old.execution_status))throw new Error('Ação CFDH executada não pode ser removida do planejamento.');
+      const del=await supabase.rpc('delete_cfdh_action',{p_action_id:old.id});if(del.error)throw del.error;
+    }
+  }
+  return getCfdhPlanBundle(planId);
+}
+export async function updateCfdhActionExecution(id,patch){
+  const payload={
+    execution_status:patch.execution_status||'realizada',
+    actual_date:patch.actual_date||null,
+    actual_start:patch.actual_start||null,
+    actual_end:patch.actual_end||null,
+    actual_duration_hours:patch.actual_duration_hours===''||patch.actual_duration_hours==null?null:Number(patch.actual_duration_hours),
+    execution_description:patch.execution_description||null,
+    execution_notes:patch.execution_notes||null,
+    updated_at:now()
+  };
+  if(mode==='mock')return payload;
+  const {data,error}=await supabase.from('cfdh_actions').update(payload).eq('id',id).select('*').single();
+  if(error)throw error;return data;
+}
+export async function openCfdhCheckin(actionId){
+  if(mode==='mock')throw new Error('Lista virtual do CFDH requer banco conectado.');
+  const {data,error}=await supabase.rpc('open_cfdh_checkin',{p_action_id:actionId,p_minutes_before:30,p_minutes_after:120});
+  if(error)throw error;return Array.isArray(data)?data[0]:data;
+}
+export async function getCfdhAttendanceSheet(actionId){
+  if(mode==='mock')return null;
+  const {data,error}=await supabase.rpc('staff_cfdh_attendance_sheet',{p_action_id:actionId});
+  if(error)throw error;return data||null;
+}
+export async function createCfdhAttendanceSubmission(actionId){
+  const sheet=await getCfdhAttendanceSheet(actionId);
+  if(!sheet)throw new Error('Lista CFDH não encontrada.');
+  const participants=(sheet.participants||[]).map((r,i)=>({
+    number:i+1,name:r.display_name||r.full_name||'',full_name:r.full_name||r.display_name||'',
+    signature_data:r.signature_data||'',birth_date:r.birth_date||'',cpf:r.cpf||'',
+    phone:r.phone||'',email:r.email||'',neighborhood:r.neighborhood||'',
+    initial_form_status:r.initial_form_status||''
+  }));
+  return saveFormSubmission('lista-presenca-contato',null,{
+    activity:(sheet.activity||'CFDH')+' · '+(sheet.action_title||''),
+    cfdh:true,cfdh_plan_id:sheet.plan_id,cfdh_action_id:sheet.action_id,
+    workshop_name:sheet.workshop_name||'',
+    location:sheet.location||'CRJ Cariacica',
+    date:sheet.date||'',start_time:String(sheet.start_time||'').slice(0,5),
+    end_time:String(sheet.end_time||'').slice(0,5),
+    participant_count:Number(sheet.participant_count||participants.length||0),
+    participants
+  });
+}
+export async function downloadCfdhPlan(planId,format='pdf'){
+  return downloadCrjDocumentRequest({cfdh_plan_id:planId,format},'Planejamento_CFDH');
+}
+export async function downloadCfdhReport(reportId,format='pdf'){
+  return downloadCrjDocumentRequest({cfdh_report_id:reportId,format},'Relatorio_CFDH');
+}
