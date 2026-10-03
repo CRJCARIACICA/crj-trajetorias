@@ -6,12 +6,9 @@ async function bindCfdhShared(){
 
   document.querySelector('[data-new-cfdh-plan]')?.addEventListener('click',async()=>{
     try{
-      const themes=await listCfdhThemes();
       modal('Novo circuito CFDH','<form id="new-cfdh-plan-form" class="stack">'+
-        '<div class="notice info"><b>Primeiro defina o circuito.</b><br>Depois o sistema abrirá o planejamento por ações. Se for estrutural, oficinas ficarão indisponíveis. Se for transversal, será possível selecionar várias oficinas.</div>'+
+        '<div class="notice info"><b>Primeiro defina o circuito.</b><br>O tema mensal não é escolhido aqui: ele será definido dentro da <b>primeira ação CFDH do mês</b>. Depois disso, os próximos planejamentos herdarão o mesmo tema automaticamente.</div>'+
         '<div class="form-grid"><div class="field"><label>Modalidade</label><select name="plan_type" required><option value="cfdh_estrutural">CFDH estrutural</option><option value="cfdh_transversal">CFDH transversal</option></select></div><div class="field"><label>Quantidade inicial de ações</label><input class="input" type="number" min="1" max="60" name="cfdh_action_count" value="1" required></div></div>'+
-        '<div class="field"><label>Tema mensal</label><select name="cfdh_theme_code"><option value="">Selecione</option>'+themes.map(t=>'<option value="'+t.code+'">'+esc(t.code+'. '+t.theme)+'</option>').join('')+'</select></div>'+
-        '<div class="field"><label>Outro tema / adaptação territorial</label><input class="input" name="cfdh_theme_custom"></div>'+
         '<div class="field"><label>Título do circuito</label><input class="input" name="activity_title" required></div>'+
         '<div class="field"><label>Objetivo geral</label><textarea name="description_objective" required></textarea></div>'+
         '<div data-cfdh-create-status></div><button class="btn primary" type="submit" data-cfdh-create-submit>Criar e estruturar ações</button></form>');
