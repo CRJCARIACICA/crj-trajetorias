@@ -107,6 +107,14 @@ function cfdhApiOverlaps(aStart,aEnd,bStart,bEnd){
   const as=cfdhApiMinutes(aStart),ae=cfdhApiMinutes(aEnd),bs=cfdhApiMinutes(bStart),be=cfdhApiMinutes(bEnd);
   return as!=null&&ae!=null&&bs!=null&&be!=null&&as<be&&ae>bs;
 }
+function cfdhApiWeekday(date){
+  const d=new Date(String(date||'')+'T12:00:00Z');return Number.isNaN(d.getTime())?null:d.getUTCDay();
+}
+function cfdhApiStructuralWindow(date){
+  const dow=cfdhApiWeekday(date);
+  if(dow==null||dow===0||dow===6)return null;
+  return dow===1?{start:'16:30',end:'19:00'}:{start:'14:00',end:'19:00'};
+}
 function cfdhMonthRange(month){
   const [y,m]=String(month).slice(0,7).split('-').map(Number);
   return {
@@ -379,9 +387,18 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
 
   const refMonth=String(plan.planned_start||current.plan.planned_start||actions[0]?.scheduled_date||'').slice(0,7);
   if(refMonth){
-    const crjCalendar=await listCrjPlanningCalendar(refMonth);
+    const [crjCalendar,specialDays]=await Promise.all([listCrjPlanningCalendar(refMonth),listCrjSpecialDays(Number(refMonth.slice(0,4)))]);
     for(let i=0;i<actions.length;i++){
       const a=actions[i],aEnd=cfdhApiAutoEndTime(a.start_time,a.planned_duration_hours);
+      if(planType==='cfdh_estrutural'){
+        const special=specialDays.find(x=>x.calendar_date===a.scheduled_date);
+        const closed=special&&(special.closure_policy==='auto_closed'||special.approval_status==='closed');
+        if(closed)throw new Error('Ação '+(i+1)+': '+(special.name||'data fechada')+' — o CRJ está fechado nesta data.');
+        const win=cfdhApiStructuralWindow(a.scheduled_date);
+        if(!win)throw new Error('Ação '+(i+1)+': ações estruturais devem ser planejadas de segunda a sexta-feira.');
+        const s=cfdhApiMinutes(a.start_time),e=cfdhApiMinutes(aEnd),ws=cfdhApiMinutes(win.start),we=cfdhApiMinutes(win.end);
+        if(s<ws||e>we)throw new Error('Ação '+(i+1)+': horário fora da janela permitida para CFDH estrutural em '+a.scheduled_date+'. Use '+win.start+'–'+win.end+'.');
+      }
       const existingConflict=crjCalendar.find(x=>{
         if(x.date!==a.scheduled_date)return false;
         if(x.source==='cfdh'&&x.plan_id===planId)return false;
