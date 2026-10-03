@@ -84,12 +84,31 @@ async function bindCfdhShared(){
     }catch(err){toast(err.message,'danger');btn.disabled=false;btn.textContent=original}
   }));
 
-  if(!planId)return;
+  document.querySelectorAll('[data-crj-special-close],[data-crj-special-open]').forEach(btn=>btn.addEventListener('click',()=>{
+    const status=btn.hasAttribute('data-crj-special-close')?'closed':'open',id=btn.dataset.crjSpecialClose||btn.dataset.crjSpecialOpen;
+    modal(status==='closed'?'Aprovar fechamento do CRJ':'Registrar funcionamento do CRJ',
+      '<form id="crj-special-day-decision" class="stack">'+
+        '<div class="notice '+(status==='closed'?'warn':'info')+'"><b>'+(status==='closed'?'Fechamento sujeito à aprovação':'Funcionamento mantido')+'</b><br>Registre a decisão para que o calendário e a distribuição inteligente passem a considerar essa data corretamente.</div>'+
+        '<div class="field"><label>Observação / justificativa</label><textarea name="note" placeholder="Ex.: fechamento aprovado pela gestão; funcionamento mantido normalmente."></textarea></div>'+
+        '<div class="field"><label>Referência da decisão</label><input class="input" name="reference" placeholder="Ex.: e-mail, ofício, reunião, comunicado interno"></div>'+
+        '<button class="btn '+(status==='closed'?'danger':'primary')+'" type="submit">'+(status==='closed'?'Confirmar fechamento':'Confirmar funcionamento')+'</button>'+
+      '</form>');
+    document.querySelector('#crj-special-day-decision')?.addEventListener('submit',async e=>{
+      e.preventDefault();const fd=new FormData(e.currentTarget),submit=e.currentTarget.querySelector('[type="submit"]'),label=submit.textContent;
+      submit.disabled=true;submit.textContent='Salvando...';
+      try{
+        await decideCrjSpecialDay(id,status,{note:fd.get('note')||'',reference:fd.get('reference')||''});
+        document.querySelector('#modal')?.remove();toast(status==='closed'?'Fechamento registrado':'Funcionamento mantido registrado');await render();
+      }catch(err){toast(err.message,'danger');submit.disabled=false;submit.textContent=label}
+    });
+  }));
+
+    if(!planId)return;
 
   let bundle;
   try{
-    const [b,themes,classification,indicators,monthDashboard,crjCalendar,smartSignals]=await Promise.all([getCfdhPlanBundle(planId),listCfdhThemes(),listMethodologyClassificationCatalog(),listIndicatorCatalog(),listCfdhMonthDashboard(month),listCrjPlanningCalendar(month),getCfdhStructuralDistributionSignals(month)]);
-    bundle=b;bundle.themes=themes;bundle.classification=classification;bundle.indicators=indicators;bundle.month_dashboard=monthDashboard;bundle.crj_calendar=crjCalendar;bundle.smart_signals=smartSignals;
+    const [b,themes,classification,indicators,monthDashboard,crjCalendar,smartSignals,specialDays]=await Promise.all([getCfdhPlanBundle(planId),listCfdhThemes(),listMethodologyClassificationCatalog(),listIndicatorCatalog(),listCfdhMonthDashboard(month),listCrjPlanningCalendar(month),getCfdhStructuralDistributionSignals(month),listCrjSpecialDays(Number(month.slice(0,4)))]);
+    bundle=b;bundle.themes=themes;bundle.classification=classification;bundle.indicators=indicators;bundle.month_dashboard=monthDashboard;bundle.crj_calendar=crjCalendar;bundle.smart_signals=smartSignals;bundle.special_days=specialDays;
   }catch(err){toast(err.message,'danger');return}
 
   const planForm=document.querySelector('#cfdh-plan-editor');
@@ -535,7 +554,7 @@ async function bindCfdhShared(){
       e.preventDefault();
       if(!planForm.reportValidity())return;
       const draft=draftBundle(),alerts=cfdhPlanAlerts(draft).filter(x=>!/avaliação|presença nominal|relatório/i.test(x));
-      const blocking=alerts.filter(x=>!/menor que 2h|Distribuição sugerida|ALERTA DE META/i.test(x));
+      const blocking=alerts.filter(x=>!/menor que 2h|Distribuição sugerida|ALERTA DE META|AVISO DE CALENDÁRIO/i.test(x));
       if(blocking.length){toast('Complete as pendências do planejamento antes de salvar.','danger');refresh();return}
       const btn=planForm.querySelector('[type="submit"]'),original=btn.textContent;btn.disabled=true;btn.textContent='Salvando e sincronizando...';
       try{
