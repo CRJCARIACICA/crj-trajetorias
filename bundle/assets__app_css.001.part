@@ -444,6 +444,18 @@ d);font-size:12px;margin:16px 0}.divider:before,.divider:after{content:"";height
 .cfdh-calendar-free>b{font-size:.76rem}.cfdh-calendar-free>small{font-size:.66rem;color:var(--muted);line-height:1.35}.cfdh-calendar-free>div{display:flex;flex-wrap:wrap;gap:5px}
 .cfdh-calendar-selected{font-size:.78rem;padding:7px 9px;border-radius:8px;background:#eef7f3;color:#315c50}
 .cfdh-calendar-conflict{margin-top:-4px}
+.cfdh-smart-distribution{min-width:min(760px,84vw)}
+.cfdh-smart-criteria{padding:12px;border:1px solid var(--line);border-radius:12px;background:#f8fbfa}
+.cfdh-smart-criteria>b{display:block;margin-bottom:9px}
+.cfdh-smart-criteria span{font-size:.76rem;color:#315c50}
+.cfdh-smart-suggestions{display:grid;gap:8px;max-height:42vh;overflow:auto;padding-right:4px}
+.cfdh-smart-suggestion{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(150px,.8fr) minmax(0,1.6fr) auto;gap:10px;align-items:center;padding:10px 11px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.cfdh-smart-suggestion>div{display:flex;align-items:center;gap:7px;min-width:0}
+.cfdh-smart-suggestion>div b{font-size:.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cfdh-smart-suggestion>strong{font-size:.77rem}
+.cfdh-smart-suggestion>small{font-size:.68rem;line-height:1.35;color:var(--muted)}
+.cfdh-smart-suggestion>em{font-style:normal;font-size:.65rem;color:var(--muted);white-space:nowrap}
+[data-cfdh-structural-smart-block]{border-left:4px solid #7aaea0;background:linear-gradient(90deg,#f4faf7 0,#fff 48%)}
 .cfdh-plan-paper,.cfdh-report-paper{max-width:1180px}
 .cfdh-plan-table{font-size:8px}
 .cfdh-plan-table th:nth-child(1){width:8%}.cfdh-plan-table th:nth-child(2){width:16%}.cfdh-plan-table th:nth-child(3){width:18%}.cfdh-plan-table th:nth-child(4){width:25%}.cfdh-plan-table th:nth-child(5){width:23%}.cfdh-plan-table th:nth-child(6){width:10%}
@@ -502,4 +514,10 @@ d);font-size:12px;margin:16px 0}.divider:before,.divider:after{content:"";height
   .cfdh-calendar-day{min-height:46px;padding:4px}
   .cfdh-calendar-day small{font-size:.56rem}
   .cfdh-calendar-busy{grid-template-columns:70px 1fr}
+}
+
+@media(max-width:820px){
+  .cfdh-smart-distribution{min-width:0}
+  .cfdh-smart-suggestion{grid-template-columns:1fr}
+  .cfdh-smart-suggestion>div b{white-space:normal}
 }
