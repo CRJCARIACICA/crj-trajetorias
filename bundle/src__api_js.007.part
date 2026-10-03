@@ -211,8 +211,9 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
 
   const first=actions[0]||{};
   const inheritedTheme=current.month_theme;
-  const themeCode=inheritedTheme?.theme_code??(first.monthly_theme_code?Number(first.monthly_theme_code):null);
-  const themeCustom=inheritedTheme?.theme_custom??(first.monthly_theme_custom||null);
+  const editingThemeSource=Boolean(inheritedTheme?.source_action_id&&first.id===inheritedTheme.source_action_id);
+  const themeCode=editingThemeSource?(first.monthly_theme_code?Number(first.monthly_theme_code):null):(inheritedTheme?.theme_code??(first.monthly_theme_code?Number(first.monthly_theme_code):null));
+  const themeCustom=editingThemeSource?(first.monthly_theme_custom||null):(inheritedTheme?.theme_custom??(first.monthly_theme_custom||null));
   const parent={
     ...plan,
     plan_type:planType,
