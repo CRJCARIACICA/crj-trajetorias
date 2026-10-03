@@ -289,6 +289,24 @@ function cfdhActionEditorCard(bundle,a,index){
     '<div class="field"><label>Recursos necessários</label><textarea name="resources">'+esc(a.resources||'')+'</textarea></div>'+
   '</div>';
 }
+
+function cfdhOperationsHtml(bundle){
+  const p=bundle.plan,workshops=bundle.workshops||[],evals=bundle.evaluations||[];
+  const youthEval=evals.filter(x=>x.form_slug==='cfdh-avaliacao-jovens').length;
+  const teamEval=evals.filter(x=>x.form_slug==='cfdh-avaliacao-equipe').length;
+  const actions=(bundle.actions||[]).map(a=>{
+    const w=workshops.find(x=>x.id===a.workshop_id),presence=Number(bundle.attendance_counts?.[a.id]||0),done=['realizada','parcial'].includes(a.execution_status);
+    return '<div class="card cfdh-operation-card"><div class="page-head compact"><div><div class="actions"><span class="pill '+(done?'success':'warn')+'">'+esc(a.execution_status||'planejada')+'</span><span class="pill">Ação '+a.action_number+'</span></div><h3>'+esc(a.title||'Ação CFDH')+'</h3><p>'+fmtDate(a.scheduled_date)+' · '+esc(String(a.start_time||'').slice(0,5))+'–'+esc(String(a.end_time||'').slice(0,5))+(w?' · '+esc(w.name):' · Estrutural')+'</p></div><div class="actions"><span class="pill info">'+presence+' presença(s)</span></div></div>'+
+      '<div class="actions"><button class="btn primary" data-cfdh-execute="'+a.id+'">'+(done?'Editar execução':'Registrar execução')+'</button><button class="btn secondary" data-cfdh-open-checkin="'+a.id+'">Abrir lista de presença</button><button class="btn" data-cfdh-list-preview="'+a.id+'">Prévia lista</button>'+(presence?'<button class="btn ghost" data-cfdh-list-pdf="'+a.id+'">PDF</button><button class="btn ghost" data-cfdh-list-docx="'+a.id+'">DOCX</button><button class="btn ghost" data-cfdh-list-print="'+a.id+'">Imprimir</button>':'')+'</div>'+
+      (done?'<div class="notice success compact" style="margin-top:10px"><b>Execução registrada:</b> '+Number(a.actual_duration_hours||0).toLocaleString('pt-BR')+'h · '+esc(a.execution_description||'Sem descrição.')+(Number(a.actual_duration_hours||0)<2?'<br><b>Atenção:</b> ação abaixo de 2h — registrada, mas fora da contagem operacional mínima deste fluxo.':'')+'</div>':'')+
+    '</div>';
+  }).join('');
+  return '<div class="page-head educator-subhead" style="margin-top:24px"><div><h3>Execução, presença e avaliação</h3><p>Cada ação gera sua própria execução e lista nominal. A inscrição no circuito pode ser feita pela própria lista.</p></div><div class="actions"><button class="btn primary" data-nav="cfdh?month='+esc(String(p.planned_start||currentMonth()).slice(0,7))+'&plan='+p.id+'&view=relatorio">'+(bundle.report?'Editar relatório CFDH':'Responder relatório CFDH')+'</button></div></div>'+
+    '<div class="stack">'+(actions||'<div class="card empty">Salve ao menos uma ação para iniciar a execução.</div>')+'</div>'+
+    '<div class="page-head educator-subhead" style="margin-top:20px"><div><h3>Avaliações do circuito</h3><p>O sistema mantém a pendência visível enquanto as avaliações necessárias ainda não estiverem registradas.</p></div></div>'+
+    '<div class="grid two"><div class="card"><div class="actions"><span class="pill">Anexo 12</span><span class="pill '+(youthEval?'success':'warn')+'">'+youthEval+' aplicação(ões)</span></div><h3>Avaliação dos Jovens</h3><p class="muted">Pode ser aplicada periodicamente e ao final do circuito.</p><button class="btn primary" data-nav="formulario/cfdh-avaliacao-jovens?cfdh_plan='+p.id+'&month='+esc(String(p.planned_start||currentMonth()).slice(0,7))+'">Aplicar avaliação dos jovens</button></div>'+
+    '<div class="card"><div class="actions"><span class="pill">Anexo 13</span><span class="pill '+(teamEval?'success':'warn')+'">'+teamEval+' aplicação(ões)</span></div><h3>Avaliação Educadores e Oficineiros</h3><p class="muted">Preenchimento reservado aos Educadores e Coordenação Geral.</p>'+(permitted('workshop_education_docs')?'<button class="btn primary" data-nav="formulario/cfdh-avaliacao-equipe?cfdh_plan='+p.id+'&month='+esc(String(p.planned_start||currentMonth()).slice(0,7))+'">Aplicar avaliação da equipe</button>':'<button class="btn" disabled>Exclusivo Educadores</button>')+'</div></div>';
+}
 function cfdhPlanEditorHtml(bundle){
   const p=bundle.plan,themes=bundle.themes||[],workshops=bundle.workshops||[],alerts=cfdhPlanAlerts(bundle);
   const themeOptions=themes.map(t=>'<option value="'+t.code+'" '+(Number(t.code)===Number(p.cfdh_theme_code)?'selected':'')+'>'+esc(t.code+'. '+t.theme)+'</option>').join('');
@@ -314,7 +332,7 @@ function cfdhPlanEditorHtml(bundle){
         '<div class="card"><div class="actions"><button class="btn primary" type="submit">Salvar planejamento CFDH</button></div></div>'+
       '</div>'+
       '<aside class="methodology-preview-pane"><div class="methodology-preview-toolbar"><div><b>Pré-visualização · Anexo 11</b><span>Atualização em tempo real</span></div><button type="button" class="btn ghost" data-toggle-cfdh-plan-preview>Ocultar</button></div><div class="methodology-preview-scroll" data-cfdh-plan-preview>'+cfdhPlanPreviewHtml(bundle)+'</div></aside>'+
-    '</div></form>';
+    '</div></form>'+cfdhOperationsHtml(bundle);
 }
 function cfdhReportSnapshot(bundle){
   return {
