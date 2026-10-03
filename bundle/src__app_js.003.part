@@ -51,6 +51,9 @@ async function bindRoute(){
   document.querySelector('#dynamic-form')?.addEventListener('submit',async e=>{
     e.preventDefault();
     const f=e.target,payload=parseForm(f),slug=f.dataset.slug,youthId=f.dataset.youth||null;
+    const cfdhPlanId=route().params.get('cfdh_plan'),cfdhActionId=route().params.get('cfdh_action');
+    if(cfdhPlanId)payload._cfdh_plan_id=cfdhPlanId;
+    if(cfdhActionId)payload._cfdh_action_id=cfdhActionId;
     try{
       if(f.dataset.new==='1'){
         const id=await createYouth(payload);
@@ -109,7 +112,8 @@ async function bindRoute(){
       }));
       document.querySelector('[data-evidence-return]')?.addEventListener('click',()=>{
         document.querySelector('#modal')?.remove();
-        if(youthId)nav(`jovem/${youthId}`);else nav('formularios');
+        if(cfdhPlanId)nav('cfdh?month='+(route().params.get('month')||currentMonth())+'&plan='+cfdhPlanId);
+        else if(youthId)nav(`jovem/${youthId}`);else nav('formularios');
       });
     }catch(err){toast(err.message,'danger')}
   });
