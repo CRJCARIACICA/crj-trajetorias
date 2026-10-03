@@ -8,10 +8,13 @@ async function bindCfdhShared(){
     try{
       const dash=await listCfdhMonthDashboard(month),themes=await listCfdhThemes(),cfg=dash.month_theme||null;
       const inheritedTheme=cfg?(cfg.theme_custom||themes.find(t=>Number(t.code)===Number(cfg.theme_code))?.theme||'Tema mensal definido'):'';
+      const themeOptions=themes.map(t=>'<option value="'+t.code+'">'+esc(t.code+'. '+t.theme)+'</option>').join('');
+      const themeFields=cfg
+        ?'<div class="notice success"><b>Tema oficial do mês: '+esc(inheritedTheme)+'</b><br>Este circuito herdará o tema já definido para '+esc(month.split('-').reverse().join('/'))+'.</div><input type="hidden" name="cfdh_theme_code" value="'+esc(cfg.theme_code??'')+'"><input type="hidden" name="cfdh_theme_custom" value="'+esc(cfg.theme_custom||'')+'">'
+        :'<div class="notice info"><b>Defina o tema do mês ao criar o circuito.</b><br>Este será o tema oficial do CFDH para '+esc(month.split('-').reverse().join('/'))+'. As ações receberão esse tema automaticamente e poderão adaptar sua descrição sem alterar o tema mensal.</div>'+
+          '<div class="form-grid"><div class="field"><label>Tema da Metodologia</label><select name="cfdh_theme_code"><option value="">Selecione um tema</option>'+themeOptions+'</select></div><div class="field"><label>Outro tema / adaptação territorial</label><input class="input" name="cfdh_theme_custom" placeholder="Descreva o tema, se necessário"></div></div>';
       modal('Novo circuito CFDH','<form id="new-cfdh-plan-form" class="stack">'+
-        (cfg
-          ?'<div class="notice success"><b>Tema mensal já definido: '+esc(inheritedTheme)+'</b><br>Este novo planejamento herdará o tema automaticamente. Para alterá-lo, edite a primeira ação CFDH que definiu o tema deste mês.</div>'
-          :'<div class="notice info"><b>Primeiro defina o circuito.</b><br>O tema mensal será escolhido dentro da <b>Ação 1</b> deste primeiro planejamento CFDH do mês. Depois de salvo, os próximos planejamentos herdarão o mesmo tema automaticamente.</div>')+
+        themeFields+
         '<div class="form-grid"><div class="field"><label>Modalidade</label><select name="plan_type" required><option value="cfdh_estrutural">CFDH estrutural</option><option value="cfdh_transversal">CFDH transversal</option></select></div><div class="field"><label>Quantidade inicial de ações</label><input class="input" type="number" min="1" max="60" name="cfdh_action_count" value="1" required></div></div>'+
         '<div class="field"><label>Título do circuito</label><input class="input" name="activity_title" required></div>'+
         '<div class="field"><label>Objetivo geral</label><textarea name="description_objective" required></textarea></div>'+
@@ -21,6 +24,7 @@ async function bindCfdhShared(){
         const form=e.currentTarget,btn=form.querySelector('[data-cfdh-create-submit]')||form.querySelector('button[type="submit"]'),status=form.querySelector('[data-cfdh-create-status]');
         if(!form.reportValidity())return;
         const p=parseForm(form);
+        if(!cfg&&!p.cfdh_theme_code&&!String(p.cfdh_theme_custom||'').trim()){toast('Defina o tema mensal antes de criar o circuito.','danger');return}
         if(btn){btn.disabled=true;btn.textContent='Criando e estruturando...'}
         if(status)status.innerHTML='<div class="notice info compact">Criando o circuito e abrindo a estrutura das ações...</div>';
         try{
@@ -63,12 +67,10 @@ async function bindCfdhShared(){
         scheduled_date:v('scheduled_date'),start_time:v('start_time')||null,end_time:v('end_time')||null,
         planned_duration_hours:Number(v('planned_duration_hours')||0),
         location_type:v('location_type')||null,location_other:v('location_other')||null,
-        title:v('title')||('Ação '+(i+1)),objective:v('objective')||'',activities:v('activities')||'',resources:v('resources')||'',
+        title:v('title')||('Ação '+(i+1)),action_theme:v('action_theme')||cfdhMonthlyThemeText(bundle),objective:v('objective')||'',activities:v('activities')||'',resources:v('resources')||'',
         nucleus_code:v('nucleus_code')||'',axis_code:axis||'',item_code:item||null,
         item_label:cat.find(x=>x.axis_code===axis&&x.item_code===item)?.item_label||'',
         classification_group_id:v('classification_group_id')||null,
-        monthly_theme_code:v('monthly_theme_code')||null,
-        monthly_theme_custom:v('monthly_theme_custom')||'',
         responsible_user_ids:[...card.querySelectorAll('[name="responsible_user_id"]:checked')].map(x=>x.value),
         responsible_names:[...card.querySelectorAll('[name="responsible_user_id"]:checked')].map(x=>bundle.team.find(t=>t.id===x.value)?.display_name).filter(Boolean),
         responsible_roles:[...card.querySelectorAll('[name="responsible_user_id"]:checked')].map(x=>bundle.team.find(t=>t.id===x.value)?.role).filter(Boolean),
@@ -394,7 +396,7 @@ async function bindCfdhShared(){
     const resizeActions=()=>{
       const wanted=Math.max(1,Math.min(60,Number(planForm.querySelector('[data-cfdh-action-count]')?.value||1))),current=collectActions();
       if(current.length<wanted){
-        for(let i=current.length;i<wanted;i++){const me=bundle.team.find(t=>t.id===state.user?.id&&['educador','assistente_social','psicologo','terapeuta_ocupacional'].includes(t.role));current.push({action_number:i+1,title:'Ação '+(i+1),planned_duration_hours:2,schedule_mode:collectPlan().plan_type==='cfdh_estrutural'?'structural':'workshop_planned',scheduled_date:'',start_time:'',end_time:'',nucleus_code:'',axis_code:'',item_code:null,responsible_user_ids:me?[me.id]:[],responsible_names:me?[me.display_name]:[],responsible_roles:me?[me.role]:[],monthly_theme_code:null,monthly_theme_custom:''})}
+        for(let i=current.length;i<wanted;i++){const me=bundle.team.find(t=>t.id===state.user?.id&&['educador','assistente_social','psicologo','terapeuta_ocupacional'].includes(t.role));current.push({action_number:i+1,title:'Ação '+(i+1),planned_duration_hours:2,schedule_mode:collectPlan().plan_type==='cfdh_estrutural'?'structural':'workshop_planned',scheduled_date:'',start_time:'',end_time:'',nucleus_code:'',axis_code:'',item_code:null,responsible_user_ids:me?[me.id]:[],responsible_names:me?[me.display_name]:[],responsible_roles:me?[me.role]:[],action_theme:cfdhMonthlyThemeText(bundle)})}
       }else if(current.length>wanted){
         const removed=current.slice(wanted);
         if(removed.some(x=>x.id&&['realizada','parcial'].includes(bundle.actions.find(a=>a.id===x.id)?.execution_status))){toast('Ação já executada não pode ser removida.','danger');planForm.querySelector('[data-cfdh-action-count]').value=current.length;return}
