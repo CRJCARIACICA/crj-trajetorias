@@ -133,6 +133,50 @@ async function bindCfdhShared(){
           if(pill){pill.textContent=ok?'Contabilizável':'Menos de 2h';pill.className='pill '+(ok?'success':'warn')}
           refresh();
         });
+
+        card.querySelector('[data-cfdh-copy-activities]')?.addEventListener('click',()=>{
+          const sourceText=card.querySelector('[name="activities"]')?.value?.trim()||'';
+          if(!sourceText){toast('Preencha primeiro o campo Atividades propostas desta ação.','warn');return}
+          const sourceNumber=Number(card.dataset.actionNumber||0),current=collectActions();
+          const targets=current.map((a,i)=>({...a,number:i+1})).filter(a=>a.number!==sourceNumber);
+          if(!targets.length){toast('Crie pelo menos duas ações para replicar a dinâmica.','warn');return}
+          const sourceAction=current[sourceNumber-1]||{},sourceWorkshop=bundle.workshops.find(w=>w.id===sourceAction.workshop_id);
+          modal('Preencher outras ações a partir desta descrição',
+            '<div class="stack">'+
+              '<div class="notice info"><b>Origem: Ação '+sourceNumber+' · '+esc(sourceAction.title||('Ação '+sourceNumber))+'</b><br>'+
+                esc(sourceWorkshop?.name||'Sem oficina definida')+(sourceAction.scheduled_date?' · '+fmtDate(sourceAction.scheduled_date):'')+
+                '<br><small>Apenas o campo <b>Atividades propostas</b> será copiado. Tema, objetivo, oficina, classificação, data, horário e recursos permanecem independentes.</small></div>'+
+              '<div class="cfdh-copy-preview">'+esc(sourceText)+'</div>'+
+              '<div class="actions"><button type="button" class="btn secondary" data-cfdh-copy-select-all>Selecionar todas</button><button type="button" class="btn ghost" data-cfdh-copy-clear>Desmarcar todas</button></div>'+
+              '<form id="cfdh-copy-activities-form" class="stack"><div class="check-grid cfdh-copy-actions-grid">'+
+                targets.map(a=>{
+                  const w=bundle.workshops.find(x=>x.id===a.workshop_id),hasText=Boolean(String(a.activities||'').trim());
+                  return '<label class="check cfdh-copy-action-option"><input type="checkbox" name="target_action" value="'+a.number+'"><span><b>Ação '+a.number+' · '+esc(a.title||('Ação '+a.number))+'</b><small>'+esc(w?.name||'Sem oficina definida')+(a.scheduled_date?' · '+fmtDate(a.scheduled_date):'')+'</small>'+(hasText?'<em>Já possui atividades — o conteúdo será substituído.</em>':'<em>Campo de atividades vazio.</em>')+'</span></label>';
+                }).join('')+
+              '</div><button type="submit" class="btn primary">Preencher ações selecionadas</button></form>'+
+            '</div>');
+          const copyForm=document.querySelector('#cfdh-copy-activities-form');
+          document.querySelector('[data-cfdh-copy-select-all]')?.addEventListener('click',()=>copyForm?.querySelectorAll('[name="target_action"]').forEach(x=>x.checked=true));
+          document.querySelector('[data-cfdh-copy-clear]')?.addEventListener('click',()=>copyForm?.querySelectorAll('[name="target_action"]').forEach(x=>x.checked=false));
+          copyForm?.addEventListener('submit',e=>{
+            e.preventDefault();
+            const selected=[...copyForm.querySelectorAll('[name="target_action"]:checked')].map(x=>Number(x.value));
+            if(!selected.length){toast('Selecione pelo menos uma ação para receber a dinâmica.','warn');return}
+            let changed=0;
+            for(const number of selected){
+              const targetCard=planForm.querySelector('[data-cfdh-action-card][data-action-number="'+number+'"]');
+              const textarea=targetCard?.querySelector('[name="activities"]');
+              if(!textarea)continue;
+              textarea.value=sourceText;
+              textarea.dispatchEvent(new Event('input',{bubbles:true}));
+              changed++;
+            }
+            document.querySelector('#modal')?.remove();
+            refresh();
+            toast('Dinâmica replicada em '+changed+' ação(ões).');
+          });
+        });
+
         card.addEventListener('input',refresh);card.addEventListener('change',refresh);
       });
     };
