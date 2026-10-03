@@ -128,8 +128,8 @@ export async function getCfdhPlanBundle(planId){
     const aq=await supabase.from('cfdh_attendance').select('action_id,youth_id,present').in('action_id',ids).eq('present',true);
     if(aq.error)throw aq.error;attendance=aq.data||[];
   }
-  const attendance_counts={};
-  for(const a of attendance)attendance_counts[a.action_id]=(attendance_counts[a.action_id]||0)+1;
+  const attendance_counts={},uniqueYouth=new Set();
+  for(const a of attendance){attendance_counts[a.action_id]=(attendance_counts[a.action_id]||0)+1;if(a.youth_id)uniqueYouth.add(a.youth_id)}
   const evaluations=(formsQ.data||[]).filter(x=>x.payload?._cfdh_plan_id===planId);
   return {
     plan,
@@ -140,6 +140,7 @@ export async function getCfdhPlanBundle(planId){
     report:reportQ.data||null,
     evaluations,
     attendance_counts,
+    unique_participants:uniqueYouth.size,
     team:teamQ.data||[]
   };
 }
