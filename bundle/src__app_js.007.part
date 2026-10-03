@@ -414,6 +414,8 @@ function cfdhPlanAlerts(bundle){
   for(const a of actions){
     if(!(a.responsible_user_ids||[]).length)alerts.push('Ação '+a.action_number+': selecione ao menos um responsável entre Educadores e Equipe Técnica.');
     if(!a.scheduled_date)alerts.push('Ação '+a.action_number+': informe a data.');
+    if(!a.start_time)alerts.push('Ação '+a.action_number+': informe o horário de início.');
+    if(a.start_time&&!a.end_time)alerts.push('Ação '+a.action_number+': a carga horária informada ultrapassa o limite do dia ou não permitiu calcular o término.');
     if(!a.nucleus_code||!a.axis_code)alerts.push('Ação '+a.action_number+': classifique Núcleo e Eixo.');
     const hasItems=Boolean((bundle?.classification||[]).find(x=>x.axis_code===a.axis_code&&x.item_code));
     if(hasItems&&!a.item_code)alerts.push('Ação '+a.action_number+': selecione o Item da Metodologia.');
