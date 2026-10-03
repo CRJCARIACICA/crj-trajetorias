@@ -10,13 +10,30 @@ export async function listEducatorPlans(month=monthKey(),userId=null){
   if(userId)q=q.eq('educator_user_id',userId);
   const {data,error}=await q;if(error)throw error;return data||[];
 }
+function normalizeEducatorPlanPayload(row){
+  const cfdh=['cfdh_estrutural','cfdh_transversal'].includes(row.plan_type);
+  return {
+    ...row,
+    expected_participants:row.expected_participants===''?null:Number(row.expected_participants||0)||null,
+    planned_duration_hours:row.planned_duration_hours===''?null:Number(row.planned_duration_hours||0)||null,
+    workshop_id:cfdh?null:(row.workshop_id||null),
+    planned_start:row.planned_start||null,
+    planned_end:row.planned_end||null,
+    start_time:row.start_time||null,
+    end_time:row.end_time||null,
+    cfdh_theme_code:row.cfdh_theme_code===''||row.cfdh_theme_code==null?null:Number(row.cfdh_theme_code),
+    cfdh_theme_custom:row.cfdh_theme_custom||null,
+    cfdh_action_count:row.cfdh_action_count===''||row.cfdh_action_count==null?null:Number(row.cfdh_action_count),
+    cfdh_monthly_notes:row.cfdh_monthly_notes||null
+  };
+}
 export async function createEducatorPlan(row){
-  const payload={...row,expected_participants:row.expected_participants===''?null:Number(row.expected_participants||0)||null,planned_duration_hours:row.planned_duration_hours===''?null:Number(row.planned_duration_hours||0)||null,workshop_id:row.workshop_id||null,planned_start:row.planned_start||null,planned_end:row.planned_end||null,start_time:row.start_time||null,end_time:row.end_time||null};
+  const payload=normalizeEducatorPlanPayload(row);
   if(mode==='mock'){const st=mock();st.educatorPlans||=[];const rec={id:uid('plan'),...payload,educator_user_id:st.currentUser.id,status:'planejado',created_at:now(),updated_at:now()};st.educatorPlans.push(rec);save(st);return rec;}
   const {data,error}=await supabase.from('educator_plans').insert(payload).select('*').single();if(error)throw error;return data;
 }
 export async function updateEducatorPlan(id,row){
-  const payload={...row,expected_participants:row.expected_participants===''?null:Number(row.expected_participants||0)||null,planned_duration_hours:row.planned_duration_hours===''?null:Number(row.planned_duration_hours||0)||null,workshop_id:row.workshop_id||null,planned_start:row.planned_start||null,planned_end:row.planned_end||null,start_time:row.start_time||null,end_time:row.end_time||null,updated_at:now()};
+  const payload={...normalizeEducatorPlanPayload(row),updated_at:now()};
   if(mode==='mock'){const st=mock(),rec=(st.educatorPlans||[]).find(x=>x.id===id);if(!rec)throw new Error('Planejamento não encontrado');Object.assign(rec,payload);save(st);return rec;}
   const {data,error}=await supabase.from('educator_plans').update(payload).eq('id',id).select('*').single();if(error)throw error;return data;
 }
@@ -28,8 +45,21 @@ export async function listEducatorReports(userId=null){
   const {data,error}=await q;if(error)throw error;return data||[];
 }
 export async function createEducatorReport(row){
-  const payload={...row,actual_participants:row.actual_participants===''?null:Number(row.actual_participants||0)||0,actual_duration_hours:row.actual_duration_hours===''?null:Number(row.actual_duration_hours||0)||0,actual_start:row.actual_start||null,actual_end:row.actual_end||null};
-  if(mode==='mock'){const st=mock();st.educatorReports||=[];const rec={id:uid('rpt'),...payload,educator_user_id:st.currentUser.id,created_at:now(),updated_at:now()};st.educatorReports.push(rec);save(st);return rec;}
+  const payload={
+    ...row,
+    actual_participants:row.actual_participants===''?null:Number(row.actual_participants||0)||0,
+    actual_duration_hours:row.actual_duration_hours===''?null:Number(row.actual_duration_hours||0)||0,
+    actual_start:row.actual_start||null,
+    actual_end:row.actual_end||null,
+    methodology_applied:row.methodology_applied||null,
+    results_achieved:row.results_achieved||null,
+    youth_feedback:row.youth_feedback||null,
+    next_steps:row.next_steps||null,
+    observations:row.observations||null,
+    execution_snapshot:row.execution_snapshot||{},
+    updated_at:now()
+  };
+  if(mode==='mock'){const st=mock();st.educatorReports||=[];let rec=(st.educatorReports||[]).find(x=>x.plan_id===row.plan_id);if(rec)Object.assign(rec,payload);else{rec={id:uid('rpt'),...payload,educator_user_id:st.currentUser.id,created_at:now()};st.educatorReports.push(rec)}save(st);return rec;}
   const {data,error}=await supabase.from('educator_reports').upsert(payload,{onConflict:'plan_id'}).select('*').single();if(error)throw error;return data;
 }
 
