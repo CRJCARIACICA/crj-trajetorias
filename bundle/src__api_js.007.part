@@ -141,8 +141,8 @@ export async function getCfdhPlanBundle(planId){
   });
   const month_theme=monthThemeQ.data||null;
   const resolvedPlan={...plan,
-    cfdh_theme_code:month_theme?.theme_code??plan.cfdh_theme_code??null,
-    cfdh_theme_custom:month_theme?.theme_custom??plan.cfdh_theme_custom??null
+    cfdh_theme_code:month_theme?.theme_code??null,
+    cfdh_theme_custom:month_theme?.theme_custom??null
   };
   const evaluations=(formsQ.data||[]).filter(x=>x.payload?._cfdh_plan_id===planId);
   return {
@@ -175,7 +175,7 @@ export async function listCfdhMonthDashboard(month=monthKey()){
   ]);
   if(aq.error)throw aq.error;if(rq.error)throw rq.error;if(formsQ.error)throw formsQ.error;if(monthThemeQ.error)throw monthThemeQ.error;
   const actions=aq.data||[],reports=rq.data||[],forms=formsQ.data||[],month_theme=monthThemeQ.data||null;
-  const resolvedPlans=plans.map(p=>({...p,cfdh_theme_code:month_theme?.theme_code??p.cfdh_theme_code??null,cfdh_theme_custom:month_theme?.theme_custom??p.cfdh_theme_custom??null}));
+  const resolvedPlans=plans.map(p=>({...p,cfdh_theme_code:month_theme?.theme_code??null,cfdh_theme_custom:month_theme?.theme_custom??null}));
   const countable=x=>Number(x||0)>=2?Number(x||0):0;
   let pending=0;
   for(const p of plans){
