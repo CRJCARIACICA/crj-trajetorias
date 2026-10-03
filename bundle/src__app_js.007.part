@@ -414,10 +414,10 @@ function cfdhCalendarPickerHtml(bundle,a,index){
   const firstDow=(new Date(y,m-1,1).getDay()+6)%7,selected=a.scheduled_date||'',cells=[];
   for(let i=0;i<firstDow;i++)cells.push('<span class="cfdh-calendar-pad"></span>');
   for(let d=1;d<=last;d++){
-    const date=month+'-'+String(d).padStart(2,'0'),entries=cfdhCalendarEntriesForDay(bundle,date,a),busy=entries.length,special=cfdhSpecialDayState(bundle,date),weekend=[0,6].includes(cfdhWeekday(date)),closed=special.closed;
-    const dayClass=closed?'closed':special.pending?'pending':busy?'busy':'free';
+    const date=month+'-'+String(d).padStart(2,'0'),entries=cfdhCalendarEntriesForDay(bundle,date,a),busy=entries.length,special=cfdhSpecialDayState(bundle,date),weekend=[0,6].includes(cfdhWeekday(date)),closed=special.closed,blocked=closed||(bundle?.plan?.plan_type==='cfdh_estrutural'&&weekend);
+    const dayClass=closed?'closed':special.pending?'pending':weekend?'weekend':busy?'busy':'free';
     const label=closed?'fechado':special.pending?'aprovação':weekend?'fim semana':busy?busy+' ocup.':'livre';
-    cells.push('<button type="button" class="cfdh-calendar-day '+(selected===date?'selected ':'')+dayClass+'" data-cfdh-calendar-day="'+date+'" '+(closed?'disabled':'')+'><b>'+d+'</b><small>'+esc(label)+'</small></button>');
+    cells.push('<button type="button" class="cfdh-calendar-day '+(selected===date?'selected ':'')+dayClass+'" data-cfdh-calendar-day="'+date+'" '+(blocked?'disabled':'')+'><b>'+d+'</b><small>'+esc(label)+'</small></button>');
   }
   return '<div class="cfdh-calendar-picker" data-cfdh-calendar-picker>'+
     '<div class="page-head compact"><div><label>Data pelo calendário do CRJ</label><small>Escolha o dia visualizando oficinas, CFDHs, agenda técnica e eventos já registrados.</small></div><button type="button" class="btn secondary" data-cfdh-toggle-calendar>'+(selected?'Trocar data':'Escolher data')+'</button></div>'+
