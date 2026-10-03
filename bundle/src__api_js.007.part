@@ -202,10 +202,23 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
   const current=await getCfdhPlanBundle(planId);
   const planType=plan.plan_type||current.plan.plan_type;
   const selected=[...new Set((planType==='cfdh_transversal'?workshop_ids:[]).filter(Boolean))];
+  if(!actions.length)throw new Error('Crie ao menos uma ação CFDH antes de salvar.');
+
+  for(let i=0;i<actions.length;i++){
+    const responsibleIds=[...new Set((actions[i].responsible_user_ids||[]).filter(Boolean))];
+    if(!responsibleIds.length)throw new Error('Ação '+(i+1)+': selecione ao menos um responsável entre Educadores e Equipe Técnica.');
+  }
+
+  const first=actions[0]||{};
+  const inheritedTheme=current.month_theme;
+  const themeCode=inheritedTheme?.theme_code??(first.monthly_theme_code?Number(first.monthly_theme_code):null);
+  const themeCustom=inheritedTheme?.theme_custom??(first.monthly_theme_custom||null);
   const parent={
     ...plan,
     plan_type:planType,
     workshop_id:null,
+    cfdh_theme_code:themeCode,
+    cfdh_theme_custom:themeCustom,
     cfdh_action_count:actions.length||Number(plan.cfdh_action_count||0)||null,
     planned_duration_hours:Number(actions.reduce((n,a)=>n+Number(a.planned_duration_hours||0),0).toFixed(2)),
     planned_start:actions.map(a=>a.scheduled_date).filter(Boolean).sort()[0]||plan.planned_start||current.plan.planned_start,
@@ -223,7 +236,7 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
   const existing=current.actions||[],keepIds=new Set();
   const saved=[];
   for(let i=0;i<actions.length;i++){
-    const a=actions[i],payload={
+    const a=actions[i],responsibleIds=[...new Set((a.responsible_user_ids||[]).filter(Boolean))],payload={
       plan_id:planId,
       action_number:i+1,
       workshop_id:planType==='cfdh_transversal'?(a.workshop_id||null):null,
@@ -238,13 +251,16 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
       nucleus_code:a.nucleus_code||null,axis_code:a.axis_code||null,
       item_code:a.item_code||null,item_label:a.item_label||null,
       classification_group_id:a.classification_group_id||null,
+      monthly_theme_code:a.monthly_theme_code?Number(a.monthly_theme_code):null,
+      monthly_theme_custom:a.monthly_theme_custom||null,
       updated_at:now()
     };
     const prior=a.id?existing.find(x=>x.id===a.id):existing.find(x=>x.action_number===i+1);
     let row;
     const structuralChange=prior&&(prior.workshop_id!==payload.workshop_id||prior.schedule_mode!==payload.schedule_mode);
+    const isThemeSource=Boolean(prior&&current.month_theme?.source_action_id===prior.id);
     if(prior&&structuralChange&&['realizada','parcial'].includes(prior.execution_status))throw new Error('Não é possível trocar oficina ou modalidade de agenda de uma ação CFDH já executada.');
-    if(prior&&structuralChange){
+    if(prior&&structuralChange&&!isThemeSource){
       const del=await supabase.rpc('delete_cfdh_action',{p_action_id:prior.id});if(del.error)throw del.error;
       const q=await supabase.from('cfdh_actions').insert(payload).select('*').single();if(q.error)throw q.error;row=q.data;
     }else if(prior){
@@ -252,6 +268,12 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
     }else{
       const q=await supabase.from('cfdh_actions').insert(payload).select('*').single();if(q.error)throw q.error;row=q.data;
     }
+
+    const rd=await supabase.from('cfdh_action_responsibles').delete().eq('action_id',row.id);
+    if(rd.error)throw rd.error;
+    const ri=await supabase.from('cfdh_action_responsibles').insert(responsibleIds.map(user_id=>({action_id:row.id,user_id})));
+    if(ri.error)throw ri.error;
+
     keepIds.add(row.id);saved.push(row);
     if(planType==='cfdh_transversal'){
       const sync=await supabase.rpc('sync_cfdh_action_to_workshop',{p_action_id:row.id});if(sync.error)throw sync.error;
@@ -260,6 +282,7 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
   for(const old of existing){
     if(!keepIds.has(old.id)){
       if(['realizada','parcial'].includes(old.execution_status))throw new Error('Ação CFDH executada não pode ser removida do planejamento.');
+      if(current.month_theme?.source_action_id===old.id)throw new Error('A primeira ação que define o tema mensal não pode ser removida.');
       const del=await supabase.rpc('delete_cfdh_action',{p_action_id:old.id});if(del.error)throw del.error;
     }
   }
