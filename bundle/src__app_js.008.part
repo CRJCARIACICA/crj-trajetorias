@@ -246,6 +246,19 @@ async function bindCfdhShared(){
         const modeInput=card.querySelector('[name="schedule_mode"]'),calendarIdInput=card.querySelector('[name="workshop_calendar_id"]'),scheduleStatus=card.querySelector('[data-cfdh-schedule-link-status]');
         const calendarPanel=card.querySelector('[data-cfdh-calendar-panel]'),dayDetail=card.querySelector('[data-cfdh-calendar-day-detail]'),selectedBox=card.querySelector('[data-cfdh-calendar-selected]');
 
+        const syncStructuralBounds=()=>{
+          if(!startInput)return;
+          if(collectPlan().plan_type!=='cfdh_estrutural'){
+            startInput.removeAttribute('min');startInput.removeAttribute('max');return;
+          }
+          const win=cfdhStructuralWindow(dateInput?.value||'');
+          if(!win){startInput.removeAttribute('min');startInput.removeAttribute('max');return}
+          const mins=Math.round(Number(durationInput?.value||0)*60),latest=cfdhTimeMinutes(win.end)-mins;
+          startInput.min=win.start;
+          startInput.max=latest>=cfdhTimeMinutes(win.start)?cfdhMinutesTime(latest):win.start;
+          const cur=cfdhTimeMinutes(startInput.value),min=cfdhTimeMinutes(startInput.min),max=cfdhTimeMinutes(startInput.max);
+          if(cur!=null&&(cur<min||cur>max)){startInput.value='';if(endInput)endInput.value=''}
+        };
         const syncCalculatedEnd=()=>{
           if(!endInput)return;
           endInput.value=cfdhAutoEndTime(startInput?.value,durationInput?.value);
@@ -280,17 +293,19 @@ async function bindCfdhShared(){
           if(dateInput)dateInput.value=date;
           card.querySelectorAll('[data-cfdh-calendar-day]').forEach(x=>x.classList.toggle('selected',x===btn));
           if(selectedBox){selectedBox.classList.remove('hidden');selectedBox.innerHTML='<b>Dia selecionado:</b> <span>'+esc(fmtDate(date))+'</span>'}
+          const special=cfdhSpecialDayState(draftBundle(),date);
+          if(special.pending)toast(special.day.name+': fechamento depende de aprovação. A data continua disponível manualmente até que o fechamento seja aprovado.','warn');
           updateDayDetail();
-          syncCalculatedEnd();syncTransversalCalendarLink();updateConflictBox();refresh();
+          syncStructuralBounds();syncCalculatedEnd();syncTransversalCalendarLink();updateConflictBox();refresh();
         }));
         workshop?.addEventListener('change',()=>{syncTransversalCalendarLink();updateConflictBox();refresh()});
-        startInput?.addEventListener('input',()=>{syncCalculatedEnd();syncTransversalCalendarLink();updateConflictBox();refresh()});
+        startInput?.addEventListener('input',()=>{syncStructuralBounds();syncCalculatedEnd();syncTransversalCalendarLink();updateConflictBox();refresh()});
         durationInput?.addEventListener('input',e=>{
           const pill=card.querySelector('[data-cfdh-count-status]'),ok=Number(e.target.value||0)>=2;
           if(pill){pill.textContent=ok?'Contabilizável':'Menos de 2h';pill.className='pill '+(ok?'success':'warn')}
-          syncCalculatedEnd();syncTransversalCalendarLink();updateConflictBox();refresh();
+          syncStructuralBounds();syncCalculatedEnd();syncTransversalCalendarLink();updateConflictBox();refresh();
         });
-        syncCalculatedEnd();syncTransversalCalendarLink();updateDayDetail();updateConflictBox();
+        syncStructuralBounds();syncCalculatedEnd();syncTransversalCalendarLink();updateDayDetail();updateConflictBox();
 
         card.querySelector('[data-cfdh-link-classification]')?.addEventListener('click',()=>{
           const sourceNumber=Number(card.dataset.actionNumber||0),current=collectActions(),source=current[sourceNumber-1]||{};
