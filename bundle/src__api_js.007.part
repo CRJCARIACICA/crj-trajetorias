@@ -220,6 +220,7 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
       objective:a.objective||null,activities:a.activities||null,resources:a.resources||null,
       nucleus_code:a.nucleus_code||null,axis_code:a.axis_code||null,
       item_code:a.item_code||null,item_label:a.item_label||null,
+      classification_group_id:a.classification_group_id||null,
       updated_at:now()
     };
     const prior=a.id?existing.find(x=>x.id===a.id):existing.find(x=>x.action_number===i+1);
