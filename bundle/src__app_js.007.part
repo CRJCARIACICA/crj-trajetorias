@@ -556,6 +556,20 @@ function cfdhSmartDistributionModalHtml(bundle,suggestions){
     '<div class="actions"><button type="button" class="btn primary" data-cfdh-apply-smart-distribution>Aplicar distribuição inteligente</button><button type="button" class="btn ghost" data-cfdh-cancel-smart-distribution>Cancelar</button></div>'+
   '</div>';
 }
+function cfdhOperatingCalendarPanelHtml(specialDays=[],month=currentMonth()){
+  const days=(specialDays||[]).filter(x=>String(x.calendar_date||'').slice(0,7)===month),canDecide=state.user?.role==='coordenacao_geral';
+  const rows=days.map(x=>{
+    const auto=x.closure_policy==='auto_closed',closed=auto||x.approval_status==='closed',pending=!auto&&x.approval_status==='pending',open=!auto&&x.approval_status==='open';
+    const status=closed?'Fechado':pending?'Aprovação pendente':'Funcionamento mantido';
+    const cls=closed?'danger':pending?'warn':'success';
+    const scope=x.jurisdiction==='national'?'Nacional':x.jurisdiction==='state_es'?'Estadual · ES':x.jurisdiction==='municipal_cariacica'?'Municipal · Cariacica':'Nacional/estadual/municipal';
+    const actions=(!auto&&canDecide)?'<div class="actions"><button class="btn danger" data-crj-special-close="'+x.id+'">Aprovar fechamento</button><button class="btn secondary" data-crj-special-open="'+x.id+'">Manter aberto</button></div>':'';
+    return '<div class="crj-special-day-row"><div><b>'+esc(fmtDate(x.calendar_date))+' · '+esc(x.name)+'</b><span>'+esc(scope)+' · '+esc(x.day_type==='holiday'?'Feriado':'Ponto facultativo')+'</span>'+(x.approval_note?'<small>'+esc(x.approval_note)+'</small>':'')+'</div><div><span class="pill '+cls+'">'+status+'</span>'+actions+'</div></div>';
+  }).join('');
+  return '<div class="card crj-operating-calendar-card" style="margin-top:16px"><div class="page-head compact"><div><h3>Calendário operacional do CRJ</h3><p>Funcionamento geral: '+CRJ_OPEN_START+'–'+CRJ_OPEN_END+' · ações estruturais: '+CRJ_ACTION_START+'–'+CRJ_ACTION_END+' de segunda a sexta · segunda-feira com reunião geral '+CRJ_MONDAY_MEETING_START+'–'+CRJ_MONDAY_MEETING_END+'.</p></div></div>'+
+    '<div class="notice info compact"><b>Regra de fechamento:</b> feriados nacionais e estaduais do Espírito Santo fecham automaticamente. Feriados municipais de Cariacica e pontos facultativos só fecham após aprovação registrada.'+(canDecide?' Como Coordenação, você pode registrar a decisão abaixo.':'')+'</div>'+
+    '<div class="crj-special-days">'+(rows||'<div class="empty">Nenhum feriado ou ponto facultativo cadastrado para este mês.</div>')+'</div></div>';
+}
 function cfdhPlanAlerts(bundle){
   const p=bundle?.plan||{},actions=bundle?.actions||[],selected=bundle?.workshop_ids||[],calendar=bundle?.calendar||[],evals=bundle?.evaluations||[],alerts=[],themeState=cfdhMonthlyThemeState(bundle,actions);
   if(!themeState.code&&!String(themeState.custom||'').trim())alerts.push('Defina o tema mensal ao criar o circuito CFDH.');
@@ -758,12 +772,12 @@ async function pageCfdhShared(){
   if(!permitted('cfdh_shared'))return '<div class="notice danger">Seu perfil não possui acesso ao CFDH compartilhado.</div>';
   const rr=route(),month=rr.params.get('month')||currentMonth(),planId=rr.params.get('plan')||'',view=rr.params.get('view')||'planejamento';
   if(planId){
-    const [bundle,themes,classification,indicators,monthDashboard,crjCalendar,smartSignals]=await Promise.all([getCfdhPlanBundle(planId),listCfdhThemes(),listMethodologyClassificationCatalog(),listIndicatorCatalog(),listCfdhMonthDashboard(month),listCrjPlanningCalendar(month),getCfdhStructuralDistributionSignals(month)]);
-    bundle.themes=themes;bundle.classification=classification;bundle.indicators=indicators;bundle.month_dashboard=monthDashboard;bundle.crj_calendar=crjCalendar;bundle.smart_signals=smartSignals;
+    const [bundle,themes,classification,indicators,monthDashboard,crjCalendar,smartSignals,specialDays]=await Promise.all([getCfdhPlanBundle(planId),listCfdhThemes(),listMethodologyClassificationCatalog(),listIndicatorCatalog(),listCfdhMonthDashboard(month),listCrjPlanningCalendar(month),getCfdhStructuralDistributionSignals(month),listCrjSpecialDays(Number(month.slice(0,4)))]);
+    bundle.themes=themes;bundle.classification=classification;bundle.indicators=indicators;bundle.month_dashboard=monthDashboard;bundle.crj_calendar=crjCalendar;bundle.smart_signals=smartSignals;bundle.special_days=specialDays;
     if(view==='relatorio')return cfdhReportEditorHtml(bundle);
     return cfdhPlanEditorHtml(bundle);
   }
-  const [dash,themes]=await Promise.all([listCfdhMonthDashboard(month),listCfdhThemes()]);
+  const [dash,themes,specialDays]=await Promise.all([listCfdhMonthDashboard(month),listCfdhThemes(),listCrjSpecialDays(Number(month.slice(0,4)))]);
   const monthThemeText=dash.month_theme?(dash.month_theme.theme_custom||themes.find(t=>Number(t.code)===Number(dash.month_theme.theme_code))?.theme||'Tema definido'):'Ainda não definido — será definido ao criar o primeiro circuito CFDH do mês';
   const target=Math.min(100,(Number(dash.metrics.countable_executed_hours||0)/CFDH_MONTH_TARGET)*100),struct=Math.min(100,(Number(dash.metrics.structural_hours||0)/CFDH_STRUCTURAL_MIN)*100);
   const plannedTotal=Number(dash.metrics.countable_planned_hours||0),plannedStructural=Number(dash.metrics.structural_planned_hours||0),plannedTransversal=Number(dash.metrics.transversal_planned_hours||0);
@@ -776,6 +790,7 @@ async function pageCfdhShared(){
   }).join('');
   return '<div class="page-head"><div><h2>CFDH compartilhado</h2><p>Tema mensal → planejamento por ações → execução → presença → avaliação → relatório.</p></div><div class="actions"><button class="btn primary" data-new-cfdh-plan>+ Novo circuito CFDH</button></div></div>'+
     '<div class="card"><div class="form-grid"><div class="field"><label>Mês de referência</label><input class="input" type="month" data-cfdh-month value="'+esc(month)+'"></div><div class="field"><label>Participação na construção</label><div class="input read-only">Educadores · Psicologia · Serviço Social · Terapia Ocupacional</div></div></div><div class="notice '+(dash.month_theme?'success':'warn')+'" style="margin-top:12px"><b>Tema oficial do mês:</b> '+esc(monthThemeText)+'<br><small>'+(dash.month_theme?'Usa como referência o primeiro planejamento CFDH criado no mês. O tema pode ser alterado depois quando houver necessidade pontual, e a mudança passa a valer para os demais circuitos do mês.':'Clique em <b>Novo circuito CFDH</b> para definir o tema inicial deste mês.')+'</small></div></div>'+
+    cfdhOperatingCalendarPanelHtml(specialDays,month)+
     plannedGoalNotice+
     '<div class="grid cards cfdh-progress-grid" style="margin-top:16px"><div class="card kpi"><div class="label">CFDH executado</div><div class="value">'+Number(dash.metrics.countable_executed_hours||0).toLocaleString('pt-BR')+'h</div><div class="progress"><span style="width:'+target+'%"></span></div><div class="meta">Referência mensal: '+CFDH_MONTH_TARGET+'h</div></div><div class="card kpi"><div class="label">CFDH estrutural</div><div class="value">'+Number(dash.metrics.structural_hours||0).toLocaleString('pt-BR')+'h</div><div class="progress"><span style="width:'+struct+'%"></span></div><div class="meta">Referência mínima estrutural: '+CFDH_STRUCTURAL_MIN+'h</div></div><div class="card kpi"><div class="label">Pendências</div><div class="value">'+Number(dash.metrics.pending||0)+'</div><div class="meta">relatórios, avaliações ou execução</div></div></div>'+
     '<div class="page-head educator-subhead"><div><h3>Circuitos do mês</h3><p>Ações com menos de 2h permanecem registradas, mas ficam sinalizadas fora da contagem operacional mínima configurada.</p></div></div><div class="grid two">'+(cards||'<div class="card empty">Nenhum planejamento CFDH neste mês.</div>')+'</div>'+
