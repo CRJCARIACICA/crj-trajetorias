@@ -191,6 +191,17 @@ function cfdhTypeLabel(t){return t==='cfdh_transversal'?'CFDH transversal':'CFDH
 function cfdhThemeText(plan,themes=[]){
   return plan?.cfdh_theme_custom||themes.find(x=>Number(x.code)===Number(plan?.cfdh_theme_code))?.theme||plan?.activity_title||'Tema não definido';
 }
+function cfdhMonthlyThemeState(bundle,actions=bundle?.actions||[]){
+  const cfg=bundle?.month_theme||null,source=cfg?.source_action_id?actions.find(a=>a.id===cfg.source_action_id):actions[0];
+  const editingSource=Boolean(source&&(!cfg||source.id===cfg.source_action_id));
+  const code=editingSource?(source?.monthly_theme_code??cfg?.theme_code??null):(cfg?.theme_code??null);
+  const custom=editingSource?(source?.monthly_theme_custom??cfg?.theme_custom??''):(cfg?.theme_custom??'');
+  return {code,custom,source,source_action_id:cfg?.source_action_id||source?.id||null,locked:Boolean(cfg&&!editingSource)};
+}
+function cfdhMonthlyThemeText(bundle,actions=bundle?.actions||[]){
+  const x=cfdhMonthlyThemeState(bundle,actions),themes=bundle?.themes||[];
+  return x.custom||themes.find(t=>Number(t.code)===Number(x.code))?.theme||'Tema mensal ainda não definido';
+}
 function cfdhClassificationOptions(catalog,action={}){
   const nuclei=[...new Map(catalog.map(x=>[x.nucleus_code,{code:x.nucleus_code,name:x.nucleus_name}])).values()];
   const axes=[...new Map(catalog.filter(x=>x.nucleus_code===action.nucleus_code).map(x=>[x.axis_code,{code:x.axis_code,name:x.axis_name}])).values()];
@@ -206,13 +217,14 @@ function cfdhActionCountableHours(a,actual=false){
   return h>=CFDH_ACTION_COUNT_MIN_HOURS?h:0;
 }
 function cfdhPlanAlerts(bundle){
-  const p=bundle?.plan||{},actions=bundle?.actions||[],selected=bundle?.workshop_ids||[],calendar=bundle?.calendar||[],evals=bundle?.evaluations||[],alerts=[];
-  if(!p.cfdh_theme_code&&!String(p.cfdh_theme_custom||'').trim())alerts.push('Defina o tema mensal do CFDH.');
+  const p=bundle?.plan||{},actions=bundle?.actions||[],selected=bundle?.workshop_ids||[],calendar=bundle?.calendar||[],evals=bundle?.evaluations||[],alerts=[],themeState=cfdhMonthlyThemeState(bundle,actions);
+  if(!themeState.code&&!String(themeState.custom||'').trim())alerts.push('Defina o tema mensal na primeira ação CFDH do mês.');
   if(!actions.length)alerts.push('Crie ao menos uma ação para o circuito.');
   if(Number(p.cfdh_action_count||actions.length)!==actions.length)alerts.push('A quantidade de ações informada não corresponde às ações estruturadas.');
   if(p.plan_type==='cfdh_estrutural'&&selected.length)alerts.push('CFDH estrutural não pode possuir oficina vinculada.');
   if(p.plan_type==='cfdh_transversal'&&!selected.length)alerts.push('CFDH transversal precisa estar vinculado a uma ou mais oficinas.');
   for(const a of actions){
+    if(!(a.responsible_user_ids||[]).length)alerts.push('Ação '+a.action_number+': selecione ao menos um responsável entre Educadores e Equipe Técnica.');
     if(!a.scheduled_date)alerts.push('Ação '+a.action_number+': informe a data.');
     if(!a.nucleus_code||!a.axis_code)alerts.push('Ação '+a.action_number+': classifique Núcleo e Eixo.');
     const hasItems=Boolean((bundle?.classification||[]).find(x=>x.axis_code===a.axis_code&&x.item_code));
@@ -238,14 +250,16 @@ function cfdhPlanAlerts(bundle){
   return [...new Set(alerts)];
 }
 function cfdhPlanPreviewHtml(bundle,draft=null){
-  const p=draft?.plan||bundle?.plan||{},actions=draft?.actions||bundle?.actions||[],themes=bundle?.themes||[],workshops=bundle?.workshops||[],catalog=bundle?.classification||[];
-  const selected=draft?.workshop_ids||bundle?.workshop_ids||[];
-  const theme=cfdhThemeText(p,themes),planned=actions.reduce((n,a)=>n+Number(a.planned_duration_hours||0),0),countable=actions.reduce((n,a)=>n+cfdhActionCountableHours(a),0);
+  const p=draft?.plan||bundle?.plan||{},actions=draft?.actions||bundle?.actions||[],themes=bundle?.themes||[],workshops=bundle?.workshops||[],catalog=bundle?.classification||[],team=bundle?.team||[];
+  const selected=draft?.workshop_ids||bundle?.workshop_ids||[],themeBundle={...bundle,plan:p};
+  const theme=cfdhMonthlyThemeText(themeBundle,actions),planned=actions.reduce((n,a)=>n+Number(a.planned_duration_hours||0),0),countable=actions.reduce((n,a)=>n+cfdhActionCountableHours(a),0);
   const rows=actions.map(a=>{
     const w=workshops.find(x=>x.id===a.workshop_id),n=catalog.find(x=>x.nucleus_code===a.nucleus_code),ax=catalog.find(x=>x.axis_code===a.axis_code),it=catalog.find(x=>x.axis_code===a.axis_code&&x.item_code===a.item_code);
+    const responsibleNames=(a.responsible_names?.length?a.responsible_names:(a.responsible_user_ids||[]).map(id=>team.find(t=>t.id===id)?.display_name).filter(Boolean));
     return '<tr><td><b>Ação '+esc(a.action_number)+'</b><br>'+esc(fmtDate(a.scheduled_date))+'<br>'+esc(String(a.start_time||'').slice(0,5))+'–'+esc(String(a.end_time||'').slice(0,5))+'</td>'+
       '<td>'+esc(a.title||'')+'<br><small>'+esc(a.objective||'')+'</small></td>'+
       '<td>'+esc(n?.nucleus_name||a.nucleus_code||'')+'<br><b>'+esc(ax?.axis_name||a.axis_code||'')+'</b>'+(it?'<br>'+esc(it.item_code)+') '+esc(it.item_label):'')+'</td>'+
+      '<td>'+esc(responsibleNames.join(', ')||'Não definido')+'</td>'+
       '<td>'+esc(w?.name||(p.plan_type==='cfdh_estrutural'?'Ação própria / sem oficina':'—'))+'<br><small>'+esc(a.schedule_mode==='atypical'?'Dia/horário atípico':a.schedule_mode==='workshop_planned'?'Dia planejado da oficina':'Estrutural')+'</small></td>'+
       '<td>'+esc(a.activities||'')+'</td><td>'+esc(a.resources||'')+'</td>'+
       '<td>'+Number(a.planned_duration_hours||0).toLocaleString('pt-BR')+'h'+(Number(a.planned_duration_hours||0)<2?'<br><small>não contabiliza</small>':'')+'</td></tr>';
@@ -260,7 +274,7 @@ function cfdhPlanPreviewHtml(bundle,draft=null){
     '<div class="methodology-row methodology-row-tall"><b>Objetivo:</b><div class="methodology-answer">'+esc(p.description_objective||'')+'</div></div>'+
     '<div class="methodology-row"><b>Oficinas vinculadas:</b><span class="methodology-inline-answer">'+esc(p.plan_type==='cfdh_estrutural'?'Não se aplica':selected.map(id=>workshops.find(w=>w.id===id)?.name).filter(Boolean).join(', ')||'Nenhuma selecionada')+'</span></div>'+
     '<div class="methodology-row"><b>Ações planejadas:</b><span class="methodology-inline-answer">'+actions.length+' · '+planned.toLocaleString('pt-BR')+'h previstas · '+countable.toLocaleString('pt-BR')+'h contabilizáveis pela regra operacional de 2h</span></div>'+
-    '<table class="methodology-planning-table cfdh-plan-table"><thead><tr><th>Ação / data</th><th>Tema / objetivo</th><th>Núcleo → Eixo → Item</th><th>Oficina / agenda</th><th>Atividades</th><th>Recursos</th><th>CH</th></tr></thead><tbody>'+(rows||'<tr><td colspan="7">Nenhuma ação estruturada.</td></tr>')+'</tbody></table>'+
+    '<table class="methodology-planning-table cfdh-plan-table"><thead><tr><th>Ação / data</th><th>Tema / objetivo</th><th>Núcleo → Eixo → Item</th><th>Responsável(is)</th><th>Oficina / agenda</th><th>Atividades</th><th>Recursos</th><th>CH</th></tr></thead><tbody>'+(rows||'<tr><td colspan="8">Nenhuma ação estruturada.</td></tr>')+'</tbody></table>'+
     '<div class="methodology-row methodology-row-tall"><b>Equipe prevista:</b><div class="methodology-answer">'+esc(p.team_text||'')+'</div></div>'+
     '<div class="methodology-row methodology-row-tall"><b>Parceiros:</b><div class="methodology-answer">'+esc(p.partners||'')+'</div></div>'+
     '<div class="methodology-row methodology-row-tall"><b>Mobilização / divulgação:</b><div class="methodology-answer">'+esc(p.mobilization_plan||'')+'</div></div>'+
