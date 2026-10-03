@@ -422,8 +422,8 @@ function cfdhDateDistance(a,b){
 }
 function cfdhSmartDistribution(bundle,actions=[]){
   const month=String(bundle?.plan?.planned_start||currentMonth()).slice(0,7),[y,m]=month.split('-').map(Number),last=new Date(y,m,0).getDate(),today=cfdhLocalToday(),signals=bundle?.smart_signals||{};
-  const flow=signals.weekday_flow||Array(7).fill(0),hourFlow=signals.hour_flow||Array(24).fill(0),history=signals.historical_success||[];
-  const maxFlow=Math.max(1,...flow),maxHour=Math.max(1,...hourFlow),successByDow=Array(7).fill(0);
+  const flow=signals.weekday_flow||Array(7).fill(0),hourFlow=signals.hour_flow||Array(24).fill(0),freeUse=signals.free_use_weekday||Array(7).fill(0),freeUseHour=signals.free_use_hour||Array(24).fill(0),history=signals.historical_success||[];
+  const maxFlow=Math.max(1,...flow),maxHour=Math.max(1,...hourFlow),maxFreeUse=Math.max(1,...freeUse),maxFreeUseHour=Math.max(1,...freeUseHour),successByDow=Array(7).fill(0);
   for(const h of history)if(h.weekday!=null)successByDow[h.weekday]+=Number(h.score||0);
   const maxSuccess=Math.max(1,...successByDow),candidateDates=[];
   for(let d=1;d<=last;d++){
@@ -435,7 +435,8 @@ function cfdhSmartDistribution(bundle,actions=[]){
     },0);
     const capacity=Math.max(0,1-Math.min(1,occupied/(14*60)));
     const peopleEvents=entries.filter(x=>x.source==='workshop'||x.source==='evento'||x.source==='cfdh').length;
-    let score=capacity*34+(Number(flow[dow]||0)/maxFlow)*24+(Number(successByDow[dow]||0)/maxSuccess)*18+Math.min(10,peopleEvents*2);
+    let score=capacity*32+(Number(flow[dow]||0)/maxFlow)*20+(Number(successByDow[dow]||0)/maxSuccess)*18+Math.min(8,peopleEvents*2);
+    if(signals.free_use_list_available)score+=(Number(freeUse[dow]||0)/maxFreeUse)*28;
     if(dow===0)score-=18;else if(dow===6)score-=3;
     candidateDates.push({date,dow,entries,occupied,flow:Number(flow[dow]||0),historical:Number(successByDow[dow]||0),baseScore:score});
   }
@@ -458,7 +459,8 @@ function cfdhSmartDistribution(bundle,actions=[]){
         const busy=[...day.entries,...selected.filter(x=>x.date===day.date).map(x=>({start:x.start,end:x.end,title:'Outra ação sugerida'}))];
         if(busy.some(x=>cfdhApiOverlapLocal(start,end,x.start,x.end)))continue;
         const hour=Math.floor(startMin/60),hourSignal=Number(hourFlow[hour]||0)/maxHour;
-        let timeScore=hourSignal*16;
+        let timeScore=hourSignal*14;
+        if(signals.free_use_list_available)timeScore+=(Number(freeUseHour[hour]||0)/maxFreeUseHour)*18;
         const nearby=day.entries.filter(x=>{
           const xs=cfdhTimeMinutes(x.start),xe=cfdhTimeMinutes(x.end);
           if(xs==null||xe==null)return false;
@@ -478,6 +480,7 @@ function cfdhSmartDistribution(bundle,actions=[]){
           if(day.occupied<=180)reasons.push('baixa sobrecarga do calendário');
           else if(day.occupied<=360)reasons.push('carga moderada no dia');
           if(day.flow>=maxFlow*.6&&day.flow>0)reasons.push('bom fluxo identificado');
+          if(signals.free_use_list_available&&Number(freeUse[day.dow]||0)>=maxFreeUse*.6)reasons.push('alto fluxo de uso livre');
           if(day.historical>0)reasons.push('histórico favorável de CFDH estrutural');
           if(nearby>0)reasons.push('janela livre próxima de atividades com público');
           if(!reasons.length)reasons.push('melhor janela livre encontrada no mês');
@@ -502,7 +505,7 @@ function cfdhSmartDistributionModalHtml(bundle,suggestions){
       '<span>✓ Histórico de CFDHs estruturais executados</span><span>✓ Janelas livres próximas de atividades com público</span>'+
       '<span>✓ Espaçamento entre as ações</span><span>✓ Ausência de conflito de horário</span></div></div>'+
     '<div class="notice info compact"><b>Base analisada:</b> '+Number(s.attendance||0)+' presença(s) de oficina · '+Number(s.visitors||0)+' registro(s) de visitante · '+Number(s.services||0)+' atendimento(s) · '+Number(s.educator_participants||0)+' participante(s) em registros educativos · '+Number(s.structural_actions||0)+' CFDH(s) estrutural(is) anterior(es).<br>'+
-      '<small>O indicador específico de <b>uso livre</b> ainda não possui uma lista própria no sistema. Até ela existir, esse peso fica neutro; o algoritmo usa somente os sinais de fluxo que já estão registrados.</small></div>'+
+      '<small>'+(bundle?.smart_signals?.free_use_list_available?'O fluxo de <b>uso livre</b> está ativo como um dos critérios da distribuição.':'O indicador específico de <b>uso livre</b> ainda não possui uma lista própria no sistema. Esse peso já está reservado no algoritmo e permanece neutro até a futura lista começar a gerar registros.')+'</small></div>'+
     '<div class="cfdh-smart-suggestions">'+suggestions.map(x=>'<div class="cfdh-smart-suggestion"><div><span class="pill info">Ação '+x.action_number+'</span><b>'+esc(x.title)+'</b></div><strong>'+esc(fmtDate(x.date))+' · '+esc(x.start)+'–'+esc(x.end)+'</strong><small>'+esc(x.duration.toLocaleString('pt-BR'))+'h · '+esc(x.reasons.join(' · '))+'</small><em>pontuação '+x.score.toLocaleString('pt-BR')+'</em></div>').join('')+'</div>'+
     '<div class="notice warn compact">Ao aplicar, somente <b>data, horário inicial e término calculado</b> serão preenchidos. Conteúdo, objetivo, responsáveis, classificação e recursos não serão alterados. Depois você poderá editar qualquer data ou horário manualmente.</div>'+
     '<div class="actions"><button type="button" class="btn primary" data-cfdh-apply-smart-distribution>Aplicar distribuição inteligente</button><button type="button" class="btn ghost" data-cfdh-cancel-smart-distribution>Cancelar</button></div>'+
