@@ -146,14 +146,26 @@ async function bindCfdhShared(){
         const rebuildAxis=()=>{
           const rows=bundle.classification.filter(x=>x.nucleus_code===nucleus.value),axes=[...new Map(rows.map(x=>[x.axis_code,{code:x.axis_code,name:x.axis_name}])).values()];
           axis.innerHTML='<option value="">Selecione</option>'+axes.map(x=>'<option value="'+x.code+'">'+esc(x.name)+'</option>').join('');
-          item.innerHTML='<option value="">Selecione o Eixo</option>';item.required=false;refresh();
+          axis.value='';
+          item.innerHTML='<option value="">Selecione o Eixo</option>';item.required=false;item.value='';
+          const itemLabel=card.querySelector('[name="item_label"]');if(itemLabel)itemLabel.value='';
+          syncLinkedClassification(card);refresh();
         };
         const rebuildItem=()=>{
           const rows=bundle.classification.filter(x=>x.axis_code===axis.value&&x.item_code);
           item.innerHTML='<option value="">'+(rows.length?'Selecione o Item':'Sem subdivisão por Item')+'</option>'+rows.map(x=>'<option value="'+x.item_code+'">'+esc(x.item_code)+') '+esc(x.item_label)+'</option>').join('');
-          item.required=rows.length>0;refresh();
+          item.required=rows.length>0;item.value='';
+          const itemLabel=card.querySelector('[name="item_label"]');if(itemLabel)itemLabel.value='';
+          syncLinkedClassification(card);refresh();
         };
-        nucleus?.addEventListener('change',rebuildAxis);axis?.addEventListener('change',rebuildItem);
+        nucleus?.addEventListener('change',rebuildAxis);
+        axis?.addEventListener('change',rebuildItem);
+        item?.addEventListener('change',()=>{
+          const itemLabel=card.querySelector('[name="item_label"]'),row=bundle.classification.find(x=>x.axis_code===axis.value&&x.item_code===item.value);
+          if(itemLabel)itemLabel.value=row?.item_label||'';
+          syncLinkedClassification(card);refresh();
+        });
+        updateLinkedHint(card);
         const workshop=card.querySelector('[data-cfdh-action-workshop]'),calendar=card.querySelector('[data-cfdh-calendar-entry]'),modeEl=card.querySelector('[data-cfdh-schedule-mode]');
         const rebuildCalendar=()=>{
           if(!calendar)return;
@@ -180,6 +192,59 @@ async function bindCfdhShared(){
           const pill=card.querySelector('[data-cfdh-count-status]'),ok=Number(e.target.value||0)>=2;
           if(pill){pill.textContent=ok?'Contabilizável':'Menos de 2h';pill.className='pill '+(ok?'success':'warn')}
           refresh();
+        });
+
+        card.querySelector('[data-cfdh-link-classification]')?.addEventListener('click',()=>{
+          const sourceNumber=Number(card.dataset.actionNumber||0),current=collectActions(),source=current[sourceNumber-1]||{};
+          const existingGroup=card.querySelector('[name="classification_group_id"]')?.value||'';
+          const group=existingGroup||(crypto?.randomUUID?crypto.randomUUID():('cfdh-'+Date.now()+'-'+Math.random().toString(16).slice(2)));
+          const targets=current.map((a,i)=>({...a,number:i+1})).filter(a=>a.number!==sourceNumber);
+          if(!targets.length){toast('Crie pelo menos duas ações para vincular a classificação.','warn');return}
+          modal(existingGroup?'Gerenciar vínculo da classificação':'Vincular classificação a outras ações',
+            '<div class="stack">'+
+              '<div class="notice info"><b>Ação de referência: '+sourceNumber+' · '+esc(source.title||('Ação '+sourceNumber))+'</b><br>'+
+              'As ações selecionadas compartilharão <b>Núcleo → Eixo → Item</b>. Depois disso, alterar qualquer uma das três opções em uma ação vinculada atualizará as demais automaticamente.</div>'+
+              '<form id="cfdh-link-classification-form" class="stack"><div class="check-grid cfdh-copy-actions-grid">'+
+                targets.map(a=>{
+                  const targetCard=planForm.querySelector('[data-cfdh-action-card][data-action-number="'+a.number+'"]');
+                  const targetGroup=targetCard?.querySelector('[name="classification_group_id"]')?.value||'';
+                  const checked=existingGroup&&targetGroup===existingGroup;
+                  const classification=[a.nucleus_code,a.axis_code,a.item_code].filter(Boolean).join(' → ')||'Sem classificação completa';
+                  return '<label class="check cfdh-copy-action-option"><input type="checkbox" name="target_action" value="'+a.number+'" '+(checked?'checked':'')+'><span><b>Ação '+a.number+' · '+esc(a.title||('Ação '+a.number))+'</b><small>'+esc(classification)+'</small>'+(targetGroup&&targetGroup!==existingGroup?'<em>Está vinculada a outro grupo; ao selecionar, passará para este vínculo.</em>':'')+'</span></label>';
+                }).join('')+
+              '</div><div class="actions"><button type="button" class="btn ghost" data-cfdh-unlink-source>Desvincular esta ação</button><button type="submit" class="btn primary">Aplicar vínculo</button></div></form>'+
+            '</div>');
+          const form=document.querySelector('#cfdh-link-classification-form');
+          document.querySelector('[data-cfdh-unlink-source]')?.addEventListener('click',()=>{
+            const hidden=card.querySelector('[name="classification_group_id"]');if(hidden)hidden.value='';
+            document.querySelector('#modal')?.remove();updateLinkedHint(card);refresh();toast('Ação desvinculada da classificação compartilhada.');
+          });
+          form?.addEventListener('submit',e=>{
+            e.preventDefault();
+            const selected=[...form.querySelectorAll('[name="target_action"]:checked')].map(x=>Number(x.value));
+            if(!selected.length){toast('Selecione pelo menos uma outra ação para criar o vínculo.','warn');return}
+            const sourceHidden=card.querySelector('[name="classification_group_id"]');if(sourceHidden)sourceHidden.value=group;
+            const classification={
+              nucleus_code:card.querySelector('[name="nucleus_code"]')?.value||'',
+              axis_code:card.querySelector('[name="axis_code"]')?.value||'',
+              item_code:card.querySelector('[name="item_code"]')?.value||''
+            };
+            const selectedSet=new Set(selected);
+            for(const target of planForm.querySelectorAll('[data-cfdh-action-card]')){
+              const number=Number(target.dataset.actionNumber||0),hidden=target.querySelector('[name="classification_group_id"]');
+              if(number===sourceNumber)continue;
+              if(selectedSet.has(number)){
+                if(hidden)hidden.value=group;
+                setClassificationOnCard(target,classification);
+              }else if(existingGroup&&hidden?.value===existingGroup){
+                hidden.value='';
+              }
+            }
+            document.querySelector('#modal')?.remove();
+            for(const target of planForm.querySelectorAll('[data-cfdh-action-card]'))updateLinkedHint(target);
+            refresh();
+            toast('Classificação vinculada e sincronizada em '+(selected.length+1)+' ações.');
+          });
         });
 
         card.querySelector('[data-cfdh-copy-objective]')?.addEventListener('click',()=>{
