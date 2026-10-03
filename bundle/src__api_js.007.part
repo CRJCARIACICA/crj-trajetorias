@@ -94,6 +94,12 @@ export async function listCfdhThemes(){
     .select('*').eq('active',true).order('code');
   if(error)throw error;return data||[];
 }
+function cfdhApiAutoEndTime(start,hours){
+  const m=String(start||'').match(/^(\d{1,2}):(\d{2})/);if(!m)return null;
+  const total=Number(m[1])*60+Number(m[2])+Math.round(Number(hours||0)*60);
+  if(total<=0||total>=24*60)return null;
+  return String(Math.floor(total/60)).padStart(2,'0')+':'+String(total%60).padStart(2,'0');
+}
 function cfdhMonthRange(month){
   const [y,m]=String(month).slice(0,7).split('-').map(Number);
   return {
@@ -274,6 +280,9 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
   for(let i=0;i<actions.length;i++){
     const responsibleIds=[...new Set((actions[i].responsible_user_ids||[]).filter(Boolean))];
     if(!responsibleIds.length)throw new Error('Ação '+(i+1)+': selecione ao menos um responsável entre Educadores e Equipe Técnica.');
+    if(!actions[i].scheduled_date)throw new Error('Ação '+(i+1)+': selecione a data pelo calendário do CRJ.');
+    if(!actions[i].start_time)throw new Error('Ação '+(i+1)+': informe o horário de início.');
+    if(!cfdhApiAutoEndTime(actions[i].start_time,actions[i].planned_duration_hours))throw new Error('Ação '+(i+1)+': não foi possível calcular um horário final válido a partir da carga horária.');
   }
 
   const inheritedTheme=current.month_theme;
@@ -313,7 +322,8 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
       schedule_mode:planType==='cfdh_estrutural'?'structural':(a.schedule_mode||'workshop_planned'),
       workshop_calendar_id:planType==='cfdh_transversal'?(a.workshop_calendar_id||null):null,
       scheduled_date:a.scheduled_date,
-      start_time:a.start_time||null,end_time:a.end_time||null,
+      start_time:a.start_time||null,
+      end_time:cfdhApiAutoEndTime(a.start_time,a.planned_duration_hours),
       planned_duration_hours:Number(a.planned_duration_hours||0)||0,
       location_type:a.location_type||null,location_other:a.location_other||null,
       title:a.title||('Ação '+(i+1)),
