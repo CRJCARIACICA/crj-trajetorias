@@ -191,17 +191,17 @@ function cfdhTypeLabel(t){return t==='cfdh_transversal'?'CFDH transversal':'CFDH
 function cfdhThemeText(plan,themes=[]){
   return plan?.cfdh_theme_custom||themes.find(x=>Number(x.code)===Number(plan?.cfdh_theme_code))?.theme||'Tema não definido';
 }
-function cfdhMonthlyThemeState(bundle,actions=bundle?.actions||[]){
-  const cfg=bundle?.month_theme||null,source=cfg?.source_action_id?actions.find(a=>a.id===cfg.source_action_id):actions[0];
-  const editingSource=Boolean(source&&(!cfg||source.id===cfg.source_action_id));
-  const fallbackCode=!cfg&&editingSource?(bundle?.plan?.cfdh_theme_code??null):null;
-  const fallbackCustom=!cfg&&editingSource?(bundle?.plan?.cfdh_theme_custom??''):'';
-  const code=editingSource?(source?.monthly_theme_code??cfg?.theme_code??fallbackCode):(cfg?.theme_code??null);
-  const custom=editingSource?(source?.monthly_theme_custom??cfg?.theme_custom??fallbackCustom):(cfg?.theme_custom??'');
-  return {code,custom,source,source_action_id:cfg?.source_action_id||source?.id||null,locked:Boolean(cfg&&!editingSource)};
+function cfdhMonthlyThemeState(bundle){
+  const cfg=bundle?.month_theme||null,p=bundle?.plan||{};
+  return {
+    code:cfg?.theme_code??p.cfdh_theme_code??null,
+    custom:cfg?.theme_custom??p.cfdh_theme_custom??'',
+    source_plan_id:cfg?.source_plan_id||null,
+    locked:Boolean(cfg)
+  };
 }
-function cfdhMonthlyThemeText(bundle,actions=bundle?.actions||[]){
-  const x=cfdhMonthlyThemeState(bundle,actions),themes=bundle?.themes||[];
+function cfdhMonthlyThemeText(bundle){
+  const x=cfdhMonthlyThemeState(bundle),themes=bundle?.themes||[];
   return x.custom||themes.find(t=>Number(t.code)===Number(x.code))?.theme||'Tema mensal ainda não definido';
 }
 function cfdhClassificationOptions(catalog,action={}){
@@ -220,7 +220,7 @@ function cfdhActionCountableHours(a,actual=false){
 }
 function cfdhPlanAlerts(bundle){
   const p=bundle?.plan||{},actions=bundle?.actions||[],selected=bundle?.workshop_ids||[],calendar=bundle?.calendar||[],evals=bundle?.evaluations||[],alerts=[],themeState=cfdhMonthlyThemeState(bundle,actions);
-  if(!themeState.code&&!String(themeState.custom||'').trim())alerts.push('Defina o tema mensal na primeira ação CFDH do mês.');
+  if(!themeState.code&&!String(themeState.custom||'').trim())alerts.push('Defina o tema mensal ao criar o circuito CFDH.');
   if(!actions.length)alerts.push('Crie ao menos uma ação para o circuito.');
   if(Number(p.cfdh_action_count||actions.length)!==actions.length)alerts.push('A quantidade de ações informada não corresponde às ações estruturadas.');
   if(p.plan_type==='cfdh_estrutural'&&selected.length)alerts.push('CFDH estrutural não pode possuir oficina vinculada.');
@@ -259,7 +259,7 @@ function cfdhPlanPreviewHtml(bundle,draft=null){
     const w=workshops.find(x=>x.id===a.workshop_id),n=catalog.find(x=>x.nucleus_code===a.nucleus_code),ax=catalog.find(x=>x.axis_code===a.axis_code),it=catalog.find(x=>x.axis_code===a.axis_code&&x.item_code===a.item_code);
     const responsibleNames=(a.responsible_names?.length?a.responsible_names:(a.responsible_user_ids||[]).map(id=>team.find(t=>t.id===id)?.display_name).filter(Boolean));
     return '<tr><td><b>Ação '+esc(a.action_number)+'</b><br>'+esc(fmtDate(a.scheduled_date))+'<br>'+esc(String(a.start_time||'').slice(0,5))+'–'+esc(String(a.end_time||'').slice(0,5))+'</td>'+
-      '<td>'+esc(a.title||'')+'<br><small>'+esc(a.objective||'')+'</small></td>'+
+      '<td><b>'+esc(a.title||'')+'</b><br><small>Tema: '+esc(a.action_theme||theme)+'</small><br><small>Objetivo: '+esc(a.objective||'')+'</small></td>'+
       '<td>'+esc(n?.nucleus_name||a.nucleus_code||'')+'<br><b>'+esc(ax?.axis_name||a.axis_code||'')+'</b>'+(it?'<br>'+esc(it.item_code)+') '+esc(it.item_label):'')+'</td>'+
       '<td>'+esc(responsibleNames.join(', ')||'Não definido')+'</td>'+
       '<td>'+esc(w?.name||(p.plan_type==='cfdh_estrutural'?'Ação própria / sem oficina':'—'))+'<br><small>'+esc(a.schedule_mode==='atypical'?'Dia/horário atípico':a.schedule_mode==='workshop_planned'?'Dia planejado da oficina':'Estrutural')+'</small></td>'+
@@ -292,21 +292,13 @@ function cfdhActionEditorCard(bundle,a,index){
   const hasItems=Boolean(catalog.find(x=>x.axis_code===a.axis_code&&x.item_code));
   const eligibleTeam=(bundle.team||[]).filter(x=>x.active!==false&&['educador','assistente_social','psicologo','terapeuta_ocupacional'].includes(x.role));
   const responsibleSet=new Set(a.responsible_user_ids||[]);
-  const sourceId=bundle.month_theme?.source_action_id||null,isThemeSource=sourceId?Boolean(a.id&&a.id===sourceId):index===0;
-  const themeCode=isThemeSource?(a.monthly_theme_code??bundle.month_theme?.theme_code??p.cfdh_theme_code??null):null;
-  const themeCustom=isThemeSource?(a.monthly_theme_custom??bundle.month_theme?.theme_custom??p.cfdh_theme_custom??''):'';
-  const themeOptions=themes.map(t=>'<option value="'+t.code+'" '+(Number(t.code)===Number(themeCode)?'selected':'')+'>'+esc(t.code+'. '+t.theme)+'</option>').join('');
-  const themeBlock=isThemeSource
-    ?'<div class="field cfdh-month-theme-source"><div class="page-head compact cfdh-field-head"><div><label>Tema mensal do CFDH</label><small>Definido pela primeira ação do mês</small></div><span class="pill info">Tema oficial do mês</span></div>'+
-      '<div class="form-grid"><div class="field"><label>Tema da Metodologia</label><select name="monthly_theme_code"><option value="">Selecione</option>'+themeOptions+'</select></div><div class="field"><label>Outro tema / adaptação territorial</label><input class="input" name="monthly_theme_custom" value="'+esc(themeCustom)+'"></div></div>'+
-      '<div class="notice info compact">'+(bundle.month_theme?'Esta é a primeira ação que originou o tema mensal. Alterar o tema aqui atualizará a referência do mês para os demais planejamentos.':'Ao salvar esta primeira ação, o tema escolhido se tornará a referência imutável dos próximos planejamentos deste mês.')+'</div></div>'
-    :'';
+  const actionTheme=a.action_theme||cfdhMonthlyThemeText(bundle);
   const responsibleChecks=eligibleTeam.map(t=>'<label class="check cfdh-responsible-option"><input type="checkbox" name="responsible_user_id" value="'+t.id+'" '+(responsibleSet.has(t.id)?'checked':'')+'><span><b>'+esc(t.display_name)+'</b><small>'+esc(roleLabel(t.role))+'</small></span></label>').join('');
 
   return '<div class="card cfdh-action-card" data-cfdh-action-card data-action-id="'+esc(a.id||'')+'" data-action-number="'+(index+1)+'">'+
     '<div class="page-head compact"><div><span class="pill info">Ação '+(index+1)+'</span><h4>'+esc(a.title||('Ação '+(index+1)))+'</h4><p>Planeje cada encontro separadamente.</p></div><div class="actions"><span class="pill '+(Number(a.planned_duration_hours||0)>=2?'success':'warn')+'" data-cfdh-count-status>'+(Number(a.planned_duration_hours||0)>=2?'Contabilizável':'Menos de 2h')+'</span></div></div>'+
-    themeBlock+
-    '<div class="field"><label>Título / tema desta ação</label><input class="input" name="title" value="'+esc(a.title||'')+'" required></div>'+
+    '<div class="field"><label>Tema desta ação</label><textarea name="action_theme" required>'+esc(actionTheme)+'</textarea><small>O tema oficial do mês é repetido automaticamente como ponto de partida. Você pode adaptar a descrição desta ação sem alterar o tema mensal do circuito.</small></div>'+
+    '<div class="field"><label>Título da ação</label><input class="input" name="title" value="'+esc(a.title||'')+'" required></div>'+
     '<div class="field"><div class="page-head compact cfdh-field-head"><div><label>Responsável(is) pela ação</label><small>Educadores e Equipe Técnica podem compartilhar a responsabilidade</small></div></div><div class="check-grid cfdh-responsible-grid">'+(responsibleChecks||'<div class="notice warn compact">Nenhum Educador ou profissional da Equipe Técnica ativo encontrado.</div>')+'</div><small>Selecione ao menos uma pessoa. Os nomes serão registrados no planejamento e no relatório desta ação.</small></div>'+
     '<div class="field"><div class="page-head compact cfdh-field-head"><div><label>Objetivo específico</label></div>'+(p.plan_type==='cfdh_transversal'?'<button type="button" class="cfdh-inline-tool" data-cfdh-copy-objective>↗ Repetir objetivo</button>':'')+'</div><textarea name="objective">'+esc(a.objective||'')+'</textarea>'+(p.plan_type==='cfdh_transversal'?'<small>Use o botão para repetir este objetivo específico somente nas ações selecionadas.</small>':'')+'</div>'+
     '<div class="field cfdh-classification-block"><div class="page-head compact cfdh-field-head"><div><label>Classificação metodológica</label><small>Núcleo → Eixo → Item</small></div>'+(p.plan_type==='cfdh_transversal'?'<button type="button" class="cfdh-inline-tool" data-cfdh-link-classification>'+(a.classification_group_id?'🔗 Gerenciar vínculo':'🔗 Vincular ações')+'</button>':'')+'</div>'+
@@ -346,10 +338,9 @@ function cfdhOperationsHtml(bundle){
 }
 function cfdhPlanEditorHtml(bundle){
   const p=bundle.plan,workshops=bundle.workshops||[],alerts=cfdhPlanAlerts(bundle),themeText=cfdhMonthlyThemeText(bundle);
-  const sourceId=bundle.month_theme?.source_action_id||null,sourceInPlan=Boolean(sourceId&&bundle.actions.some(a=>a.id===sourceId));
   const themeNotice=bundle.month_theme
-    ?'<div class="notice '+(sourceInPlan?'info':'success')+'"><b>Tema mensal: '+esc(themeText)+'</b><br>'+(sourceInPlan?'Este planejamento contém a primeira ação que definiu o tema. Para alterá-lo, edite o campo <b>Tema mensal do CFDH</b> dentro dessa primeira ação.':'Tema herdado da primeira ação CFDH registrada neste mês. Ele fica bloqueado neste planejamento e só pode ser alterado na ação de origem.')+'</div>'
-    :'<div class="notice warn"><b>Tema mensal ainda não definido.</b><br>O tema deste mês será criado a partir da <b>Ação 1</b>. Depois de salvar, os próximos planejamentos do mesmo mês herdarão esse tema automaticamente.</div>';
+    ?'<div class="notice success"><b>Tema oficial do mês: '+esc(themeText)+'</b><br>Este tema foi definido na criação do circuito CFDH. Cada ação abaixo recebe esse tema como base e pode ter sua descrição adaptada individualmente.</div>'
+    :'<div class="notice warn"><b>Tema mensal ainda não definido.</b><br>Volte ao CFDH compartilhado e use <b>Novo circuito CFDH</b> para definir o tema do mês.</div>';
   const workshopChecks=workshops.map(w=>'<label class="check cfdh-workshop-check"><input type="checkbox" name="cfdh_workshop_id" value="'+w.id+'" '+(bundle.workshop_ids.includes(w.id)?'checked':'')+'><span><b>'+esc(w.name)+'</b><small>'+esc(workshopScheduleLabel(w))+' · '+esc(String(w.start_time||'').slice(0,5))+(w.end_time?'–'+esc(String(w.end_time).slice(0,5)):'')+'</small></span></label>').join('');
   return '<div class="page-head"><div><h2>Planejamento CFDH · '+esc(p.activity_title||'Circuito Formativo')+'</h2><p>'+esc(cfdhTypeLabel(p.plan_type))+' · planejamento por ações, agenda, presença e avaliação.</p></div><div class="actions"><button class="btn" data-nav="cfdh?month='+esc(String(p.planned_start||currentMonth()).slice(0,7))+'">Voltar</button><button class="btn" data-cfdh-plan-print="'+p.id+'">Imprimir</button><button class="btn secondary" data-cfdh-plan-pdf="'+p.id+'">PDF</button><button class="btn secondary" data-cfdh-plan-docx="'+p.id+'">DOCX</button></div></div>'+
     '<div class="cfdh-alerts" data-cfdh-alerts>'+(alerts.length?alerts.map(x=>'<div class="notice warn compact">⚠ '+esc(x)+'</div>').join(''):'<div class="notice success compact">Planejamento sem pendências estruturais.</div>')+'</div>'+
@@ -398,7 +389,7 @@ function cfdhReportDraft(bundle,form=null){
 }
 function cfdhReportPreviewHtml(bundle,draft=null){
   const p=bundle.plan,r=draft||cfdhReportDraft(bundle),theme=cfdhMonthlyThemeText(bundle),workshops=bundle.workshops||[];
-  const rows=(bundle.actions||[]).map(a=>'<tr><td><b>Ação '+a.action_number+'</b><br>'+esc(fmtDate(a.scheduled_date))+'</td><td>'+esc((a.responsible_names||[]).join(', ')||'Não definido')+'</td><td>'+esc(a.title||'')+'<br><small>'+esc(workshops.find(w=>w.id===a.workshop_id)?.name||'Estrutural')+'</small></td><td>'+esc(a.execution_status||'planejada')+'</td><td>'+esc(a.execution_description||'')+'</td><td>'+Number(a.actual_duration_hours||0).toLocaleString('pt-BR')+'h</td><td>'+Number(bundle.attendance_counts?.[a.id]||0)+'</td></tr>').join('');
+  const rows=(bundle.actions||[]).map(a=>'<tr><td><b>Ação '+a.action_number+'</b><br>'+esc(fmtDate(a.scheduled_date))+'</td><td>'+esc((a.responsible_names||[]).join(', ')||'Não definido')+'</td><td><b>'+esc(a.title||'')+'</b><br><small>Tema: '+esc(a.action_theme||theme)+'</small><br><small>'+esc(workshops.find(w=>w.id===a.workshop_id)?.name||'Estrutural')+'</small></td><td>'+esc(a.execution_status||'planejada')+'</td><td>'+esc(a.execution_description||'')+'</td><td>'+Number(a.actual_duration_hours||0).toLocaleString('pt-BR')+'h</td><td>'+Number(bundle.attendance_counts?.[a.id]||0)+'</td></tr>').join('');
   const plannedCount=(bundle.actions||[]).reduce((n,a)=>n+cfdhActionCountableHours(a),0),actualCount=(bundle.actions||[]).reduce((n,a)=>n+cfdhActionCountableHours(a,true),0);
   return '<div class="methodology-paper methodology-paper-landscape cfdh-report-paper"><div class="methodology-annex-title">CRJ CARIACICA · RELATÓRIO DE EXECUÇÃO CFDH</div><div class="methodology-institutional-header"><img src="'+METHODOLOGY_HEADER_DATA+'" alt="Cabeçalho institucional"></div><div class="methodology-inner-title">CIRCUITO FORMATIVO EM DIREITOS HUMANOS</div>'+
     '<div class="methodology-row"><b>Modalidade:</b><span class="methodology-inline-answer">'+esc(cfdhTypeLabel(p.plan_type))+'</span></div><div class="methodology-row"><b>Tema:</b><span class="methodology-inline-answer">'+esc(theme)+'</span></div><div class="methodology-row"><b>Circuito:</b><span class="methodology-inline-answer">'+esc(p.activity_title||'')+'</span></div>'+
@@ -422,7 +413,7 @@ async function pageCfdhShared(){
     return cfdhPlanEditorHtml(bundle);
   }
   const [dash,themes]=await Promise.all([listCfdhMonthDashboard(month),listCfdhThemes()]);
-  const monthThemeText=dash.month_theme?(dash.month_theme.theme_custom||themes.find(t=>Number(t.code)===Number(dash.month_theme.theme_code))?.theme||'Tema definido'):'Ainda não definido — será criado pela primeira ação CFDH do mês';
+  const monthThemeText=dash.month_theme?(dash.month_theme.theme_custom||themes.find(t=>Number(t.code)===Number(dash.month_theme.theme_code))?.theme||'Tema definido'):'Ainda não definido — será definido ao criar o primeiro circuito CFDH do mês';
   const target=Math.min(100,(Number(dash.metrics.countable_executed_hours||0)/CFDH_MONTH_TARGET)*100),struct=Math.min(100,(Number(dash.metrics.structural_hours||0)/CFDH_STRUCTURAL_MIN)*100);
   const reportMap=new Map((dash.reports||[]).map(x=>[x.plan_id,x]));
   const cards=(dash.plans||[]).map(p=>{
@@ -430,7 +421,7 @@ async function pageCfdhShared(){
     return '<div class="card cfdh-dashboard-card"><div class="actions"><span class="pill '+(p.plan_type==='cfdh_estrutural'?'success':'info')+'">'+esc(cfdhTypeLabel(p.plan_type))+'</span><span class="pill">'+aa.length+' ação(ões)</span></div><h3>'+esc(p.activity_title||cfdhThemeText(p,themes))+'</h3><p>'+esc(cfdhThemeText(p,themes))+'</p><div class="cfdh-card-stats"><span><b>'+count.toLocaleString('pt-BR')+'h</b><small>executadas e contabilizáveis</small></span><span><b>'+pending+'</b><small>ações pendentes</small></span></div><div class="actions"><button class="btn primary" data-nav="cfdh?month='+month+'&plan='+p.id+'">Abrir planejamento</button><button class="btn secondary" data-nav="cfdh?month='+month+'&plan='+p.id+'&view=relatorio">'+(rep?'Editar relatório':'Responder relatório')+'</button></div></div>';
   }).join('');
   return '<div class="page-head"><div><h2>CFDH compartilhado</h2><p>Tema mensal → planejamento por ações → execução → presença → avaliação → relatório.</p></div><div class="actions"><button class="btn primary" data-new-cfdh-plan>+ Novo circuito CFDH</button></div></div>'+
-    '<div class="card"><div class="form-grid"><div class="field"><label>Mês de referência</label><input class="input" type="month" data-cfdh-month value="'+esc(month)+'"></div><div class="field"><label>Participação na construção</label><div class="input read-only">Educadores · Psicologia · Serviço Social · Terapia Ocupacional</div></div></div><div class="notice '+(dash.month_theme?'success':'warn')+'" style="margin-top:12px"><b>Tema oficial do mês:</b> '+esc(monthThemeText)+'<br><small>'+(dash.month_theme?'Definido pela primeira ação do mês. Os demais planejamentos apenas herdam esta referência.':'O tema será definido dentro da primeira ação criada e, depois disso, ficará bloqueado para os planejamentos seguintes.')+'</small></div></div>'+
+    '<div class="card"><div class="form-grid"><div class="field"><label>Mês de referência</label><input class="input" type="month" data-cfdh-month value="'+esc(month)+'"></div><div class="field"><label>Participação na construção</label><div class="input read-only">Educadores · Psicologia · Serviço Social · Terapia Ocupacional</div></div></div><div class="notice '+(dash.month_theme?'success':'warn')+'" style="margin-top:12px"><b>Tema oficial do mês:</b> '+esc(monthThemeText)+'<br><small>'+(dash.month_theme?'Definido na criação do primeiro circuito CFDH do mês. Os demais circuitos herdam esta referência.':'Clique em <b>Novo circuito CFDH</b> para definir o tema oficial deste mês.')+'</small></div></div>'+
     '<div class="grid cards cfdh-progress-grid" style="margin-top:16px"><div class="card kpi"><div class="label">CFDH executado</div><div class="value">'+Number(dash.metrics.countable_executed_hours||0).toLocaleString('pt-BR')+'h</div><div class="progress"><span style="width:'+target+'%"></span></div><div class="meta">Referência mensal: '+CFDH_MONTH_TARGET+'h</div></div><div class="card kpi"><div class="label">CFDH estrutural</div><div class="value">'+Number(dash.metrics.structural_hours||0).toLocaleString('pt-BR')+'h</div><div class="progress"><span style="width:'+struct+'%"></span></div><div class="meta">Referência mínima estrutural: '+CFDH_STRUCTURAL_MIN+'h</div></div><div class="card kpi"><div class="label">Pendências</div><div class="value">'+Number(dash.metrics.pending||0)+'</div><div class="meta">relatórios, avaliações ou execução</div></div></div>'+
     '<div class="page-head educator-subhead"><div><h3>Circuitos do mês</h3><p>Ações com menos de 2h permanecem registradas, mas ficam sinalizadas fora da contagem operacional mínima configurada.</p></div></div><div class="grid two">'+(cards||'<div class="card empty">Nenhum planejamento CFDH neste mês.</div>')+'</div>'+
     '<div class="page-head educator-subhead" style="margin-top:20px"><div><h3>Formulários de avaliação do CFDH</h3><p>As avaliações também ficam disponíveis dentro de cada circuito, já contextualizadas ao planejamento.</p></div></div><div class="grid three"><div class="card"><span class="pill">Anexo 11</span><h3>Planejamento CFDH</h3><p class="muted">O editor do circuito estrutura as mesmas informações em ações e mantém pré-visualização documental.</p></div><div class="card"><span class="pill">Anexo 12</span><h3>Avaliação dos Jovens</h3><p class="muted">Aplicação periódica e ao final do circuito.</p></div><div class="card"><div class="actions"><span class="pill">Anexo 13</span><span class="pill warn">Exclusivo Educadores</span></div><h3>Avaliação Educadores e Oficineiros</h3><p class="muted">Avaliação da execução e condução do CFDH pela equipe de referência.</p></div></div>';
