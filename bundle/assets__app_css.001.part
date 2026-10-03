@@ -410,8 +410,10 @@ d);font-size:12px;margin:16px 0}.divider:before,.divider:after{content:"";height
 .cfdh-transversal-schedule{display:grid;gap:10px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#f7faf9}
 .cfdh-plan-paper,.cfdh-report-paper{max-width:1180px}
 .cfdh-plan-table{font-size:8px}
-.cfdh-plan-table th:nth-child(1){width:18%}.cfdh-plan-table th:nth-child(2){width:20%}.cfdh-plan-table th:nth-child(3){width:28%}.cfdh-plan-table th:nth-child(4){width:24%}.cfdh-plan-table th:nth-child(5){width:10%}
-.cfdh-extra-table th{width:20%}
+.cfdh-plan-table th:nth-child(1){width:8%}.cfdh-plan-table th:nth-child(2){width:16%}.cfdh-plan-table th:nth-child(3){width:18%}.cfdh-plan-table th:nth-child(4){width:25%}.cfdh-plan-table th:nth-child(5){width:23%}.cfdh-plan-table th:nth-child(6){width:10%}
+.cfdh-extra-table th:nth-child(1){width:9%}
+.cfdh-extra-table th:not(:first-child){width:auto}
+.action-ref{font-weight:800;text-align:center!important;white-space:nowrap!important;background:#fafafa}
 .cfdh-report-table{font-size:8px}
 .cfdh-report-table th:nth-child(1){width:11%}.cfdh-report-table th:nth-child(2){width:16%}.cfdh-report-table th:nth-child(3){width:20%}.cfdh-report-table th:nth-child(4){width:10%}.cfdh-report-table th:nth-child(5){width:27%}.cfdh-report-table th:nth-child(6){width:8%}.cfdh-report-table th:nth-child(7){width:8%}
 .cfdh-operation-card{border-left:4px solid #92b9ad}
