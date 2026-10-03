@@ -194,8 +194,10 @@ function cfdhThemeText(plan,themes=[]){
 function cfdhMonthlyThemeState(bundle,actions=bundle?.actions||[]){
   const cfg=bundle?.month_theme||null,source=cfg?.source_action_id?actions.find(a=>a.id===cfg.source_action_id):actions[0];
   const editingSource=Boolean(source&&(!cfg||source.id===cfg.source_action_id));
-  const code=editingSource?(source?.monthly_theme_code??cfg?.theme_code??null):(cfg?.theme_code??null);
-  const custom=editingSource?(source?.monthly_theme_custom??cfg?.theme_custom??''):(cfg?.theme_custom??'');
+  const fallbackCode=!cfg&&editingSource?(bundle?.plan?.cfdh_theme_code??null):null;
+  const fallbackCustom=!cfg&&editingSource?(bundle?.plan?.cfdh_theme_custom??''):'';
+  const code=editingSource?(source?.monthly_theme_code??cfg?.theme_code??fallbackCode):(cfg?.theme_code??null);
+  const custom=editingSource?(source?.monthly_theme_custom??cfg?.theme_custom??fallbackCustom):(cfg?.theme_custom??'');
   return {code,custom,source,source_action_id:cfg?.source_action_id||source?.id||null,locked:Boolean(cfg&&!editingSource)};
 }
 function cfdhMonthlyThemeText(bundle,actions=bundle?.actions||[]){
@@ -291,8 +293,8 @@ function cfdhActionEditorCard(bundle,a,index){
   const eligibleTeam=(bundle.team||[]).filter(x=>x.active!==false&&['educador','assistente_social','psicologo','terapeuta_ocupacional'].includes(x.role));
   const responsibleSet=new Set(a.responsible_user_ids||[]);
   const sourceId=bundle.month_theme?.source_action_id||null,isThemeSource=sourceId?Boolean(a.id&&a.id===sourceId):index===0;
-  const themeCode=isThemeSource?(a.monthly_theme_code??bundle.month_theme?.theme_code??null):null;
-  const themeCustom=isThemeSource?(a.monthly_theme_custom??bundle.month_theme?.theme_custom??''):'';
+  const themeCode=isThemeSource?(a.monthly_theme_code??bundle.month_theme?.theme_code??p.cfdh_theme_code??null):null;
+  const themeCustom=isThemeSource?(a.monthly_theme_custom??bundle.month_theme?.theme_custom??p.cfdh_theme_custom??''):'';
   const themeOptions=themes.map(t=>'<option value="'+t.code+'" '+(Number(t.code)===Number(themeCode)?'selected':'')+'>'+esc(t.code+'. '+t.theme)+'</option>').join('');
   const themeBlock=isThemeSource
     ?'<div class="field cfdh-month-theme-source"><div class="page-head compact cfdh-field-head"><div><label>Tema mensal do CFDH</label><small>Definido pela primeira ação do mês</small></div><span class="pill info">Tema oficial do mês</span></div>'+
