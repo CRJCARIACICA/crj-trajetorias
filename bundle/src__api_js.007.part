@@ -197,6 +197,33 @@ export async function listCfdhMonthDashboard(month=monthKey()){
     }
   };
 }
+export async function updateCfdhMonthTheme(month,{theme_code=null,theme_custom=''}={}){
+  const cleanCustom=String(theme_custom||'').trim();
+  const code=theme_code===''||theme_code==null?null:Number(theme_code);
+  if(!code&&!cleanCustom)throw new Error('Defina o tema mensal antes de salvar.');
+  if(mode==='mock')return {month_start:month+'-01',theme_code:code,theme_custom:cleanCustom||null};
+  const range=cfdhMonthRange(month);
+  const {data:cfg,error:cfgError}=await supabase.from('cfdh_month_settings').select('*').eq('month_start',range.start).maybeSingle();
+  if(cfgError)throw cfgError;
+  if(!cfg?.source_plan_id)throw new Error('O mês ainda não possui um planejamento CFDH de referência.');
+  const {data,error}=await supabase.from('educator_plans').update({
+    cfdh_theme_code:code,
+    cfdh_theme_custom:cleanCustom||null,
+    updated_at:now()
+  }).eq('id',cfg.source_plan_id).select('*').single();
+  if(error)throw error;
+  return data;
+}
+export async function deleteCfdhPlan(planId){
+  if(!planId)throw new Error('Planejamento CFDH inválido.');
+  if(mode==='mock')return true;
+  const {data:plan,error:planError}=await supabase.from('educator_plans').select('id,plan_type,activity_title').eq('id',planId).single();
+  if(planError)throw planError;
+  if(!['cfdh_estrutural','cfdh_transversal'].includes(plan?.plan_type))throw new Error('O registro informado não é um CFDH.');
+  const {error}=await supabase.from('educator_plans').delete().eq('id',planId);
+  if(error)throw error;
+  return true;
+}
 export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions=[]}={}){
   if(mode==='mock')return getCfdhPlanBundle(planId);
   const current=await getCfdhPlanBundle(planId);
@@ -210,8 +237,12 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
   }
 
   const inheritedTheme=current.month_theme;
-  const themeCode=inheritedTheme?.theme_code??plan.cfdh_theme_code??current.plan.cfdh_theme_code??null;
-  const themeCustom=inheritedTheme?.theme_custom??plan.cfdh_theme_custom??current.plan.cfdh_theme_custom??null;
+  const isThemeSource=Boolean(inheritedTheme?.source_plan_id&&inheritedTheme.source_plan_id===planId);
+  const requestedCode=plan.cfdh_theme_code===''||plan.cfdh_theme_code==null?null:Number(plan.cfdh_theme_code);
+  const requestedCustom=String(plan.cfdh_theme_custom||'').trim()||null;
+  const themeCode=isThemeSource?requestedCode:(inheritedTheme?.theme_code??current.plan.cfdh_theme_code??null);
+  const themeCustom=isThemeSource?requestedCustom:(inheritedTheme?.theme_custom??current.plan.cfdh_theme_custom??null);
+  if(isThemeSource&&!themeCode&&!themeCustom)throw new Error('O planejamento de referência precisa manter um tema mensal definido.');
   const parent={
     ...plan,
     plan_type:planType,
