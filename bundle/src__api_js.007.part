@@ -100,6 +100,13 @@ function cfdhApiAutoEndTime(start,hours){
   if(total<=0||total>=24*60)return null;
   return String(Math.floor(total/60)).padStart(2,'0')+':'+String(total%60).padStart(2,'0');
 }
+function cfdhApiMinutes(v){
+  const m=String(v||'').match(/^(\d{1,2}):(\d{2})/);return m?Number(m[1])*60+Number(m[2]):null;
+}
+function cfdhApiOverlaps(aStart,aEnd,bStart,bEnd){
+  const as=cfdhApiMinutes(aStart),ae=cfdhApiMinutes(aEnd),bs=cfdhApiMinutes(bStart),be=cfdhApiMinutes(bEnd);
+  return as!=null&&ae!=null&&bs!=null&&be!=null&&as<be&&ae>bs;
+}
 function cfdhMonthRange(month){
   const [y,m]=String(month).slice(0,7).split('-').map(Number);
   return {
@@ -283,6 +290,25 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
     if(!actions[i].scheduled_date)throw new Error('Ação '+(i+1)+': selecione a data pelo calendário do CRJ.');
     if(!actions[i].start_time)throw new Error('Ação '+(i+1)+': informe o horário de início.');
     if(!cfdhApiAutoEndTime(actions[i].start_time,actions[i].planned_duration_hours))throw new Error('Ação '+(i+1)+': não foi possível calcular um horário final válido a partir da carga horária.');
+  }
+
+  const refMonth=String(plan.planned_start||current.plan.planned_start||actions[0]?.scheduled_date||'').slice(0,7);
+  if(refMonth){
+    const crjCalendar=await listCrjPlanningCalendar(refMonth);
+    for(let i=0;i<actions.length;i++){
+      const a=actions[i],aEnd=cfdhApiAutoEndTime(a.start_time,a.planned_duration_hours);
+      const existingConflict=crjCalendar.find(x=>{
+        if(x.date!==a.scheduled_date)return false;
+        if(x.source==='cfdh'&&x.plan_id===planId)return false;
+        if(x.source==='workshop'&&a.workshop_calendar_id&&x.id===a.workshop_calendar_id)return false;
+        return cfdhApiOverlaps(a.start_time,aEnd,x.start,x.end);
+      });
+      if(existingConflict)throw new Error('Ação '+(i+1)+': conflito com '+(existingConflict.title||'atividade do CRJ')+' em '+a.scheduled_date+' ('+(existingConflict.start||'--:--')+'–'+(existingConflict.end||'--:--')+'). Escolha outro horário no calendário do CRJ.');
+      for(let j=0;j<i;j++){
+        const b=actions[j],bEnd=cfdhApiAutoEndTime(b.start_time,b.planned_duration_hours);
+        if(a.scheduled_date===b.scheduled_date&&cfdhApiOverlaps(a.start_time,aEnd,b.start_time,bEnd))throw new Error('Ação '+(i+1)+': conflito com a Ação '+(j+1)+' do mesmo planejamento. Escolha outro horário.');
+      }
+    }
   }
 
   const inheritedTheme=current.month_theme;
