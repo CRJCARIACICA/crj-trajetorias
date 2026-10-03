@@ -348,7 +348,7 @@ function cfdhReportDraft(bundle,form=null){
   const r=bundle.report||{},get=n=>form?.querySelector('[name="'+n+'"]')?.value;
   const v=n=>form?get(n):(r[n]??'');
   const executed=(bundle.actions||[]).filter(a=>['realizada','parcial'].includes(a.execution_status));
-  const youthUnique=Object.values(bundle.attendance_counts||{}).reduce((n,x)=>n+Number(x||0),0);
+  const youthUnique=Number(bundle.unique_participants||0);
   return {...r,plan_id:bundle.plan.id,report_date:v('report_date')||new Date().toISOString().slice(0,10),
     execution_status:v('execution_status')||'realizado',
     actual_description:v('actual_description')||'',actual_participants:youthUnique,
