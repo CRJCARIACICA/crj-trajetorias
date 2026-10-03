@@ -81,13 +81,13 @@ function uiDraftApply(form,snapshot,{dispatch=true}={}){
       if(diff)changed.push(el);
     }else if(row.value!==undefined&&el.value!==String(row.value)){el.value=String(row.value);changed.push(el)}
   }
-  delete form.dataset.draftRestoring;
   if(dispatch){
     for(const el of changed){
       const t=String(el.type||'').toLowerCase();
       el.dispatchEvent(new Event((el.tagName==='SELECT'||t==='checkbox'||t==='radio')?'change':'input',{bubbles:true}));
     }
   }
+  delete form.dataset.draftRestoring;
 }
 function uiDraftClear(form,key=uiDraftKey(form)){
   uiDraftLocalDelete(key);
