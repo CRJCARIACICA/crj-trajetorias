@@ -413,3 +413,13 @@ d);font-size:12px;margin:16px 0}.divider:before,.divider:after{content:"";height
 .cfdh-operation-card{border-left:4px solid #92b9ad}
 .cfdh-operation-card .page-head.compact{margin-bottom:8px}
 @media(max-width:900px){.cfdh-progress-grid,.cfdh-workshop-grid{grid-template-columns:1fr}}
+
+.cfdh-field-head{align-items:center;margin-bottom:6px}
+.cfdh-field-head label{margin:0}
+.cfdh-copy-preview{white-space:pre-wrap;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:#f7faf9;max-height:180px;overflow:auto;line-height:1.45}
+.cfdh-copy-actions-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.cfdh-copy-action-option{align-items:flex-start;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.cfdh-copy-action-option span{display:grid;gap:2px}
+.cfdh-copy-action-option small{color:var(--muted)}
+.cfdh-copy-action-option em{font-size:.76rem;color:var(--muted);font-style:normal}
+@media(max-width:760px){.cfdh-copy-actions-grid{grid-template-columns:1fr}.cfdh-field-head{align-items:flex-start;gap:8px}.cfdh-field-head .btn{width:100%}}
