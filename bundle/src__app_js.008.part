@@ -6,8 +6,12 @@ async function bindCfdhShared(){
 
   document.querySelector('[data-new-cfdh-plan]')?.addEventListener('click',async()=>{
     try{
+      const dash=await listCfdhMonthDashboard(month),themes=await listCfdhThemes(),cfg=dash.month_theme||null;
+      const inheritedTheme=cfg?(cfg.theme_custom||themes.find(t=>Number(t.code)===Number(cfg.theme_code))?.theme||'Tema mensal definido'):'';
       modal('Novo circuito CFDH','<form id="new-cfdh-plan-form" class="stack">'+
-        '<div class="notice info"><b>Primeiro defina o circuito.</b><br>O tema mensal não é escolhido aqui: ele será definido dentro da <b>primeira ação CFDH do mês</b>. Depois disso, os próximos planejamentos herdarão o mesmo tema automaticamente.</div>'+
+        (cfg
+          ?'<div class="notice success"><b>Tema mensal já definido: '+esc(inheritedTheme)+'</b><br>Este novo planejamento herdará o tema automaticamente. Para alterá-lo, edite a primeira ação CFDH que definiu o tema deste mês.</div>'
+          :'<div class="notice info"><b>Primeiro defina o circuito.</b><br>O tema mensal será escolhido dentro da <b>Ação 1</b> deste primeiro planejamento CFDH do mês. Depois de salvo, os próximos planejamentos herdarão o mesmo tema automaticamente.</div>')+
         '<div class="form-grid"><div class="field"><label>Modalidade</label><select name="plan_type" required><option value="cfdh_estrutural">CFDH estrutural</option><option value="cfdh_transversal">CFDH transversal</option></select></div><div class="field"><label>Quantidade inicial de ações</label><input class="input" type="number" min="1" max="60" name="cfdh_action_count" value="1" required></div></div>'+
         '<div class="field"><label>Título do circuito</label><input class="input" name="activity_title" required></div>'+
         '<div class="field"><label>Objetivo geral</label><textarea name="description_objective" required></textarea></div>'+
