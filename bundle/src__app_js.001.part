@@ -119,6 +119,34 @@ function methodologyPlanningMatrix(value){
     rows.map(function(r){return '<tr>'+[0,1,2,3,4].map(function(i){return '<td>'+esc(r[i]||'')+'</td>';}).join('')+'</tr>';}).join('')+
     '</tbody></table>';
 }
+function methodologyColumnCellValue(f,value){
+  const val=officialPreviewValue(f,value);
+  if(f.type==='select'||f.type==='multiselect'){
+    const selected=Array.isArray(value)?value:(value?[String(value)]:[]);
+    if(!selected.length)return '&nbsp;';
+    return selected.map(function(x){return esc(x);}).join('<br>');
+  }
+  if(f.type==='textarea')return val?esc(val).replace(/\n/g,'<br>'):'&nbsp;';
+  return val?esc(val):'&nbsp;';
+}
+function methodologyFieldsAsColumns(fields,values,maxColumns=4){
+  const groups=[];let current=[];
+  const flush=()=>{if(current.length){groups.push(current);current=[]}};
+  for(const f of fields||[]){
+    const independent=Boolean(f.full||f.type==='textarea'||f.type==='multiselect');
+    if(independent){flush();groups.push([f]);continue}
+    current.push(f);
+    if(current.length>=maxColumns)flush();
+  }
+  flush();
+  return groups.map(function(group){
+    return '<table class="methodology-record-table"><thead><tr>'+
+      group.map(function(f){return '<th>'+esc(f.label)+'</th>';}).join('')+
+      '</tr></thead><tbody><tr>'+
+      group.map(function(f){return '<td>'+methodologyColumnCellValue(f,values[f.key])+'</td>';}).join('')+
+      '</tr></tbody></table>';
+  }).join('');
+}
 function methodologyPreviewHtml(form,values){
   values=values||{};
   if(!form)return '';
@@ -140,10 +168,10 @@ function methodologyPreviewHtml(form,values){
     form.sections.forEach(function(section){
       const sectionLabel=officialSectionLabel(form,section);
       if(sectionLabel)body+='<div class="methodology-section-title">'+esc(sectionLabel)+'</div>';
-      (section.fields||[]).forEach(function(f){body+=officialPreviewField(f,values[f.key]);});
+      body+=methodologyFieldsAsColumns(section.fields||[],values,4);
     });
   }
-  const paper='<div class="methodology-paper">'+officialPreviewHeader(form)+body+'</div>';
+  const paper='<div class="methodology-paper methodology-paper-landscape">'+officialPreviewHeader(form)+body+'</div>';
   if(form.slug==='emprestimo-canhoto')return paper.replace('</div>','</div>')+'<div class="methodology-cut-line">recorte aqui</div>'+paper;
   return paper;
 }
