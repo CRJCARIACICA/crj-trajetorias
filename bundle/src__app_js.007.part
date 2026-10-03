@@ -344,6 +344,7 @@ function cfdhAutoEndTime(start,hours){
 function cfdhCalendarEntriesForDay(bundle,date,action={}){
   return (bundle?.crj_calendar||[]).filter(x=>{
     if(x.date!==date)return false;
+    if(x.source==='cfdh'&&bundle?.plan?.id&&x.plan_id===bundle.plan.id)return false;
     if(x.source==='cfdh'&&action.id&&x.id===action.id)return false;
     if(x.source==='workshop'&&action.workshop_calendar_id&&x.id===action.workshop_calendar_id)return false;
     return true;
