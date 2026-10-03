@@ -158,9 +158,10 @@ async function bindCfdhShared(){
     planForm.querySelector('[data-cfdh-auto-distribute]')?.addEventListener('click',()=>{
       const selected=selectedWorkshopIds();
       if(!selected.length){toast('Selecione ao menos uma oficina antes de distribuir.','warn');return}
-      const used=new Map(),actions=collectActions().map((a,i)=>{
-        const workshop_id=selected[i%selected.length],available=bundle.calendar.filter(x=>x.workshop_id===workshop_id),idx=used.get(workshop_id)||0,d=available[idx]||null;used.set(workshop_id,idx+1);
-        if(d)return {...a,workshop_id,schedule_mode:'workshop_planned',workshop_calendar_id:d.id,scheduled_date:d.scheduled_date,start_time:String(d.start_time||'').slice(0,5),end_time:String(d.end_time||'').slice(0,5),location_type:d.location_type||a.location_type,location_other:d.location_other||a.location_other};
+      const usedDates=new Set(),actions=collectActions().map((a,i)=>{
+        const workshop_id=selected[i%selected.length],available=bundle.calendar.filter(x=>x.workshop_id===workshop_id);
+        const d=available.find(x=>!usedDates.has(x.scheduled_date))||null;
+        if(d){usedDates.add(d.scheduled_date);return {...a,workshop_id,schedule_mode:'workshop_planned',workshop_calendar_id:d.id,scheduled_date:d.scheduled_date,start_time:String(d.start_time||'').slice(0,5),end_time:String(d.end_time||'').slice(0,5),location_type:d.location_type||a.location_type,location_other:d.location_other||a.location_other}}
         return {...a,workshop_id,schedule_mode:'atypical',workshop_calendar_id:null,scheduled_date:'',start_time:'',end_time:''};
       });
       renderActions(actions);
