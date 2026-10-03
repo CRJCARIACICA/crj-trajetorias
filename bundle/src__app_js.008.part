@@ -44,6 +44,46 @@ async function bindCfdhShared(){
     }catch(err){toast(err.message,'danger')}
   });
 
+  document.querySelectorAll('[data-cfdh-edit-theme]').forEach(btn=>btn.addEventListener('click',async()=>{
+    try{
+      const [dash,themes]=await Promise.all([listCfdhMonthDashboard(month),listCfdhThemes()]);
+      const cfg=dash.month_theme;
+      if(!cfg){toast('Crie o primeiro planejamento CFDH do mês antes de definir o tema.','danger');return}
+      const options=themes.map(t=>'<option value="'+t.code+'" '+(Number(t.code)===Number(cfg.theme_code)?'selected':'')+'>'+esc(t.code+'. '+t.theme)+'</option>').join('');
+      modal('Editar tema mensal do CFDH','<form id="edit-cfdh-month-theme" class="stack"><div class="notice info"><b>Tema de referência do mês</b><br>Ele foi definido pelo primeiro planejamento criado, mas pode ser atualizado quando a realidade do território exigir. A alteração será aplicada aos demais circuitos deste mês.</div><div class="form-grid"><div class="field"><label>Tema da Metodologia</label><select name="theme_code"><option value="">Selecione</option>'+options+'</select></div><div class="field"><label>Outro tema / adaptação territorial</label><input class="input" name="theme_custom" value="'+esc(cfg.theme_custom||'')+'"></div></div><div class="actions"><button type="submit" class="btn primary">Salvar tema do mês</button></div></form>');
+      document.querySelector('#edit-cfdh-month-theme')?.addEventListener('submit',async e=>{
+        e.preventDefault();
+        const form=e.currentTarget,p=parseForm(form),submit=form.querySelector('[type="submit"]'),label=submit.textContent;
+        if(!p.theme_code&&!String(p.theme_custom||'').trim()){toast('Defina um tema antes de salvar.','danger');return}
+        submit.disabled=true;submit.textContent='Salvando...';
+        try{
+          await updateCfdhMonthTheme(month,{theme_code:p.theme_code,theme_custom:p.theme_custom});
+          document.querySelector('#modal')?.remove();
+          toast('Tema mensal do CFDH atualizado');
+          await render();
+        }catch(err){toast(err.message,'danger');submit.disabled=false;submit.textContent=label}
+      });
+    }catch(err){toast(err.message,'danger')}
+  }));
+
+  document.querySelectorAll('[data-cfdh-delete-plan]').forEach(btn=>btn.addEventListener('click',async()=>{
+    const title=btn.dataset.cfdhDeleteTitle||'este CFDH';
+    let dash=null;
+    try{dash=await listCfdhMonthDashboard(month)}catch{}
+    const isSource=dash?.month_theme?.source_plan_id===btn.dataset.cfdhDeletePlan;
+    const remaining=(dash?.plans||[]).filter(p=>p.id!==btn.dataset.cfdhDeletePlan).length;
+    const themeMessage=isSource
+      ?(remaining?'\n\nEste é o planejamento que atualmente referencia o tema do mês. O tema será preservado e a referência passará automaticamente para o próximo CFDH do mês.':'\n\nEste é o único CFDH do mês. Ao excluí-lo, a configuração do tema mensal também será removida.')
+      :'';
+    if(!confirm('Excluir "'+title+'"?\n\nAs ações, listas e relatório vinculados a este circuito também serão excluídos.'+themeMessage))return;
+    const original=btn.textContent;btn.disabled=true;btn.textContent='Excluindo...';
+    try{
+      await deleteCfdhPlan(btn.dataset.cfdhDeletePlan);
+      toast('CFDH excluído');
+      await render();
+    }catch(err){toast(err.message,'danger');btn.disabled=false;btn.textContent=original}
+  }));
+
   if(!planId)return;
 
   let bundle;
@@ -80,8 +120,8 @@ async function bindCfdhShared(){
     const collectPlan=()=>({
       ...bundle.plan,
       plan_type:planForm.querySelector('[name="plan_type"]')?.value||bundle.plan.plan_type,
-      cfdh_theme_code:bundle.month_theme?.theme_code??bundle.plan.cfdh_theme_code??null,
-      cfdh_theme_custom:bundle.month_theme?.theme_custom??bundle.plan.cfdh_theme_custom??'',
+      cfdh_theme_code:planForm.querySelector('[name="cfdh_theme_code"]')?.value??bundle.month_theme?.theme_code??bundle.plan.cfdh_theme_code??null,
+      cfdh_theme_custom:planForm.querySelector('[name="cfdh_theme_custom"]')?.value??bundle.month_theme?.theme_custom??bundle.plan.cfdh_theme_custom??'',
       activity_title:planForm.querySelector('[name="activity_title"]')?.value||'',
       description_objective:planForm.querySelector('[name="description_objective"]')?.value||'',
       cfdh_action_count:Number(planForm.querySelector('[name="cfdh_action_count"]')?.value||0),
