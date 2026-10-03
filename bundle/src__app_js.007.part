@@ -255,34 +255,28 @@ function cfdhPlanPreviewHtml(bundle,draft=null){
   const p=draft?.plan||bundle?.plan||{},actions=draft?.actions||bundle?.actions||[],themes=bundle?.themes||[],workshops=bundle?.workshops||[],catalog=bundle?.classification||[],team=bundle?.team||[];
   const selected=draft?.workshop_ids||bundle?.workshop_ids||[],themeBundle={...bundle,plan:p};
   const theme=cfdhMonthlyThemeText(themeBundle,actions),planned=actions.reduce((n,a)=>n+Number(a.planned_duration_hours||0),0),countable=actions.reduce((n,a)=>n+cfdhActionCountableHours(a),0);
-  const rows=actions.map(a=>{
+  const mainRows=[],extraRowsA=[],extraRowsB=[];
+  for(const a of actions){
     const w=workshops.find(x=>x.id===a.workshop_id),n=catalog.find(x=>x.nucleus_code===a.nucleus_code),ax=catalog.find(x=>x.axis_code===a.axis_code),it=catalog.find(x=>x.axis_code===a.axis_code&&x.item_code===a.item_code);
     const responsibleNames=(a.responsible_names?.length?a.responsible_names:(a.responsible_user_ids||[]).map(id=>team.find(t=>t.id===id)?.display_name).filter(Boolean));
-    return '<tr><td><b>Ação '+esc(a.action_number)+'</b><br>'+esc(fmtDate(a.scheduled_date))+'<br>'+esc(String(a.start_time||'').slice(0,5))+'–'+esc(String(a.end_time||'').slice(0,5))+'</td>'+
-      '<td><b>'+esc(a.title||'')+'</b><br><small>Tema: '+esc(a.action_theme||theme)+'</small><br><small>Objetivo: '+esc(a.objective||'')+'</small></td>'+
-      '<td>'+esc(n?.nucleus_name||a.nucleus_code||'')+'<br><b>'+esc(ax?.axis_name||a.axis_code||'')+'</b>'+(it?'<br>'+esc(it.item_code)+') '+esc(it.item_label):'')+'</td>'+
-      '<td>'+esc(responsibleNames.join(', ')||'Não definido')+'</td>'+
-      '<td>'+esc(w?.name||(p.plan_type==='cfdh_estrutural'?'Ação própria / sem oficina':'—'))+'<br><small>'+esc(a.schedule_mode==='atypical'?'Dia/horário atípico':a.schedule_mode==='workshop_planned'?'Dia planejado da oficina':'Estrutural')+'</small></td>'+
-      '<td>'+esc(a.activities||'')+'</td><td>'+esc(a.resources||'')+'</td>'+
-      '<td>'+Number(a.planned_duration_hours||0).toLocaleString('pt-BR')+'h'+(Number(a.planned_duration_hours||0)<2?'<br><small>não contabiliza</small>':'')+'</td></tr>';
-  }).join('');
+    mainRows.push('<tr><td>'+esc(a.action_theme||theme)+'</td><td>'+esc(a.objective||'')+'</td><td>'+esc(a.activities||'')+'</td><td>'+esc(a.resources||'')+'</td><td>'+Number(a.planned_duration_hours||0).toLocaleString('pt-BR')+'h'+(Number(a.planned_duration_hours||0)<2?'<br><small>não contabiliza</small>':'')+'</td></tr>');
+    extraRowsA.push('<tr><td><b>Ação '+esc(a.action_number)+'</b><br>'+esc(a.title||'')+'</td><td>'+esc(fmtDate(a.scheduled_date))+'</td><td>'+esc(String(a.start_time||'').slice(0,5))+'–'+esc(String(a.end_time||'').slice(0,5))+'</td><td>'+esc(responsibleNames.join(', ')||'Não definido')+'</td><td>'+esc(w?.name||(p.plan_type==='cfdh_estrutural'?'Ação própria / sem oficina':'—'))+'</td></tr>');
+    extraRowsB.push('<tr><td>'+esc(n?.nucleus_name||a.nucleus_code||'')+'</td><td>'+esc(ax?.axis_name||a.axis_code||'')+'</td><td>'+(it?esc(it.item_code)+') '+esc(it.item_label):'—')+'</td><td>'+esc(a.schedule_mode==='atypical'?'Dia/horário atípico':a.schedule_mode==='workshop_planned'?'Dia planejado da oficina':'Estrutural')+'</td><td>'+esc(workshopLocationLabel({location_type:a.location_type,location_other:a.location_other})||'')+'</td></tr>');
+  }
   return '<div class="methodology-paper methodology-paper-landscape cfdh-plan-paper">'+
     '<div class="methodology-annex-title">ANEXO 11 · CFDH — PLANEJAMENTO</div>'+
     '<div class="methodology-institutional-header"><img src="'+METHODOLOGY_HEADER_DATA+'" alt="Cabeçalho institucional"></div>'+
     '<div class="methodology-inner-title">CIRCUITO FORMATIVO EM DIREITOS HUMANOS</div>'+
-    '<div class="methodology-row"><b>Modalidade:</b><span class="methodology-inline-answer">'+esc(cfdhTypeLabel(p.plan_type))+'</span></div>'+
-    '<div class="methodology-row"><b>Tema mensal:</b><span class="methodology-inline-answer">'+esc(theme)+'</span></div>'+
-    '<div class="methodology-row"><b>Título do circuito:</b><span class="methodology-inline-answer">'+esc(p.activity_title||'')+'</span></div>'+
-    '<div class="methodology-row methodology-row-tall"><b>Objetivo:</b><div class="methodology-answer">'+esc(p.description_objective||'')+'</div></div>'+
-    '<div class="methodology-row"><b>Oficinas vinculadas:</b><span class="methodology-inline-answer">'+esc(p.plan_type==='cfdh_estrutural'?'Não se aplica':selected.map(id=>workshops.find(w=>w.id===id)?.name).filter(Boolean).join(', ')||'Nenhuma selecionada')+'</span></div>'+
-    '<div class="methodology-row"><b>Ações planejadas:</b><span class="methodology-inline-answer">'+actions.length+' · '+planned.toLocaleString('pt-BR')+'h previstas · '+countable.toLocaleString('pt-BR')+'h contabilizáveis pela regra operacional de 2h</span></div>'+
-    '<table class="methodology-planning-table cfdh-plan-table"><thead><tr><th>Ação / data</th><th>Tema / objetivo</th><th>Núcleo → Eixo → Item</th><th>Responsável(is)</th><th>Oficina / agenda</th><th>Atividades</th><th>Recursos</th><th>CH</th></tr></thead><tbody>'+(rows||'<tr><td colspan="8">Nenhuma ação estruturada.</td></tr>')+'</tbody></table>'+
-    '<div class="methodology-row methodology-row-tall"><b>Equipe prevista:</b><div class="methodology-answer">'+esc(p.team_text||'')+'</div></div>'+
-    '<div class="methodology-row methodology-row-tall"><b>Parceiros:</b><div class="methodology-answer">'+esc(p.partners||'')+'</div></div>'+
-    '<div class="methodology-row methodology-row-tall"><b>Mobilização / divulgação:</b><div class="methodology-answer">'+esc(p.mobilization_plan||'')+'</div></div>'+
-    '<div class="methodology-row methodology-row-tall"><b>Resultados esperados:</b><div class="methodology-answer">'+esc(p.expected_results||'')+'</div></div>'+
-    '<div class="methodology-row methodology-row-tall"><b>Observações:</b><div class="methodology-answer">'+esc(p.cfdh_monthly_notes||'')+'</div></div>'+
-    '<div class="methodology-system-note">Ações transversais vinculadas a oficinas são refletidas no calendário e no planejamento mensal da oficina. Ações estruturais permanecem independentes de oficina.</div>'+
+    '<table class="methodology-record-table"><thead><tr><th>Modalidade</th><th>Tema mensal</th><th>Título do circuito</th><th>Oficinas vinculadas</th></tr></thead><tbody><tr><td>'+esc(cfdhTypeLabel(p.plan_type))+'</td><td>'+esc(theme)+'</td><td>'+esc(p.activity_title||'')+'</td><td>'+esc(p.plan_type==='cfdh_estrutural'?'Não se aplica':selected.map(id=>workshops.find(w=>w.id===id)?.name).filter(Boolean).join(', ')||'Nenhuma selecionada')+'</td></tr></tbody></table>'+
+    '<table class="methodology-record-table"><thead><tr><th>Objetivo geral</th><th>Ações planejadas</th></tr></thead><tbody><tr><td>'+esc(p.description_objective||'')+'</td><td>'+actions.length+' · '+planned.toLocaleString('pt-BR')+'h previstas · '+countable.toLocaleString('pt-BR')+'h contabilizáveis</td></tr></tbody></table>'+
+    '<div class="methodology-section-title">ESTRUTURA PRINCIPAL DA METODOLOGIA</div>'+
+    '<table class="methodology-planning-table cfdh-plan-table"><thead><tr><th>7. Tema</th><th>8. Objetivo</th><th>9. Atividades propostas</th><th>10. Recursos necessários</th><th>11. Carga horária</th></tr></thead><tbody>'+(mainRows.join('')||'<tr><td colspan="5">Nenhuma ação estruturada.</td></tr>')+'</tbody></table>'+
+    '<div class="methodology-section-title">CAMPOS ADICIONAIS DO REGISTRO</div>'+
+    '<table class="methodology-record-table cfdh-extra-table"><thead><tr><th>Ação / título</th><th>Data</th><th>Horário</th><th>Responsável(is)</th><th>Oficina vinculada</th></tr></thead><tbody>'+(extraRowsA.join('')||'<tr><td colspan="5">Sem campos adicionais.</td></tr>')+'</tbody></table>'+
+    '<table class="methodology-record-table cfdh-extra-table"><thead><tr><th>Núcleo</th><th>Eixo</th><th>Item</th><th>Agenda / modalidade</th><th>Local</th></tr></thead><tbody>'+(extraRowsB.join('')||'<tr><td colspan="5">Sem campos adicionais.</td></tr>')+'</tbody></table>'+
+    '<table class="methodology-record-table"><thead><tr><th>Equipe prevista</th><th>Parceiros</th><th>Mobilização / divulgação</th><th>Resultados esperados</th></tr></thead><tbody><tr><td>'+esc(p.team_text||'')+'</td><td>'+esc(p.partners||'')+'</td><td>'+esc(p.mobilization_plan||'')+'</td><td>'+esc(p.expected_results||'')+'</td></tr></tbody></table>'+
+    '<table class="methodology-record-table"><thead><tr><th>Observações</th></tr></thead><tbody><tr><td>'+esc(p.cfdh_monthly_notes||'')+'</td></tr></tbody></table>'+
+    '<div class="methodology-system-note">Os cinco campos da estrutura principal permanecem iguais aos títulos previstos na metodologia. Dados operacionais adicionais ficam em tabelas independentes e não alteram a estrutura metodológica.</div>'+
   '</div>';
 }
 function cfdhActionEditorCard(bundle,a,index){
