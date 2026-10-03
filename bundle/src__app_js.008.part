@@ -88,8 +88,8 @@ async function bindCfdhShared(){
 
   let bundle;
   try{
-    const [b,themes,classification,indicators]=await Promise.all([getCfdhPlanBundle(planId),listCfdhThemes(),listMethodologyClassificationCatalog(),listIndicatorCatalog()]);
-    bundle=b;bundle.themes=themes;bundle.classification=classification;bundle.indicators=indicators;
+    const [b,themes,classification,indicators,monthDashboard,crjCalendar]=await Promise.all([getCfdhPlanBundle(planId),listCfdhThemes(),listMethodologyClassificationCatalog(),listIndicatorCatalog(),listCfdhMonthDashboard(month),listCrjPlanningCalendar(month)]);
+    bundle=b;bundle.themes=themes;bundle.classification=classification;bundle.indicators=indicators;bundle.month_dashboard=monthDashboard;bundle.crj_calendar=crjCalendar;
   }catch(err){toast(err.message,'danger');return}
 
   const planForm=document.querySelector('#cfdh-plan-editor');
@@ -222,33 +222,56 @@ async function bindCfdhShared(){
           syncLinkedClassification(card);refresh();
         });
         updateLinkedHint(card);
-        const workshop=card.querySelector('[data-cfdh-action-workshop]'),calendar=card.querySelector('[data-cfdh-calendar-entry]'),modeEl=card.querySelector('[data-cfdh-schedule-mode]');
-        const rebuildCalendar=()=>{
-          if(!calendar)return;
-          const rows=bundle.calendar.filter(x=>x.workshop_id===workshop?.value);
-          calendar.innerHTML='<option value="">Selecione uma data</option>'+rows.map(d=>'<option value="'+d.id+'">'+fmtDate(d.scheduled_date)+' · '+esc(String(d.start_time||'').slice(0,5))+'–'+esc(String(d.end_time||'').slice(0,5))+'</option>').join('');
-          const date=card.querySelector('[name="scheduled_date"]'),start=card.querySelector('[name="start_time"]'),end=card.querySelector('[name="end_time"]');
-          if(modeEl?.value==='workshop_planned'){if(date)date.value='';if(start)start.value='';if(end)end.value=''}
-          refresh();
+        const workshop=card.querySelector('[data-cfdh-action-workshop]');
+        const dateInput=card.querySelector('[name="scheduled_date"]'),startInput=card.querySelector('[name="start_time"]'),endInput=card.querySelector('[name="end_time"]'),durationInput=card.querySelector('[name="planned_duration_hours"]');
+        const modeInput=card.querySelector('[name="schedule_mode"]'),calendarIdInput=card.querySelector('[name="workshop_calendar_id"]'),scheduleStatus=card.querySelector('[data-cfdh-schedule-link-status]');
+        const calendarPanel=card.querySelector('[data-cfdh-calendar-panel]'),dayDetail=card.querySelector('[data-cfdh-calendar-day-detail]'),selectedBox=card.querySelector('[data-cfdh-calendar-selected]');
+
+        const syncCalculatedEnd=()=>{
+          if(!endInput)return;
+          endInput.value=cfdhAutoEndTime(startInput?.value,durationInput?.value);
         };
-        workshop?.addEventListener('change',rebuildCalendar);
-        calendar?.addEventListener('change',()=>{
-          const d=bundle.calendar.find(x=>x.id===calendar.value),date=card.querySelector('[name="scheduled_date"]'),start=card.querySelector('[name="start_time"]'),end=card.querySelector('[name="end_time"]'),loc=card.querySelector('[name="location_type"]'),other=card.querySelector('[name="location_other"]');
-          if(d){date.value=d.scheduled_date||'';start.value=String(d.start_time||'').slice(0,5);end.value=String(d.end_time||'').slice(0,5);if(d.location_type)loc.value=d.location_type;if(d.location_other)other.value=d.location_other}
-          refresh();
-        });
-        modeEl?.addEventListener('change',()=>{
-          const atypical=modeEl.value==='atypical',plannedWrap=card.querySelector('[data-cfdh-planned-date-wrap]'),atypicalWrap=card.querySelector('[data-cfdh-atypical-wrap]');
-          plannedWrap?.classList.toggle('hidden',atypical);atypicalWrap?.classList.toggle('hidden',!atypical);
-          const date=card.querySelector('[name="scheduled_date"]'),start=card.querySelector('[name="start_time"]'),end=card.querySelector('[name="end_time"]');
-          for(const el of [date,start,end])if(el){el.readOnly=!atypical;if(atypical&&el===date&&calendar)calendar.value=''}
-          refresh();
-        });
-        card.querySelector('[name="planned_duration_hours"]')?.addEventListener('input',e=>{
+        const syncTransversalCalendarLink=()=>{
+          if(!modeInput||!calendarIdInput)return;
+          const wid=workshop?.value||'',date=dateInput?.value||'',start=cfdhTimeMinutes(startInput?.value),end=cfdhTimeMinutes(endInput?.value);
+          const match=(bundle.calendar||[]).find(x=>{
+            if(x.workshop_id!==wid||x.scheduled_date!==date)return false;
+            const xs=cfdhTimeMinutes(String(x.start_time||'').slice(0,5)),xe=cfdhTimeMinutes(String(x.end_time||'').slice(0,5));
+            return start!=null&&end!=null&&xs!=null&&xe!=null&&start>=xs&&end<=xe;
+          });
+          modeInput.value=match?'workshop_planned':'atypical';
+          calendarIdInput.value=match?.id||'';
+          if(scheduleStatus)scheduleStatus.textContent=match?'Dentro de aula planejada · '+fmtDate(match.scheduled_date)+' · '+String(match.start_time||'').slice(0,5)+'–'+String(match.end_time||'').slice(0,5):'Dia/horário atípico em relação à oficina vinculada';
+        };
+        const updateConflictBox=()=>{
+          const d=draftBundle(),idx=Number(card.dataset.actionNumber||1)-1,action=d.actions[idx],box=card.querySelector('[data-cfdh-calendar-conflict]');
+          if(!box||!action)return;
+          const conflicts=cfdhActionCalendarConflicts(d,action,d.actions);
+          box.classList.toggle('hidden',!conflicts.length);
+          box.innerHTML=conflicts.length?'<div class="notice danger compact"><b>Conflito de horário:</b><br>'+conflicts.map(x=>esc((x.start||'--:--')+'–'+(x.end||'--:--')+' · '+(x.title||'Atividade CRJ'))).join('<br>')+'</div>':'';
+        };
+        const updateDayDetail=()=>{
+          if(!dayDetail)return;
+          const idx=Number(card.dataset.actionNumber||1)-1,d=draftBundle(),action=d.actions[idx]||{};
+          dayDetail.innerHTML=cfdhCalendarDayDetailHtml(d,dateInput?.value||'',action);
+        };
+        card.querySelector('[data-cfdh-toggle-calendar]')?.addEventListener('click',()=>calendarPanel?.classList.toggle('hidden'));
+        card.querySelectorAll('[data-cfdh-calendar-day]').forEach(btn=>btn.addEventListener('click',()=>{
+          const date=btn.dataset.cfdhCalendarDay||'';
+          if(dateInput)dateInput.value=date;
+          card.querySelectorAll('[data-cfdh-calendar-day]').forEach(x=>x.classList.toggle('selected',x===btn));
+          if(selectedBox){selectedBox.classList.remove('hidden');selectedBox.innerHTML='<b>Dia selecionado:</b> <span>'+esc(fmtDate(date))+'</span>'}
+          updateDayDetail();
+          syncCalculatedEnd();syncTransversalCalendarLink();updateConflictBox();refresh();
+        }));
+        workshop?.addEventListener('change',()=>{syncTransversalCalendarLink();updateConflictBox();refresh()});
+        startInput?.addEventListener('input',()=>{syncCalculatedEnd();syncTransversalCalendarLink();updateConflictBox();refresh()});
+        durationInput?.addEventListener('input',e=>{
           const pill=card.querySelector('[data-cfdh-count-status]'),ok=Number(e.target.value||0)>=2;
           if(pill){pill.textContent=ok?'Contabilizável':'Menos de 2h';pill.className='pill '+(ok?'success':'warn')}
-          refresh();
+          syncCalculatedEnd();syncTransversalCalendarLink();updateConflictBox();refresh();
         });
+        syncCalculatedEnd();syncTransversalCalendarLink();updateDayDetail();updateConflictBox();
 
         card.querySelector('[data-cfdh-link-classification]')?.addEventListener('click',()=>{
           const sourceNumber=Number(card.dataset.actionNumber||0),current=collectActions(),source=current[sourceNumber-1]||{};
@@ -484,7 +507,7 @@ async function bindCfdhShared(){
       e.preventDefault();
       if(!planForm.reportValidity())return;
       const draft=draftBundle(),alerts=cfdhPlanAlerts(draft).filter(x=>!/avaliação|presença nominal|relatório/i.test(x));
-      const blocking=alerts.filter(x=>!/menor que 2h|Distribuição sugerida/i.test(x));
+      const blocking=alerts.filter(x=>!/menor que 2h|Distribuição sugerida|ALERTA DE META/i.test(x));
       if(blocking.length){toast('Complete as pendências do planejamento antes de salvar.','danger');refresh();return}
       const btn=planForm.querySelector('[type="submit"]'),original=btn.textContent;btn.disabled=true;btn.textContent='Salvando e sincronizando...';
       try{
