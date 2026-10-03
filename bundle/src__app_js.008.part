@@ -394,7 +394,7 @@ async function bindCfdhShared(){
     const resizeActions=()=>{
       const wanted=Math.max(1,Math.min(60,Number(planForm.querySelector('[data-cfdh-action-count]')?.value||1))),current=collectActions();
       if(current.length<wanted){
-        for(let i=current.length;i<wanted;i++)current.push({action_number:i+1,title:'Ação '+(i+1),planned_duration_hours:2,schedule_mode:collectPlan().plan_type==='cfdh_estrutural'?'structural':'workshop_planned',scheduled_date:'',start_time:'',end_time:'',nucleus_code:'',axis_code:'',item_code:null,responsible_user_ids:[],monthly_theme_code:null,monthly_theme_custom:''});
+        for(let i=current.length;i<wanted;i++){const me=bundle.team.find(t=>t.id===state.user?.id&&['educador','assistente_social','psicologo','terapeuta_ocupacional'].includes(t.role));current.push({action_number:i+1,title:'Ação '+(i+1),planned_duration_hours:2,schedule_mode:collectPlan().plan_type==='cfdh_estrutural'?'structural':'workshop_planned',scheduled_date:'',start_time:'',end_time:'',nucleus_code:'',axis_code:'',item_code:null,responsible_user_ids:me?[me.id]:[],responsible_names:me?[me.display_name]:[],responsible_roles:me?[me.role]:[],monthly_theme_code:null,monthly_theme_custom:''})}
       }else if(current.length>wanted){
         const removed=current.slice(wanted);
         if(removed.some(x=>x.id&&['realizada','parcial'].includes(bundle.actions.find(a=>a.id===x.id)?.execution_status))){toast('Ação já executada não pode ser removida.','danger');planForm.querySelector('[data-cfdh-action-count]').value=current.length;return}
