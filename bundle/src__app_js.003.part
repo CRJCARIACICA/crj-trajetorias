@@ -27,7 +27,7 @@ function youthSelect(rows,name='youth_id'){return `<select name="${name}" requir
 
 async function bindRoute(){
   document.querySelectorAll('[data-nav]').forEach(b=>b.addEventListener('click',()=>nav(b.dataset.nav)));
-  document.querySelector('[data-action="logout"]')?.addEventListener('click',async e=>{e.preventDefault();await signOut();state.user=null;renderLogin()});
+  document.querySelector('[data-action="logout"]')?.addEventListener('click',async e=>{e.preventDefault();const userId=state.user?.id;await signOut();if(userId)clearLocalUiDraftsForUser(userId);state.user=null;renderLogin()});
   document.querySelector('[data-back]')?.addEventListener('click',()=>history.back());
   document.querySelector('#search-youth')?.addEventListener('submit',e=>{e.preventDefault();nav(`jovens?q=${encodeURIComponent(new FormData(e.target).get('q'))}`)});
   decorateMethodologyFormGoals(document.querySelector('#dynamic-form'));
