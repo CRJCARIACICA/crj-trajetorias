@@ -63,14 +63,17 @@ async function bindCfdhShared(){
         nucleus_code:v('nucleus_code')||'',axis_code:axis||'',item_code:item||null,
         item_label:cat.find(x=>x.axis_code===axis&&x.item_code===item)?.item_label||'',
         classification_group_id:v('classification_group_id')||null,
+        monthly_theme_code:v('monthly_theme_code')||null,
+        monthly_theme_custom:v('monthly_theme_custom')||'',
+        responsible_user_ids:[...card.querySelectorAll('[name="responsible_user_id"]:checked')].map(x=>x.value),
         execution_status:(bundle.actions.find(x=>x.id===card.dataset.actionId)?.execution_status)||'planejada'
       };
     });
     const collectPlan=()=>({
       ...bundle.plan,
       plan_type:planForm.querySelector('[name="plan_type"]')?.value||bundle.plan.plan_type,
-      cfdh_theme_code:planForm.querySelector('[name="cfdh_theme_code"]')?.value||null,
-      cfdh_theme_custom:planForm.querySelector('[name="cfdh_theme_custom"]')?.value||'',
+      cfdh_theme_code:bundle.month_theme?.theme_code??bundle.plan.cfdh_theme_code??null,
+      cfdh_theme_custom:bundle.month_theme?.theme_custom??bundle.plan.cfdh_theme_custom??'',
       activity_title:planForm.querySelector('[name="activity_title"]')?.value||'',
       description_objective:planForm.querySelector('[name="description_objective"]')?.value||'',
       cfdh_action_count:Number(planForm.querySelector('[name="cfdh_action_count"]')?.value||0),
@@ -385,7 +388,7 @@ async function bindCfdhShared(){
     const resizeActions=()=>{
       const wanted=Math.max(1,Math.min(60,Number(planForm.querySelector('[data-cfdh-action-count]')?.value||1))),current=collectActions();
       if(current.length<wanted){
-        for(let i=current.length;i<wanted;i++)current.push({action_number:i+1,title:'Ação '+(i+1),planned_duration_hours:2,schedule_mode:collectPlan().plan_type==='cfdh_estrutural'?'structural':'workshop_planned',scheduled_date:'',start_time:'',end_time:'',nucleus_code:'',axis_code:'',item_code:null});
+        for(let i=current.length;i<wanted;i++)current.push({action_number:i+1,title:'Ação '+(i+1),planned_duration_hours:2,schedule_mode:collectPlan().plan_type==='cfdh_estrutural'?'structural':'workshop_planned',scheduled_date:'',start_time:'',end_time:'',nucleus_code:'',axis_code:'',item_code:null,responsible_user_ids:[],monthly_theme_code:null,monthly_theme_custom:''});
       }else if(current.length>wanted){
         const removed=current.slice(wanted);
         if(removed.some(x=>x.id&&['realizada','parcial'].includes(bundle.actions.find(a=>a.id===x.id)?.execution_status))){toast('Ação já executada não pode ser removida.','danger');planForm.querySelector('[data-cfdh-action-count]').value=current.length;return}
