@@ -112,27 +112,42 @@ export async function getCfdhPlanBundle(planId){
   const plan=pq.data;
   if(!['cfdh_estrutural','cfdh_transversal'].includes(plan.plan_type))throw new Error('Este registro não é um planejamento CFDH.');
   const month=String(plan.planned_start||new Date().toISOString().slice(0,10)).slice(0,7),range=cfdhMonthRange(month);
-  const [linksQ,actionsQ,workshopsQ,calendarQ,reportQ,formsQ,teamQ]=await Promise.all([
+  const [linksQ,actionsQ,workshopsQ,calendarQ,reportQ,formsQ,teamQ,monthThemeQ]=await Promise.all([
     supabase.from('cfdh_plan_workshops').select('workshop_id').eq('plan_id',planId),
     supabase.from('cfdh_actions').select('*').eq('plan_id',planId).order('action_number'),
     supabase.from('workshops').select('*').eq('active',true).order('name'),
     supabase.from('workshop_calendar').select('*').gte('scheduled_date',range.start).lt('scheduled_date',range.end).neq('status','cancelada').order('scheduled_date').order('start_time'),
     supabase.from('educator_reports').select('*').eq('plan_id',planId).maybeSingle(),
     supabase.from('methodology_form_submissions').select('id,form_slug,payload,submitted_at,created_by').in('form_slug',['cfdh-planejamento','cfdh-avaliacao-jovens','cfdh-avaliacao-equipe']).order('submitted_at',{ascending:false}).limit(300),
-    supabase.from('profiles').select('id,display_name,role,active').order('display_name')
+    supabase.from('profiles').select('id,display_name,role,active').order('display_name'),
+    supabase.from('cfdh_month_settings').select('*').eq('month_start',range.start).maybeSingle()
   ]);
-  for(const q of [linksQ,actionsQ,workshopsQ,calendarQ,reportQ,formsQ,teamQ])if(q.error)throw q.error;
-  const actions=actionsQ.data||[],ids=actions.map(x=>x.id);
-  let attendance=[];
+  for(const q of [linksQ,actionsQ,workshopsQ,calendarQ,reportQ,formsQ,teamQ,monthThemeQ])if(q.error)throw q.error;
+  let actions=actionsQ.data||[],ids=actions.map(x=>x.id);
+  let attendance=[],responsibles=[];
   if(ids.length){
-    const aq=await supabase.from('cfdh_attendance').select('action_id,youth_id,present').in('action_id',ids).eq('present',true);
-    if(aq.error)throw aq.error;attendance=aq.data||[];
+    const [aq,rq]=await Promise.all([
+      supabase.from('cfdh_attendance').select('action_id,youth_id,present').in('action_id',ids).eq('present',true),
+      supabase.from('cfdh_action_responsibles').select('action_id,user_id').in('action_id',ids)
+    ]);
+    if(aq.error)throw aq.error;if(rq.error)throw rq.error;
+    attendance=aq.data||[];responsibles=rq.data||[];
   }
-  const attendance_counts={},uniqueYouth=new Set();
+  const attendance_counts={},uniqueYouth=new Set(),team=teamQ.data||[],teamMap=new Map(team.map(x=>[x.id,x]));
   for(const a of attendance){attendance_counts[a.action_id]=(attendance_counts[a.action_id]||0)+1;if(a.youth_id)uniqueYouth.add(a.youth_id)}
+  actions=actions.map(a=>{
+    const ids=responsibles.filter(x=>x.action_id===a.id).map(x=>x.user_id),profiles=ids.map(id=>teamMap.get(id)).filter(Boolean);
+    return {...a,responsible_user_ids:ids,responsible_names:profiles.map(x=>x.display_name),responsible_roles:profiles.map(x=>x.role)};
+  });
+  const month_theme=monthThemeQ.data||null;
+  const resolvedPlan={...plan,
+    cfdh_theme_code:month_theme?.theme_code??plan.cfdh_theme_code??null,
+    cfdh_theme_custom:month_theme?.theme_custom??plan.cfdh_theme_custom??null
+  };
   const evaluations=(formsQ.data||[]).filter(x=>x.payload?._cfdh_plan_id===planId);
   return {
-    plan,
+    plan:resolvedPlan,
+    month_theme,
     workshop_ids:(linksQ.data||[]).map(x=>x.workshop_id),
     actions,
     workshops:workshopsQ.data||[],
@@ -141,7 +156,7 @@ export async function getCfdhPlanBundle(planId){
     evaluations,
     attendance_counts,
     unique_participants:uniqueYouth.size,
-    team:teamQ.data||[]
+    team
   };
 }
 export async function listCfdhMonthDashboard(month=monthKey()){
