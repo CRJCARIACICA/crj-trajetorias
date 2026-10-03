@@ -14,15 +14,27 @@ async function bindCfdhShared(){
         '<div class="field"><label>Outro tema / adaptação territorial</label><input class="input" name="cfdh_theme_custom"></div>'+
         '<div class="field"><label>Título do circuito</label><input class="input" name="activity_title" required></div>'+
         '<div class="field"><label>Objetivo geral</label><textarea name="description_objective" required></textarea></div>'+
-        '<button class="btn primary">Criar e estruturar ações</button></form>');
+        '<div data-cfdh-create-status></div><button class="btn primary" type="submit" data-cfdh-create-submit>Criar e estruturar ações</button></form>');
       document.querySelector('#new-cfdh-plan-form')?.addEventListener('submit',async e=>{
-        e.preventDefault();const p=parseForm(e.target),btn=e.target.querySelector('button[type="submit"]');btn.disabled=true;btn.textContent='Criando...';
+        e.preventDefault();
+        const form=e.currentTarget,btn=form.querySelector('[data-cfdh-create-submit]')||form.querySelector('button[type="submit"]'),status=form.querySelector('[data-cfdh-create-status]');
+        if(!form.reportValidity())return;
+        const p=parseForm(form);
+        if(btn){btn.disabled=true;btn.textContent='Criando e estruturando...'}
+        if(status)status.innerHTML='<div class="notice info compact">Criando o circuito e abrindo a estrutura das ações...</div>';
         try{
-          const created=await createEducatorPlan({...p,planned_start:month+'-01',status:'planejado',workshop_id:null});
+          const created=await createEducatorPlan({...p,planned_start:month+'-01',planned_end:month+'-01',status:'planejado',workshop_id:null});
+          if(!created?.id)throw new Error('O circuito foi enviado, mas o sistema não recebeu o identificador do planejamento.');
           document.querySelector('#modal')?.remove();
           nav('cfdh?month='+month+'&plan='+created.id);
           await render();
-        }catch(err){toast(err.message,'danger');btn.disabled=false;btn.textContent='Criar e estruturar ações'}
+        }catch(err){
+          console.error('Falha ao criar CFDH:',err);
+          const message=err?.message||String(err)||'Não foi possível criar o CFDH.';
+          toast(message,'danger');
+          if(status)status.innerHTML='<div class="notice danger"><b>Não foi possível criar o CFDH.</b><br>'+esc(message)+'</div>';
+          if(btn){btn.disabled=false;btn.textContent='Criar e estruturar ações'}
+        }
       });
     }catch(err){toast(err.message,'danger')}
   });
