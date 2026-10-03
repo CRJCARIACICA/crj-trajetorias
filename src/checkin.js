@@ -102,14 +102,14 @@ async function showCpfCheck(){
 }
 function showNoCpfMatch(cpf){
   shell('CPF não encontrado',
-    '<div class="notice warn"><b>Não encontramos Formulário Inicial com este CPF.</b><br>Você pode iniciar o Formulário Inicial de forma parcial agora ou registrar somente a participação desta aula, sem inscrição na oficina.</div>'+
-    '<div class="choice-grid"><button type="button" class="choice-card" data-create-provisional><b>Iniciar Formulário Inicial parcial</b><span>É o mesmo Formulário Inicial do CRJ, salvo incompleto e com pendências para complementar depois.</span></button><button type="button" class="choice-card" data-visitor><b>Registrar participação sem inscrição</b><span>Entra imediatamente na lista desta aula, sem criar inscrição na oficina.</span></button></div>','3');
+    '<div class="notice warn"><b>Não encontramos Formulário Inicial com este CPF.</b><br>'+(cfdhMode?'Para participar do CFDH é necessário iniciar o Formulário Inicial parcial e concluir a inscrição no circuito.':'Você pode iniciar o Formulário Inicial de forma parcial agora ou registrar somente a participação desta aula, sem inscrição na oficina.')+'</div>'+
+    (cfdhMode?'<button type="button" class="btn primary" data-create-provisional>Iniciar Formulário Inicial parcial e inscrever no CFDH</button>':'<div class="choice-grid"><button type="button" class="choice-card" data-create-provisional><b>Iniciar Formulário Inicial parcial</b><span>É o mesmo Formulário Inicial do CRJ, salvo incompleto e com pendências para complementar depois.</span></button><button type="button" class="choice-card" data-visitor><b>Registrar participação sem inscrição</b><span>Entra imediatamente na lista desta aula, sem criar inscrição na oficina.</span></button></div>'),'3');
   backButton(showCpfCheck);
   app.querySelector('[data-create-provisional]').addEventListener('click',()=>showProvisionalForm({cpf}));
-  app.querySelector('[data-visitor]').addEventListener('click',()=>showVisitorForm({cpf}));
+  app.querySelector('[data-visitor]')?.addEventListener('click',()=>showVisitorForm({cpf}));
 }
 function showVisitorKnown(data){
-  const force=Boolean(data.must_provisional);
+  const force=cfdhMode||Boolean(data.must_provisional);
   shell(force?'Limite de visitante atingido':'Histórico de visitante',
     '<div class="notice '+(force?'warn':'info')+'"><b>'+esc(data.display_name||'Visitante')+'</b><br>'+
     Number(data.visits||0)+' visita(s) registrada(s).'+(force?' O ciclo de visitante foi encerrado: agora é necessário iniciar o Formulário Inicial parcial.':' Você pode se cadastrar agora ou continuar como visitante enquanto estiver abaixo do limite.')+'</div>'+
@@ -128,6 +128,7 @@ async function resolveCandidate(id,prefix=''){
     return;
   }
   if(data.enrolled){showPinForm(data,prefix);return}
+  if(cfdhMode&&!data.eligible_initial){showExistingInitialStartForm(data,prefix);return}
   showEnrollmentForm(data,prefix);
 }
 function candidateCard(s){
@@ -136,7 +137,7 @@ function candidateCard(s){
 function showPinForm(state,prefix=''){
   shell('Confirmar participação',
     (prefix?notice('success','Cadastro localizado',prefix):'')+candidateCard(state)+pendingBox(state)+
-    '<form id="pin-form" class="stack"><div class="field"><label>Senha da oficina</label><input class="input" name="secret" type="password" minlength="4" autocomplete="current-password" required></div><button class="btn primary">Confirmar presença</button></form>','3');
+    '<form id="pin-form" class="stack"><div class="field"><label>'+(cfdhMode?'Senha do CFDH':'Senha da oficina')+'</label><input class="input" name="secret" type="password" minlength="4" autocomplete="current-password" required></div><button class="btn primary">Confirmar presença</button></form>','3');
   backButton(showRegisteredSearch);
   app.querySelector('#pin-form').addEventListener('submit',async e=>{
     e.preventDefault();const btn=e.target.querySelector('button');btn.disabled=true;btn.textContent='Confirmando...';
@@ -195,11 +196,11 @@ function showEnrollmentForm(state,prefix=''){
   const signatureHtml=reuse
     ?notice('success','Assinatura já registrada','A mesma assinatura usada em outra oficina será reutilizada automaticamente nesta inscrição.')
     :signatureBlock();
-  shell('Inscrição na oficina',
+  shell(cfdhMode?'Inscrição no CFDH':'Inscrição na oficina',
     (prefix?notice('success','Cadastro localizado',prefix):'')+candidateCard(state)+pendingBox(state)+
     '<div class="notice"><b>Próxima etapa:</b> fazer a inscrição nesta oficina. Os dados já existentes no CRJ serão reutilizados sem expor CPF completo, e-mail ou endereço nesta tela.</div>'+
     '<form id="enroll-existing-form" class="stack">'+extraCpf+extraEmail+extraBairro+
-    '<div class="field"><label>Criar senha da oficina</label><input class="input" name="secret" type="password" minlength="4" maxlength="32" required><small>Guarde esta senha. Ela será usada nas próximas presenças e não será enviada em texto por e-mail.</small></div>'+
+    '<div class="field"><label>'+(cfdhMode?'Criar senha do CFDH':'Criar senha da oficina')+'</label><input class="input" name="secret" type="password" minlength="4" maxlength="32" required><small>Guarde esta senha. Ela será usada nas próximas presenças e não será enviada em texto por e-mail.</small></div>'+
     signatureHtml+'<button class="btn primary">'+(reuse?'Inscrever e confirmar presença':'Assinar, inscrever e confirmar presença')+'</button></form>','3');
   backButton(showRegisteredSearch);
   const form=app.querySelector('#enroll-existing-form'),getSignature=reuse?(()=>null):bindSignature(form);
@@ -208,12 +209,13 @@ function showEnrollmentForm(state,prefix=''){
     if(!reuse&&!sig){form.insertAdjacentHTML('afterbegin',notice('danger','Assinatura obrigatória','Assine no quadro antes de continuar.'));return}
     const btn=form.querySelector('button[type="submit"]');btn.disabled=true;btn.textContent='Registrando...';
     const fd=new FormData(form);
-    const {data,error}=await db.rpc('workshop_checkin_enroll_existing',{
-      p_token:token,p_youth_id:state.candidate_id,p_signature_data:sig,p_secret:fd.get('secret'),
-      p_cpf_if_missing:fd.get('cpf')||null,p_email_if_missing:fd.get('email')||null,p_neighborhood_if_missing:fd.get('neighborhood')||null
-    });
+    const rpc=rpcName('workshop_checkin_enroll_existing','cfdh_checkin_enroll_existing');
+    const args=cfdhMode
+      ?{p_token:token,p_youth_id:state.candidate_id,p_signature_data:sig,p_secret:fd.get('secret')}
+      :{p_token:token,p_youth_id:state.candidate_id,p_signature_data:sig,p_secret:fd.get('secret'),p_cpf_if_missing:fd.get('cpf')||null,p_email_if_missing:fd.get('email')||null,p_neighborhood_if_missing:fd.get('neighborhood')||null};
+    const {data,error}=await db.rpc(rpc,args);
     if(error){btn.disabled=false;btn.textContent=reuse?'Inscrever e confirmar presença':'Assinar, inscrever e confirmar presença';form.querySelector('.notice.danger')?.remove();form.insertAdjacentHTML('afterbegin',notice('danger','Não foi possível concluir',error.message));return}
-    showSuccess('Inscrição e presença confirmadas',reuse?'Sua assinatura já registrada foi reutilizada nesta oficina.':'Você já está inscrito nesta oficina.',data);
+    showSuccess('Inscrição e presença confirmadas',reuse?('Sua assinatura já registrada foi reutilizada '+(cfdhMode?'no CFDH.':'nesta oficina.')):('Você já está inscrito '+(cfdhMode?'no CFDH.':'nesta oficina.')),data);
   });
 }
 function showProvisionalForm(prefill={}){
