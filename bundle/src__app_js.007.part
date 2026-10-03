@@ -218,6 +218,99 @@ function cfdhActionCountableHours(a,actual=false){
   const h=Number(actual?a.actual_duration_hours:a.planned_duration_hours||0);
   return h>=CFDH_ACTION_COUNT_MIN_HOURS?h:0;
 }
+function cfdhActionGoalLinks(bundle,a){
+  const defs=bundle?.indicators||[],links=[],seen=new Set(),p=bundle?.plan||{};
+  const add=(code,reason,evidence)=>{
+    if(seen.has(code))return;
+    const ind=defs.find(x=>x.code===code);
+    if(!ind)return;
+    seen.add(code);
+    links.push({
+      code:ind.code,
+      label:ind.label,
+      goal_stage:ind.goalStage||'',
+      target:ind.target,
+      unit:ind.unit||'',
+      periodicity:ind.periodicity||'',
+      reason,
+      evidence
+    });
+  };
+  const structural=p.plan_type==='cfdh_estrutural';
+  add('M6.1_CFDH_HORAS',
+    structural
+      ?'A execução desta ação pode contabilizar carga horária de CFDH quando registrada conforme a regra operacional.'
+      :'Comprova a transversalidade do CFDH dentro da oficina; a contabilização ocorre pela execução registrada sem duplicar a carga da oficina.',
+    'Planejamento + registro de execução da ação + lista nominal de presença.'
+  );
+  add('M2.1_ATENDIMENTOS',
+    'Quando houver presença nominal, as participações desta ação colaboram com o registro de atendimentos do mês.',
+    'Lista de presença nominal vinculada à ação.'
+  );
+  add('M9.1_MONITORAMENTO',
+    'O planejamento, a execução, as presenças e o relatório desta ação geram informação rastreável para monitoramento.',
+    'Planejamento, relatório, lista de presença e demais referências anexadas.'
+  );
+
+  if(a.nucleus_code==='N1') add('M4.2_ATIVIDADES_PERCENTUAL',
+    'A ação está classificada no Núcleo Socioafirmativo e de Acesso e colabora com a execução das atividades previstas desse núcleo.',
+    'Execução da ação identificada por Núcleo, Eixo e Item, com lista/relatório.'
+  );
+  if(a.nucleus_code==='N2') add('M4.3_ATIVIDADES_PERCENTUAL',
+    'A ação está classificada no Núcleo Economia Criativa, Trabalho e Renda e colabora com a execução das atividades previstas desse núcleo.',
+    'Execução da ação identificada por Núcleo, Eixo e Item, com lista/relatório.'
+  );
+  if(a.nucleus_code==='N3') add('M4.4_ACOES',
+    'A ação está classificada no Núcleo de Parcerias e pode comprovar ação desenvolvida em articulação com parceiros.',
+    'Registro da ação, parceiro envolvido, relatório e evidências.'
+  );
+
+  const key=(a.axis_code||'')+'|'+(a.item_code||'');
+  if(key==='N1.E1|A') add('M6.1_EMPRESTIMOS','Quando a ação envolver empréstimo/agendamento, o registro colabora com esse acompanhamento.','Solicitação/agendamento e comprovante de uso/devolução.');
+  if(key==='N1.E1|B') add('M6.1_OFICINAS_HORAS','Quando executada no contexto de oficina permanente, a ação qualifica a comprovação da oferta e da transversalidade, sem dupla contagem.','Sessão/aula, lista nominal e execução do CFDH.');
+  if(key==='N1.E1|E') add('M6.1_EVENTOS','Quando a ação constituir evento ou programação, sua execução pode comprovar a programação mensal.','Programação, relatório, lista de presença e registro fotográfico.');
+  if(key==='N1.E1|G'||key==='N1.E1|H') add('M6.1_MOSTRAS','Quando a ação constituir mostra, sua execução pode comprovar a realização prevista.','Programação da mostra, relatório, lista e registros.');
+  if(key==='N1.E2|A'){
+    add('M6.2_PVIDA_HORAS','Se a ação for parte do PVida, a execução pode colaborar com as atividades mensais do PVida.','Registro da atividade PVida e participantes vinculados.');
+    add('M6.2_PVIDA_PARTICIPACOES','As presenças vinculadas à ação podem comprovar participações individuais/coletivas em PVida.','Lista nominal vinculada ao PVida.');
+  }
+  if(key==='N1.E2|B') add('M6.2_OUTRAS_DEMANDAS','Se a ação responder a outras demandas acompanhadas, o registro colabora com esse monitoramento.','Registro da demanda e encaminhamento/acompanhamento.');
+  if(a.axis_code==='N1.E3') add('M6.3_CONSULTAS','Se a ação funcionar como orientação ou subsídio #FicaADica, pode comprovar consulta/orientação realizada.','Registro da orientação/consulta e referência utilizada.');
+  if(key==='N2.E1|A'){
+    add('M4.1_PTRAMPO_ATIVIDADES','Quando vinculada ao PTrampo, a execução colabora com o quantitativo de atividades relacionadas ao PTrampo.','Registro PTrampo, execução e participantes.');
+    add('M6.4_PTRAMPO_ATIVIDADES','Quando vinculada ao PTrampo, a execução também colabora com o indicador operacional de atividades do PTrampo.','Registro PTrampo, execução e participantes.');
+  }
+  if(key==='N2.E1|B'){
+    add('M4.6_CURSO_HORAS','Quando a ação integra curso/oficina profissionalizante, sua execução qualifica a comprovação da carga horária correspondente.','Planejamento da oficina, sessão, lista nominal e execução.');
+    add('M6.4_CURSO_HORAS','Quando a ação integra curso/oficina profissionalizante, colabora com o acompanhamento operacional da oferta.','Planejamento da oficina, sessão, lista nominal e execução.');
+  }
+  if(key==='N2.E1|C'){
+    add('M4.5_MOSTRAS','Quando a ação compõe a Mostra de Profissões, sua execução colabora com a meta semestral.','Programação da mostra, relatório, lista e registros.');
+    add('M6.4_MOSTRAS','A mesma execução pode comprovar a Mostra de Profissões no quadro operacional.','Programação da mostra, relatório, lista e registros.');
+  }
+  if(a.axis_code==='N3.E1'){
+    add('M6.7_ENCONTROS_REDE','Quando a ação envolver reunião/encontro com a rede, pode colaborar com o acompanhamento dos encontros realizados.','Ata, lista, registro da reunião/encontro e encaminhamentos.');
+    add('M6.7_PARCERIAS','Quando resultar em parceria formalizada, pode colaborar com o indicador de parcerias.','Documento, e-mail, termo, ata ou outro registro da formalização.');
+  }
+  return links;
+}
+function cfdhActionGoalFlyoutContent(bundle,a,index){
+  const links=cfdhActionGoalLinks(bundle,a);
+  const catalog=bundle?.classification||[];
+  const n=catalog.find(x=>x.nucleus_code===a.nucleus_code),ax=catalog.find(x=>x.axis_code===a.axis_code),it=catalog.find(x=>x.axis_code===a.axis_code&&x.item_code===a.item_code);
+  const classification=[n?.nucleus_name||a.nucleus_code,ax?.axis_name||a.axis_code,it?(it.item_code+') '+it.item_label):''].filter(Boolean).join(' → ')||'Classificação ainda não definida';
+  return '<div class="cfdh-goal-flyout-head"><div><b>Ação '+(index+1)+' · Metas e Etapas</b><span>'+esc(classification)+'</span></div><span class="pill info">'+links.length+' vínculo(s)</span></div>'+
+    (links.length?'<div class="cfdh-goal-link-list">'+links.map(x=>{
+      const stage=x.goal_stage?('Meta '+String(x.goal_stage).split('.')[0]+' · Etapa '+x.goal_stage):'Indicador de acompanhamento';
+      const target=x.target!=null?(' · referência '+Number(x.target).toLocaleString('pt-BR')+' '+esc(x.unit||'')):'';
+      return '<div class="cfdh-goal-link"><strong>'+esc(stage)+'</strong><b>'+esc(x.label)+'</b><small>'+esc(x.reason)+'</small><em><b>Meio de verificação:</b> '+esc(x.evidence)+'</em><span>'+esc(x.code)+(x.periodicity?' · '+esc(x.periodicity):'')+target+'</span></div>';
+    }).join('')+'</div>':'<div class="notice warn compact">Defina Núcleo, Eixo e Item para o sistema completar os vínculos desta ação.</div>')+
+    '<div class="cfdh-goal-rule"><b>Regra:</b> o planejamento demonstra intenção e enquadramento. A meta só é contabilizada quando existir a execução/evidência exigida pelo respectivo indicador.</div>';
+}
+function cfdhActionGoalFlyoutHtml(bundle,a,index){
+  const links=cfdhActionGoalLinks(bundle,a);
+  return '<div class="cfdh-action-goal-zone" data-cfdh-action-goals><span class="cfdh-action-goal-badge">Metas e etapas · '+links.length+'</span><div class="cfdh-action-goal-flyout" role="tooltip">'+cfdhActionGoalFlyoutContent(bundle,a,index)+'</div></div>';
+}
 function cfdhPlanAlerts(bundle){
   const p=bundle?.plan||{},actions=bundle?.actions||[],selected=bundle?.workshop_ids||[],calendar=bundle?.calendar||[],evals=bundle?.evaluations||[],alerts=[],themeState=cfdhMonthlyThemeState(bundle,actions);
   if(!themeState.code&&!String(themeState.custom||'').trim())alerts.push('Defina o tema mensal ao criar o circuito CFDH.');
@@ -290,6 +383,7 @@ function cfdhActionEditorCard(bundle,a,index){
   const responsibleChecks=eligibleTeam.map(t=>'<label class="check cfdh-responsible-option"><input type="checkbox" name="responsible_user_id" value="'+t.id+'" '+(responsibleSet.has(t.id)?'checked':'')+'><span><b>'+esc(t.display_name)+'</b><small>'+esc(roleLabel(t.role))+'</small></span></label>').join('');
 
   return '<div class="card cfdh-action-card" data-cfdh-action-card data-action-id="'+esc(a.id||'')+'" data-action-number="'+(index+1)+'">'+
+    cfdhActionGoalFlyoutHtml(bundle,a,index)+
     '<div class="page-head compact"><div><span class="pill info">Ação '+(index+1)+'</span><h4>'+esc(a.title||('Ação '+(index+1)))+'</h4><p>Planeje cada encontro separadamente.</p></div><div class="actions"><span class="pill '+(Number(a.planned_duration_hours||0)>=2?'success':'warn')+'" data-cfdh-count-status>'+(Number(a.planned_duration_hours||0)>=2?'Contabilizável':'Menos de 2h')+'</span></div></div>'+
     '<div class="field"><label>Tema desta ação</label><textarea name="action_theme" required>'+esc(actionTheme)+'</textarea><small>O tema oficial do mês é repetido automaticamente como ponto de partida. Você pode adaptar a descrição desta ação sem alterar o tema mensal do circuito.</small></div>'+
     '<div class="field"><label>Título da ação</label><input class="input" name="title" value="'+esc(a.title||'')+'" required></div>'+
@@ -364,7 +458,7 @@ function cfdhPlanEditorHtml(bundle){
 }
 function cfdhReportSnapshot(bundle){
   return {
-    actions:(bundle.actions||[]).map(a=>({...a,attendance_count:Number(bundle.attendance_counts?.[a.id]||0)})),
+    actions:(bundle.actions||[]).map(a=>({...a,attendance_count:Number(bundle.attendance_counts?.[a.id]||0),goal_links:cfdhActionGoalLinks(bundle,a)})),
     attendance_counts:bundle.attendance_counts||{}
   };
 }
@@ -405,8 +499,8 @@ async function pageCfdhShared(){
   if(!permitted('cfdh_shared'))return '<div class="notice danger">Seu perfil não possui acesso ao CFDH compartilhado.</div>';
   const rr=route(),month=rr.params.get('month')||currentMonth(),planId=rr.params.get('plan')||'',view=rr.params.get('view')||'planejamento';
   if(planId){
-    const [bundle,themes,classification]=await Promise.all([getCfdhPlanBundle(planId),listCfdhThemes(),listMethodologyClassificationCatalog()]);
-    bundle.themes=themes;bundle.classification=classification;
+    const [bundle,themes,classification,indicators]=await Promise.all([getCfdhPlanBundle(planId),listCfdhThemes(),listMethodologyClassificationCatalog(),listIndicatorCatalog()]);
+    bundle.themes=themes;bundle.classification=classification;bundle.indicators=indicators;
     if(view==='relatorio')return cfdhReportEditorHtml(bundle);
     return cfdhPlanEditorHtml(bundle);
   }
