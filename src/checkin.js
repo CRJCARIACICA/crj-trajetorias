@@ -143,7 +143,7 @@ function showPinForm(state,prefix=''){
     e.preventDefault();const btn=e.target.querySelector('button');btn.disabled=true;btn.textContent='Confirmando...';
     const {data,error}=await db.rpc(rpcName('workshop_checkin_mark','cfdh_checkin_mark'),{p_token:token,p_enrollment_id:state.enrollment_id,p_secret:e.target.secret.value});
     if(error){btn.disabled=false;btn.textContent='Confirmar presença';e.target.querySelector('.notice.danger')?.remove();e.target.insertAdjacentHTML('afterbegin',notice('danger','Senha não confirmada',error.message));return}
-    showSuccess('Presença confirmada','Seu registro foi incluído na aula.',data);
+    showSuccess('Presença confirmada',cfdhMode?'Seu registro foi incluído nesta ação do CFDH.':'Seu registro foi incluído na aula.',data);
   });
 }
 function signatureBlock(){
@@ -189,16 +189,16 @@ async function rpcWithTimeout(name,args,ms=20000){
 }
 
 function showEnrollmentForm(state,prefix=''){
-  const extraCpf=!state.has_cpf?'<div class="field"><label>CPF completo</label><input class="input" name="cpf" inputmode="numeric" required></div>':'';
-  const extraEmail=!state.has_email?'<div class="field"><label>E-mail</label><input class="input" name="email" type="email" required></div>':'';
-  const extraBairro=!state.has_neighborhood?'<div class="field"><label>Bairro</label><input class="input" name="neighborhood" required></div>':'';
+  const extraCpf=!cfdhMode&&!state.has_cpf?'<div class="field"><label>CPF completo</label><input class="input" name="cpf" inputmode="numeric" required></div>':'';
+  const extraEmail=!cfdhMode&&!state.has_email?'<div class="field"><label>E-mail</label><input class="input" name="email" type="email" required></div>':'';
+  const extraBairro=!cfdhMode&&!state.has_neighborhood?'<div class="field"><label>Bairro</label><input class="input" name="neighborhood" required></div>':'';
   const reuse=Boolean(state.has_reusable_signature);
   const signatureHtml=reuse
-    ?notice('success','Assinatura já registrada','A mesma assinatura usada em outra oficina será reutilizada automaticamente nesta inscrição.')
+    ?notice('success','Assinatura já registrada',cfdhMode?'A mesma assinatura usada anteriormente será reutilizada automaticamente na inscrição do CFDH.':'A mesma assinatura usada em outra oficina será reutilizada automaticamente nesta inscrição.')
     :signatureBlock();
   shell(cfdhMode?'Inscrição no CFDH':'Inscrição na oficina',
     (prefix?notice('success','Cadastro localizado',prefix):'')+candidateCard(state)+pendingBox(state)+
-    '<div class="notice"><b>Próxima etapa:</b> fazer a inscrição nesta oficina. Os dados já existentes no CRJ serão reutilizados sem expor CPF completo, e-mail ou endereço nesta tela.</div>'+
+    '<div class="notice"><b>Próxima etapa:</b> '+(cfdhMode?'fazer a inscrição neste Circuito Formativo.':'fazer a inscrição nesta oficina.')+' Os dados já existentes no CRJ serão reutilizados sem expor CPF completo, e-mail ou endereço nesta tela.</div>'+
     '<form id="enroll-existing-form" class="stack">'+extraCpf+extraEmail+extraBairro+
     '<div class="field"><label>'+(cfdhMode?'Criar senha do CFDH':'Criar senha da oficina')+'</label><input class="input" name="secret" type="password" minlength="4" maxlength="32" required><small>Guarde esta senha. Ela será usada nas próximas presenças e não será enviada em texto por e-mail.</small></div>'+
     signatureHtml+'<button class="btn primary">'+(reuse?'Inscrever e confirmar presença':'Assinar, inscrever e confirmar presença')+'</button></form>','3');
@@ -218,13 +218,41 @@ function showEnrollmentForm(state,prefix=''){
     showSuccess('Inscrição e presença confirmadas',reuse?('Sua assinatura já registrada foi reutilizada '+(cfdhMode?'no CFDH.':'nesta oficina.')):('Você já está inscrito '+(cfdhMode?'no CFDH.':'nesta oficina.')),data);
   });
 }
+function showExistingInitialStartForm(state,prefix=''){
+  const reuse=Boolean(state.has_reusable_signature);
+  const extraCpf=!state.has_cpf?'<div class="field"><label>CPF completo</label><input class="input" name="cpf" inputmode="numeric" required></div>':'';
+  const extraEmail=!state.has_email?'<div class="field"><label>E-mail</label><input class="input" type="email" name="email" required></div>':'';
+  const extraBairro=!state.has_neighborhood?'<div class="field"><label>Bairro</label><input class="input" name="neighborhood" required></div>':'';
+  shell('Iniciar Formulário Inicial parcial',
+    (prefix?notice('success','Cadastro localizado',prefix):'')+candidateCard(state)+
+    '<div class="notice warn"><b>Seu cadastro existe, mas ainda não possui o requisito mínimo do CFDH.</b><br>Vamos iniciar o mesmo Formulário Inicial deste cadastro de forma parcial. Não será criado outro jovem.</div>'+
+    '<form id="existing-cfdh-initial-form" class="stack">'+extraCpf+extraEmail+extraBairro+
+    '<div class="field"><label>Criar senha do CFDH</label><input class="input" type="password" name="secret" minlength="4" maxlength="32" required></div>'+
+    (reuse?notice('success','Assinatura já registrada','Sua assinatura anterior será reutilizada automaticamente.'):signatureBlock())+
+    '<button class="btn primary">Iniciar Formulário Inicial, inscrever e confirmar presença</button></form>','3');
+  backButton(showRegisteredSearch);
+  const form=app.querySelector('#existing-cfdh-initial-form'),getSignature=reuse?(()=>null):bindSignature(form);
+  form.addEventListener('submit',async e=>{
+    e.preventDefault();const sig=getSignature();
+    if(!reuse&&!sig){form.insertAdjacentHTML('afterbegin',notice('danger','Assinatura obrigatória','Assine no quadro antes de continuar.'));return}
+    const fd=new FormData(form),btn=form.querySelector('button[type="submit"]');btn.disabled=true;btn.textContent='Registrando...';
+    const {data,error}=await db.rpc('cfdh_checkin_start_initial_existing',{
+      p_token:token,p_youth_id:state.candidate_id,
+      p_cpf_if_missing:fd.get('cpf')||null,p_email_if_missing:fd.get('email')||null,
+      p_neighborhood_if_missing:fd.get('neighborhood')||null,p_signature_data:sig,p_secret:fd.get('secret')
+    });
+    if(error){btn.disabled=false;btn.textContent='Iniciar Formulário Inicial, inscrever e confirmar presença';form.querySelector('.notice.danger')?.remove();form.insertAdjacentHTML('afterbegin',notice('danger','Não foi possível concluir',error.message));return}
+    showSuccess('Inscrição e presença confirmadas','O Formulário Inicial foi iniciado no mesmo cadastro e ficou sinalizado para complementação.',data);
+  });
+}
+
 function showProvisionalForm(prefill={}){
   shell('Formulário Inicial parcial',
     '<div class="notice warn"><b>Este é o próprio Formulário Inicial do CRJ, salvo parcialmente.</b><br>Os dados coletados agora ficam no Anexo 1 do jovem. O restante será complementado depois e as pendências continuarão visíveis no cadastro.</div>'+
     '<form id="provisional-form" class="stack" novalidate><div class="field"><label>Nome completo</label><input class="input" name="full_name" value="'+esc(prefill.full_name||'')+'" required></div>'+
     '<div class="form-grid"><div class="field"><label>Data de nascimento</label><input class="input" type="date" name="birth_date" value="'+esc(prefill.birth_date||'')+'" required></div><div class="field"><label>CPF</label><input class="input" name="cpf" inputmode="numeric" value="'+esc(prefill.cpf||lastCpf||'')+'" required></div></div>'+
     '<div class="field"><label>E-mail</label><input class="input" name="email" type="email" required></div><div class="field"><label>Bairro</label><input class="input" name="neighborhood" required></div>'+
-    '<div class="field"><label>Criar senha da oficina</label><input class="input" name="secret" type="password" minlength="4" maxlength="32" required></div>'+signatureBlock()+
+    '<div class="field"><label>'+(cfdhMode?'Criar senha do CFDH':'Criar senha da oficina')+'</label><input class="input" name="secret" type="password" minlength="4" maxlength="32" required></div>'+signatureBlock()+
     '<div data-action-status></div><button class="btn primary" type="button" data-provisional-save>Salvar Formulário Inicial parcial e confirmar presença</button></form>','4');
   backButton(showCpfCheck);
   const form=app.querySelector('#provisional-form');
@@ -238,7 +266,7 @@ function showProvisionalForm(prefill={}){
     if(!sig){status.innerHTML=notice('danger','Assinatura obrigatória','Assine no quadro antes de continuar.');return}
     const fd=new FormData(form);
     btn.disabled=true;btn.textContent='Salvando cadastro e presença...';
-    status.innerHTML=notice('info','Registrando','Estamos salvando o Formulário Inicial parcial, a inscrição e a presença desta aula.');
+    status.innerHTML=notice('info','Registrando',cfdhMode?'Estamos salvando o Formulário Inicial parcial, a inscrição no CFDH e a presença desta ação.':'Estamos salvando o Formulário Inicial parcial, a inscrição e a presença desta aula.');
     try{
       const result=await rpcWithTimeout(rpcName('workshop_checkin_create_provisional','cfdh_checkin_create_provisional'),{
         p_token:token,
@@ -252,7 +280,7 @@ function showProvisionalForm(prefill={}){
       });
       if(result?.error)throw result.error;
       const data=result?.data||{};
-      showSuccess('Cadastro parcial e presença registrados','O mesmo Formulário Inicial poderá ser completado depois. Sua presença já entrou na lista desta aula.',data);
+      showSuccess('Cadastro parcial e presença registrados',cfdhMode?'O mesmo Formulário Inicial poderá ser completado depois. Você foi inscrito no CFDH e sua presença entrou nesta ação.':'O mesmo Formulário Inicial poderá ser completado depois. Sua presença já entrou na lista desta aula.',data);
     }catch(err){
       btn.disabled=false;btn.textContent='Salvar Formulário Inicial parcial e confirmar presença';
       const msg=String(err?.message||err)==='CPF_JA_CADASTRADO'?'Este CPF já possui trajetória no CRJ. Volte e pesquise o cadastro existente.':(err?.message||String(err));
