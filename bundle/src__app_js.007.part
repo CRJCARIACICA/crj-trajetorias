@@ -227,6 +227,10 @@ function cfdhPlanAlerts(bundle){
   }
   if(actions.some(x=>x.execution_status==='realizada')&&!evals.some(x=>x.form_slug==='cfdh-avaliacao-jovens'))alerts.push('Há ação realizada sem aplicação registrada da Avaliação dos Jovens (Anexo 12).');
   if(actions.some(x=>x.execution_status==='realizada')&&!evals.some(x=>x.form_slug==='cfdh-avaliacao-equipe'))alerts.push('Há ação realizada sem Avaliação de Educadores e Oficineiros (Anexo 13).');
+  if(actions.length>1){
+    const dates=actions.map(x=>x.scheduled_date).filter(Boolean),uniqueDates=new Set(dates);
+    if(dates.length===actions.length&&uniqueDates.size<actions.length)alerts.push('Separe as ações em dias distintos. Há duas ou mais ações CFDH planejadas para a mesma data.');
+  }
   if(p.plan_type==='cfdh_transversal'&&selected.length>1&&actions.length>=selected.length){
     const covered=new Set(actions.map(x=>x.workshop_id).filter(Boolean));
     for(const id of selected)if(!covered.has(id))alerts.push('Distribuição sugerida: a oficina '+(bundle.workshops?.find(w=>w.id===id)?.name||'selecionada')+' ainda não possui ação CFDH.');
