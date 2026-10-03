@@ -323,14 +323,13 @@ d);font-size:12px;margin:16px 0}.divider:before,.divider:after{content:"";height
 .workshop-plan-lesson p{margin:0;color:var(--muted)}
 .workshop-plan-paper{max-width:1180px}
 .workshop-plan-table{font-size:8px}
-.workshop-plan-table th:nth-child(1){width:14%}
-.workshop-plan-table th:nth-child(2){width:13%}
-.workshop-plan-table th:nth-child(3){width:16%}
-.workshop-plan-table th:nth-child(4){width:20%}
-.workshop-plan-table th:nth-child(5){width:14%}
-.workshop-plan-table th:nth-child(6){width:8%}
-.workshop-plan-table th:nth-child(7){width:15%}
+.workshop-plan-table th:nth-child(1){width:18%}
+.workshop-plan-table th:nth-child(2){width:20%}
+.workshop-plan-table th:nth-child(3){width:28%}
+.workshop-plan-table th:nth-child(4){width:24%}
+.workshop-plan-table th:nth-child(5){width:10%}
 .workshop-plan-table td{vertical-align:top;min-height:48px;white-space:pre-wrap}
+.workshop-plan-extra-table th{width:20%}
 [data-workshop-plan-workspace].preview-open{grid-template-columns:minmax(0,1fr) minmax(520px,1.05fr)}
 [data-workshop-plan-workspace] .methodology-preview-pane{position:sticky;top:88px}
 @media(max-width:1180px){
@@ -411,7 +410,8 @@ d);font-size:12px;margin:16px 0}.divider:before,.divider:after{content:"";height
 .cfdh-transversal-schedule{display:grid;gap:10px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#f7faf9}
 .cfdh-plan-paper,.cfdh-report-paper{max-width:1180px}
 .cfdh-plan-table{font-size:8px}
-.cfdh-plan-table th:nth-child(1){width:11%}.cfdh-plan-table th:nth-child(2){width:16%}.cfdh-plan-table th:nth-child(3){width:16%}.cfdh-plan-table th:nth-child(4){width:13%}.cfdh-plan-table th:nth-child(5){width:14%}.cfdh-plan-table th:nth-child(6){width:15%}.cfdh-plan-table th:nth-child(7){width:10%}.cfdh-plan-table th:nth-child(8){width:5%}
+.cfdh-plan-table th:nth-child(1){width:18%}.cfdh-plan-table th:nth-child(2){width:20%}.cfdh-plan-table th:nth-child(3){width:28%}.cfdh-plan-table th:nth-child(4){width:24%}.cfdh-plan-table th:nth-child(5){width:10%}
+.cfdh-extra-table th{width:20%}
 .cfdh-report-table{font-size:8px}
 .cfdh-report-table th:nth-child(1){width:11%}.cfdh-report-table th:nth-child(2){width:16%}.cfdh-report-table th:nth-child(3){width:20%}.cfdh-report-table th:nth-child(4){width:10%}.cfdh-report-table th:nth-child(5){width:27%}.cfdh-report-table th:nth-child(6){width:8%}.cfdh-report-table th:nth-child(7){width:8%}
 .cfdh-operation-card{border-left:4px solid #92b9ad}
