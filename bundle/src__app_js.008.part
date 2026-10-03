@@ -1,45 +1,236 @@
 
+
 async function bindCfdhShared(){
-  const monthEl=document.querySelector('[data-cfdh-month]');
-  monthEl?.addEventListener('change',()=>nav('cfdh?month='+monthEl.value));
-  const month=route().params.get('month')||currentMonth();
-  const [plans,reports,workshops]=await Promise.all([listEducatorPlans(month,null),listEducatorReports(null),listWorkshops()]);
-  const cfdhPlans=(plans||[]).filter(p=>['cfdh_estrutural','cfdh_transversal'].includes(p.plan_type));
-  const openPlan=async(plan=null)=>{
-    let html='<form id="cfdh-plan-form" class="stack">';
-    html+='<div class="notice info"><b>CFDH compartilhado</b><br>Educadores e Equipe Técnica podem construir e atualizar este planejamento.</div>';
-    html+='<div class="form-grid"><div class="field"><label>Tipo</label><select name="plan_type" required><option value="cfdh_estrutural">CFDH estrutural</option><option value="cfdh_transversal">CFDH transversal</option></select></div><div class="field"><label>Oficina vinculada</label><select name="workshop_id"><option value="">Não se aplica</option>'+workshops.filter(w=>w.active).map(w=>'<option value="'+w.id+'">'+esc(w.name)+'</option>').join('')+'</select></div></div>';
-    html+='<div class="field"><label>ATIVIDADE / título</label><input class="input" name="activity_title" value="'+esc(plan?.activity_title||'')+'" required></div>';
-    html+='<div class="field"><label>DESCRIÇÃO / objetivo</label><textarea name="description_objective" required>'+esc(plan?.description_objective||'')+'</textarea></div>';
-    html+='<div class="form-grid"><div class="field"><label>Núcleo</label><input class="input" name="nucleus" value="'+esc(plan?.nucleus||'')+'"></div><div class="field"><label>Eixo</label><input class="input" name="axis" value="'+esc(plan?.axis||'')+'"></div></div>';
-    html+='<div class="form-grid"><div class="field"><label>Nº de jovens previsto</label><input class="input" type="number" name="expected_participants" min="0" value="'+esc(plan?.expected_participants??'')+'"></div><div class="field"><label>Duração prevista (h)</label><input class="input" type="number" step="0.25" name="planned_duration_hours" min="0" value="'+esc(plan?.planned_duration_hours??'')+'"></div></div>';
-    html+='<div class="form-grid"><div class="field"><label>Data inicial</label><input class="input" type="date" name="planned_start" value="'+esc(plan?.planned_start||month+'-01')+'"></div><div class="field"><label>Data final</label><input class="input" type="date" name="planned_end" value="'+esc(plan?.planned_end||'')+'"></div></div>';
-    html+='<div class="field"><label>Equipe prevista</label><input class="input" name="team_text" value="'+esc(plan?.team_text||'')+'"></div><div class="field"><label>Parceiros</label><input class="input" name="partners" value="'+esc(plan?.partners||'')+'"></div>';
-    html+='<div class="field"><label>Mobilização / divulgação planejada</label><textarea name="mobilization_plan">'+esc(plan?.mobilization_plan||'')+'</textarea></div><div class="field"><label>Ações planejadas</label><textarea name="planned_actions">'+esc(plan?.planned_actions||'')+'</textarea></div><div class="field"><label>Resultados esperados</label><textarea name="expected_results">'+esc(plan?.expected_results||'')+'</textarea></div><div class="field"><label>Recursos necessários</label><textarea name="resources">'+esc(plan?.resources||'')+'</textarea></div><button class="btn primary">'+(plan?'Salvar atualização':'Salvar planejamento CFDH')+'</button></form>';
-    modal(plan?'Editar planejamento CFDH':'Novo planejamento CFDH',html);
-    const form=document.querySelector('#cfdh-plan-form');
-    if(form?.querySelector('[name="plan_type"]'))form.querySelector('[name="plan_type"]').value=plan?.plan_type||'cfdh_estrutural';
-    if(form?.querySelector('[name="workshop_id"]'))form.querySelector('[name="workshop_id"]').value=plan?.workshop_id||'';
-    decorateEduGoalForm(form,plan?.plan_type==='cfdh_transversal'?'cfdh_transversal':'cfdh_estrutural');
-    form?.querySelector('[name="plan_type"]')?.addEventListener('change',e=>decorateEduGoalForm(form,e.target.value==='cfdh_transversal'?'cfdh_transversal':'cfdh_estrutural'));
-    form?.addEventListener('submit',async e=>{e.preventDefault();try{if(plan)await updateEducatorPlan(plan.id,parseForm(e.target));else await createEducatorPlan(parseForm(e.target));document.querySelector('#modal')?.remove();toast('Planejamento CFDH salvo');await render()}catch(err){toast(err.message,'danger')}});
-  };
-  document.querySelector('[data-new-cfdh-plan]')?.addEventListener('click',()=>openPlan());
-  document.querySelectorAll('[data-cfdh-edit-plan]').forEach(btn=>btn.addEventListener('click',()=>{const p=cfdhPlans.find(x=>x.id===btn.dataset.cfdhEditPlan);if(p)openPlan(p)}));
-  document.querySelectorAll('[data-cfdh-report-plan]').forEach(btn=>btn.addEventListener('click',()=>{
-    const p=cfdhPlans.find(x=>x.id===btn.dataset.cfdhReportPlan);if(!p)return;
-    const existing=reports.find(x=>x.plan_id===p.id)||{};
-    let html='<form id="cfdh-report-form" class="stack"><input type="hidden" name="plan_id" value="'+p.id+'"><div class="notice info"><b>'+esc(p.activity_title)+'</b><br>Relatório de execução compartilhado do CFDH.</div>';
-    html+='<div class="field"><label>Situação</label><select name="execution_status"><option value="realizado">Realizado</option><option value="parcial">Parcial</option><option value="nao_realizado">Não realizado</option></select></div>';
-    html+='<div class="field"><label>Descrição do que efetivamente aconteceu</label><textarea name="actual_description" required>'+esc(existing.actual_description||'')+'</textarea></div>';
-    html+='<div class="form-grid"><div class="field"><label>Nº real de jovens</label><input class="input" type="number" name="actual_participants" min="0" value="'+esc(existing.actual_participants??'')+'"></div><div class="field"><label>Duração real (h)</label><input class="input" type="number" step="0.25" name="actual_duration_hours" min="0" value="'+esc(existing.actual_duration_hours??'')+'"></div></div>';
-    html+='<div class="form-grid"><div class="field"><label>Data inicial real</label><input class="input" type="date" name="actual_start" value="'+esc(existing.actual_start||p.planned_start||'')+'"></div><div class="field"><label>Data final real</label><input class="input" type="date" name="actual_end" value="'+esc(existing.actual_end||p.planned_end||p.planned_start||'')+'"></div></div>';
-    html+='<div class="field"><label>Mobilização / divulgação realizada</label><textarea name="mobilization_actual">'+esc(existing.mobilization_actual||'')+'</textarea></div><div class="field"><label>Pontos positivos</label><textarea name="positive_points">'+esc(existing.positive_points||'')+'</textarea></div><div class="field"><label>Pontos negativos</label><textarea name="negative_points">'+esc(existing.negative_points||'')+'</textarea></div><div class="field"><label>Ações realizadas</label><textarea name="actions_performed">'+esc(existing.actions_performed||'')+'</textarea></div><div class="field"><label>Justificativa</label><textarea name="justification">'+esc(existing.justification||'')+'</textarea></div><div class="field"><label>Evidências</label><input class="input" name="evidence_ref" value="'+esc(existing.evidence_ref||'')+'"></div><button class="btn primary">Salvar relatório de execução CFDH</button></form>';
-    modal('Relatório de execução CFDH',html);
-    const form=document.querySelector('#cfdh-report-form');if(form?.querySelector('[name="execution_status"]'))form.querySelector('[name="execution_status"]').value=existing.execution_status||'realizado';
-    decorateEduGoalForm(form,p.plan_type==='cfdh_transversal'?'cfdh_transversal':'cfdh_estrutural');
-    form?.addEventListener('submit',async e=>{e.preventDefault();try{await createEducatorReport(parseForm(e.target));document.querySelector('#modal')?.remove();toast('Relatório de execução CFDH salvo');await render()}catch(err){toast(err.message,'danger')}});
+  const rr=route(),month=rr.params.get('month')||currentMonth(),planId=rr.params.get('plan')||'',view=rr.params.get('view')||'planejamento';
+  document.querySelector('[data-cfdh-month]')?.addEventListener('change',e=>nav('cfdh?month='+e.target.value));
+
+  document.querySelector('[data-new-cfdh-plan]')?.addEventListener('click',async()=>{
+    try{
+      const themes=await listCfdhThemes();
+      modal('Novo circuito CFDH','<form id="new-cfdh-plan-form" class="stack">'+
+        '<div class="notice info"><b>Primeiro defina o circuito.</b><br>Depois o sistema abrirá o planejamento por ações. Se for estrutural, oficinas ficarão indisponíveis. Se for transversal, será possível selecionar várias oficinas.</div>'+
+        '<div class="form-grid"><div class="field"><label>Modalidade</label><select name="plan_type" required><option value="cfdh_estrutural">CFDH estrutural</option><option value="cfdh_transversal">CFDH transversal</option></select></div><div class="field"><label>Quantidade inicial de ações</label><input class="input" type="number" min="1" max="60" name="cfdh_action_count" value="1" required></div></div>'+
+        '<div class="field"><label>Tema mensal</label><select name="cfdh_theme_code"><option value="">Selecione</option>'+themes.map(t=>'<option value="'+t.code+'">'+esc(t.code+'. '+t.theme)+'</option>').join('')+'</select></div>'+
+        '<div class="field"><label>Outro tema / adaptação territorial</label><input class="input" name="cfdh_theme_custom"></div>'+
+        '<div class="field"><label>Título do circuito</label><input class="input" name="activity_title" required></div>'+
+        '<div class="field"><label>Objetivo geral</label><textarea name="description_objective" required></textarea></div>'+
+        '<button class="btn primary">Criar e estruturar ações</button></form>');
+      document.querySelector('#new-cfdh-plan-form')?.addEventListener('submit',async e=>{
+        e.preventDefault();const p=parseForm(e.target),btn=e.target.querySelector('button[type="submit"]');btn.disabled=true;btn.textContent='Criando...';
+        try{
+          const created=await createEducatorPlan({...p,planned_start:month+'-01',status:'planejado',workshop_id:null});
+          document.querySelector('#modal')?.remove();
+          nav('cfdh?month='+month+'&plan='+created.id);
+          await render();
+        }catch(err){toast(err.message,'danger');btn.disabled=false;btn.textContent='Criar e estruturar ações'}
+      });
+    }catch(err){toast(err.message,'danger')}
+  });
+
+  if(!planId)return;
+
+  let bundle;
+  try{
+    const [b,themes,classification]=await Promise.all([getCfdhPlanBundle(planId),listCfdhThemes(),listMethodologyClassificationCatalog()]);
+    bundle=b;bundle.themes=themes;bundle.classification=classification;
+  }catch(err){toast(err.message,'danger');return}
+
+  const planForm=document.querySelector('#cfdh-plan-editor');
+  if(planForm){
+    const actionsBox=document.querySelector('[data-cfdh-actions]'),preview=document.querySelector('[data-cfdh-plan-preview]'),alertsBox=document.querySelector('[data-cfdh-alerts]'),workspace=document.querySelector('[data-cfdh-plan-workspace]');
+
+    const selectedWorkshopIds=()=>[...planForm.querySelectorAll('[name="cfdh_workshop_id"]:checked')].map(x=>x.value);
+    const collectActions=()=>[...planForm.querySelectorAll('[data-cfdh-action-card]')].map((card,i)=>{
+      const v=n=>card.querySelector('[name="'+n+'"]')?.value||'';
+      const axis=v('axis_code'),item=v('item_code'),cat=bundle.classification||[];
+      return {
+        id:card.dataset.actionId||null,action_number:i+1,
+        workshop_id:v('workshop_id')||null,schedule_mode:v('schedule_mode')||'structural',
+        workshop_calendar_id:v('workshop_calendar_id')||null,
+        scheduled_date:v('scheduled_date'),start_time:v('start_time')||null,end_time:v('end_time')||null,
+        planned_duration_hours:Number(v('planned_duration_hours')||0),
+        location_type:v('location_type')||null,location_other:v('location_other')||null,
+        title:v('title')||('Ação '+(i+1)),objective:v('objective')||'',activities:v('activities')||'',resources:v('resources')||'',
+        nucleus_code:v('nucleus_code')||'',axis_code:axis||'',item_code:item||null,
+        item_label:cat.find(x=>x.axis_code===axis&&x.item_code===item)?.item_label||'',
+        execution_status:(bundle.actions.find(x=>x.id===card.dataset.actionId)?.execution_status)||'planejada'
+      };
+    });
+    const collectPlan=()=>({
+      ...bundle.plan,
+      plan_type:planForm.querySelector('[name="plan_type"]')?.value||bundle.plan.plan_type,
+      cfdh_theme_code:planForm.querySelector('[name="cfdh_theme_code"]')?.value||null,
+      cfdh_theme_custom:planForm.querySelector('[name="cfdh_theme_custom"]')?.value||'',
+      activity_title:planForm.querySelector('[name="activity_title"]')?.value||'',
+      description_objective:planForm.querySelector('[name="description_objective"]')?.value||'',
+      cfdh_action_count:Number(planForm.querySelector('[name="cfdh_action_count"]')?.value||0),
+      expected_participants:planForm.querySelector('[name="expected_participants"]')?.value||null,
+      team_text:planForm.querySelector('[name="team_text"]')?.value||'',
+      partners:planForm.querySelector('[name="partners"]')?.value||'',
+      mobilization_plan:planForm.querySelector('[name="mobilization_plan"]')?.value||'',
+      expected_results:planForm.querySelector('[name="expected_results"]')?.value||'',
+      cfdh_monthly_notes:planForm.querySelector('[name="cfdh_monthly_notes"]')?.value||''
+    });
+    const draftBundle=()=>({...bundle,plan:collectPlan(),workshop_ids:collectPlan().plan_type==='cfdh_transversal'?selectedWorkshopIds():[],actions:collectActions()});
+    const refresh=()=>{
+      const d=draftBundle();
+      if(preview)preview.innerHTML=cfdhPlanPreviewHtml(d,d);
+      if(alertsBox){
+        const alerts=cfdhPlanAlerts(d);
+        alertsBox.innerHTML=alerts.length?alerts.map(x=>'<div class="notice warn compact">⚠ '+esc(x)+'</div>').join(''):'<div class="notice success compact">Planejamento sem pendências estruturais.</div>';
+      }
+    };
+    const bindActionCards=()=>{
+      planForm.querySelectorAll('[data-cfdh-action-card]').forEach(card=>{
+        const nucleus=card.querySelector('[data-cfdh-nucleus]'),axis=card.querySelector('[data-cfdh-axis]'),item=card.querySelector('[data-cfdh-item]');
+        const rebuildAxis=()=>{
+          const rows=bundle.classification.filter(x=>x.nucleus_code===nucleus.value),axes=[...new Map(rows.map(x=>[x.axis_code,{code:x.axis_code,name:x.axis_name}])).values()];
+          axis.innerHTML='<option value="">Selecione</option>'+axes.map(x=>'<option value="'+x.code+'">'+esc(x.name)+'</option>').join('');
+          item.innerHTML='<option value="">Selecione o Eixo</option>';item.required=false;refresh();
+        };
+        const rebuildItem=()=>{
+          const rows=bundle.classification.filter(x=>x.axis_code===axis.value&&x.item_code);
+          item.innerHTML='<option value="">'+(rows.length?'Selecione o Item':'Sem subdivisão por Item')+'</option>'+rows.map(x=>'<option value="'+x.item_code+'">'+esc(x.item_code)+') '+esc(x.item_label)+'</option>').join('');
+          item.required=rows.length>0;refresh();
+        };
+        nucleus?.addEventListener('change',rebuildAxis);axis?.addEventListener('change',rebuildItem);
+        const workshop=card.querySelector('[data-cfdh-action-workshop]'),calendar=card.querySelector('[data-cfdh-calendar-entry]'),modeEl=card.querySelector('[data-cfdh-schedule-mode]');
+        const rebuildCalendar=()=>{
+          if(!calendar)return;
+          const rows=bundle.calendar.filter(x=>x.workshop_id===workshop?.value);
+          calendar.innerHTML='<option value="">Selecione uma data</option>'+rows.map(d=>'<option value="'+d.id+'">'+fmtDate(d.scheduled_date)+' · '+esc(String(d.start_time||'').slice(0,5))+'–'+esc(String(d.end_time||'').slice(0,5))+'</option>').join('');
+          const date=card.querySelector('[name="scheduled_date"]'),start=card.querySelector('[name="start_time"]'),end=card.querySelector('[name="end_time"]');
+          if(modeEl?.value==='workshop_planned'){if(date)date.value='';if(start)start.value='';if(end)end.value=''}
+          refresh();
+        };
+        workshop?.addEventListener('change',rebuildCalendar);
+        calendar?.addEventListener('change',()=>{
+          const d=bundle.calendar.find(x=>x.id===calendar.value),date=card.querySelector('[name="scheduled_date"]'),start=card.querySelector('[name="start_time"]'),end=card.querySelector('[name="end_time"]'),loc=card.querySelector('[name="location_type"]'),other=card.querySelector('[name="location_other"]');
+          if(d){date.value=d.scheduled_date||'';start.value=String(d.start_time||'').slice(0,5);end.value=String(d.end_time||'').slice(0,5);if(d.location_type)loc.value=d.location_type;if(d.location_other)other.value=d.location_other}
+          refresh();
+        });
+        modeEl?.addEventListener('change',()=>{
+          const atypical=modeEl.value==='atypical',plannedWrap=card.querySelector('[data-cfdh-planned-date-wrap]'),atypicalWrap=card.querySelector('[data-cfdh-atypical-wrap]');
+          plannedWrap?.classList.toggle('hidden',atypical);atypicalWrap?.classList.toggle('hidden',!atypical);
+          const date=card.querySelector('[name="scheduled_date"]'),start=card.querySelector('[name="start_time"]'),end=card.querySelector('[name="end_time"]');
+          for(const el of [date,start,end])if(el){el.readOnly=!atypical;if(atypical&&el===date&&calendar)calendar.value=''}
+          refresh();
+        });
+        card.querySelector('[name="planned_duration_hours"]')?.addEventListener('input',e=>{
+          const pill=card.querySelector('[data-cfdh-count-status]'),ok=Number(e.target.value||0)>=2;
+          if(pill){pill.textContent=ok?'Contabilizável':'Menos de 2h';pill.className='pill '+(ok?'success':'warn')}
+          refresh();
+        });
+        card.addEventListener('input',refresh);card.addEventListener('change',refresh);
+      });
+    };
+    const renderActions=(actions)=>{
+      const d={...bundle,plan:collectPlan(),workshop_ids:collectPlan().plan_type==='cfdh_transversal'?selectedWorkshopIds():[],actions};
+      bundle.workshop_ids=d.workshop_ids;
+      actionsBox.innerHTML=actions.map((a,i)=>cfdhActionEditorCard(d,{...a,action_number:i+1},i)).join('');
+      bindActionCards();refresh();
+    };
+    const resizeActions=()=>{
+      const wanted=Math.max(1,Math.min(60,Number(planForm.querySelector('[data-cfdh-action-count]')?.value||1))),current=collectActions();
+      if(current.length<wanted){
+        for(let i=current.length;i<wanted;i++)current.push({action_number:i+1,title:'Ação '+(i+1),planned_duration_hours:2,schedule_mode:collectPlan().plan_type==='cfdh_estrutural'?'structural':'workshop_planned',scheduled_date:'',start_time:'',end_time:'',nucleus_code:'',axis_code:'',item_code:null});
+      }else if(current.length>wanted){
+        const removed=current.slice(wanted);
+        if(removed.some(x=>x.id&&['realizada','parcial'].includes(bundle.actions.find(a=>a.id===x.id)?.execution_status))){toast('Ação já executada não pode ser removida.','danger');planForm.querySelector('[data-cfdh-action-count]').value=current.length;return}
+        current.splice(wanted);
+      }
+      renderActions(current);
+    };
+    if(!bundle.actions.length)resizeActions(); else bindActionCards();
+
+    planForm.querySelector('[data-cfdh-action-count]')?.addEventListener('change',resizeActions);
+    planForm.querySelector('[data-cfdh-type]')?.addEventListener('change',e=>{
+      const structural=e.target.value==='cfdh_estrutural';
+      document.querySelector('[data-cfdh-workshops-block]')?.classList.toggle('hidden',structural);
+      if(structural)planForm.querySelectorAll('[name="cfdh_workshop_id"]').forEach(x=>x.checked=false);
+      const actions=collectActions().map(a=>({...a,workshop_id:structural?null:a.workshop_id,schedule_mode:structural?'structural':(a.schedule_mode==='structural'?'workshop_planned':a.schedule_mode),workshop_calendar_id:structural?null:a.workshop_calendar_id}));
+      renderActions(actions);
+    });
+    planForm.querySelectorAll('[name="cfdh_workshop_id"]').forEach(x=>x.addEventListener('change',()=>{
+      const selected=selectedWorkshopIds(),actions=collectActions().map(a=>selected.includes(a.workshop_id)?a:{...a,workshop_id:null,workshop_calendar_id:null,scheduled_date:a.schedule_mode==='atypical'?a.scheduled_date:'',start_time:a.schedule_mode==='atypical'?a.start_time:'',end_time:a.schedule_mode==='atypical'?a.end_time:''});
+      renderActions(actions);
+    }));
+    planForm.querySelector('[data-cfdh-auto-distribute]')?.addEventListener('click',()=>{
+      const selected=selectedWorkshopIds();
+      if(!selected.length){toast('Selecione ao menos uma oficina antes de distribuir.','warn');return}
+      const used=new Map(),actions=collectActions().map((a,i)=>{
+        const workshop_id=selected[i%selected.length],available=bundle.calendar.filter(x=>x.workshop_id===workshop_id),idx=used.get(workshop_id)||0,d=available[idx]||null;used.set(workshop_id,idx+1);
+        if(d)return {...a,workshop_id,schedule_mode:'workshop_planned',workshop_calendar_id:d.id,scheduled_date:d.scheduled_date,start_time:String(d.start_time||'').slice(0,5),end_time:String(d.end_time||'').slice(0,5),location_type:d.location_type||a.location_type,location_other:d.location_other||a.location_other};
+        return {...a,workshop_id,schedule_mode:'atypical',workshop_calendar_id:null,scheduled_date:'',start_time:'',end_time:''};
+      });
+      renderActions(actions);
+      toast('Ações distribuídas entre oficinas e datas disponíveis. Complete os dias atípicos sinalizados.');
+    });
+    document.querySelector('[data-toggle-cfdh-plan-preview]')?.addEventListener('click',e=>{workspace?.classList.toggle('preview-open');e.currentTarget.textContent=workspace?.classList.contains('preview-open')?'Ocultar':'Abrir prévia'});
+    planForm.addEventListener('input',refresh);planForm.addEventListener('change',refresh);
+    planForm.addEventListener('submit',async e=>{
+      e.preventDefault();
+      if(!planForm.reportValidity())return;
+      const draft=draftBundle(),alerts=cfdhPlanAlerts(draft).filter(x=>!/avaliação|presença nominal|relatório/i.test(x));
+      const blocking=alerts.filter(x=>!/menor que 2h|Distribuição sugerida/i.test(x));
+      if(blocking.length){toast('Complete as pendências do planejamento antes de salvar.','danger');refresh();return}
+      const btn=planForm.querySelector('[type="submit"]'),original=btn.textContent;btn.disabled=true;btn.textContent='Salvando e sincronizando...';
+      try{
+        const saved=await saveCfdhPlanBundle(planId,{plan:draft.plan,workshop_ids:draft.workshop_ids,actions:draft.actions});
+        toast('Planejamento CFDH salvo e sincronizado');
+        nav('cfdh?month='+month+'&plan='+planId);await render();
+      }catch(err){toast(err.message,'danger');btn.disabled=false;btn.textContent=original}
+    });
+    refresh();
+  }
+
+  document.querySelectorAll('[data-cfdh-plan-pdf]').forEach(btn=>btn.addEventListener('click',async()=>{const o=btn.textContent;btn.disabled=true;btn.textContent='Gerando...';try{await downloadCfdhPlan(btn.dataset.cfdhPlanPdf,'pdf');toast('PDF do planejamento CFDH gerado')}catch(err){toast(err.message,'danger')}finally{btn.disabled=false;btn.textContent=o}}));
+  document.querySelectorAll('[data-cfdh-plan-docx]').forEach(btn=>btn.addEventListener('click',async()=>{const o=btn.textContent;btn.disabled=true;btn.textContent='Gerando...';try{await downloadCfdhPlan(btn.dataset.cfdhPlanDocx,'docx');toast('DOCX do planejamento CFDH gerado')}catch(err){toast(err.message,'danger')}finally{btn.disabled=false;btn.textContent=o}}));
+  document.querySelectorAll('[data-cfdh-plan-print]').forEach(btn=>btn.addEventListener('click',async()=>{
+    try{const b=await getCfdhPlanBundle(btn.dataset.cfdhPlanPrint),themes=await listCfdhThemes(),classification=await listMethodologyClassificationCatalog();b.themes=themes;b.classification=classification;openPrintableDocument('Planejamento CFDH · '+(b.plan.activity_title||''),cfdhPlanPreviewHtml(b))}catch(err){toast(err.message,'danger')}
   }));
+
+  document.querySelectorAll('[data-cfdh-execute]').forEach(btn=>btn.addEventListener('click',()=>{
+    const a=bundle.actions.find(x=>x.id===btn.dataset.cfdhExecute);if(!a)return;
+    modal('Execução · Ação '+a.action_number,'<form id="cfdh-execution-form" class="stack"><div class="notice info"><b>'+esc(a.title||'Ação CFDH')+'</b><br>'+fmtDate(a.scheduled_date)+' · planejado '+Number(a.planned_duration_hours||0).toLocaleString('pt-BR')+'h.</div><div class="field"><label>Situação da execução</label><select name="execution_status"><option value="realizada" '+(a.execution_status==='realizada'?'selected':'')+'>Realizada</option><option value="parcial" '+(a.execution_status==='parcial'?'selected':'')+'>Parcial</option><option value="cancelada" '+(a.execution_status==='cancelada'?'selected':'')+'>Cancelada</option></select></div><div class="form-grid three"><div class="field"><label>Data real</label><input class="input" type="date" name="actual_date" value="'+esc(a.actual_date||a.scheduled_date||'')+'"></div><div class="field"><label>Início real</label><input class="input" type="time" name="actual_start" value="'+esc(String(a.actual_start||a.start_time||'').slice(0,5))+'"></div><div class="field"><label>Término real</label><input class="input" type="time" name="actual_end" value="'+esc(String(a.actual_end||a.end_time||'').slice(0,5))+'"></div></div><div class="field"><label>Duração real (h)</label><input class="input" type="number" min="0" step="0.25" name="actual_duration_hours" value="'+esc(a.actual_duration_hours??a.planned_duration_hours??'')+'"><small>Menos de 2h fica registrado, mas não entra na contagem operacional mínima configurada.</small></div><div class="field"><label>Descrição do que foi executado</label><textarea name="execution_description" required>'+esc(a.execution_description||'')+'</textarea></div><div class="field"><label>Observações / diferenças do planejado</label><textarea name="execution_notes">'+esc(a.execution_notes||'')+'</textarea></div><button class="btn primary">Salvar execução</button></form>');
+    document.querySelector('#cfdh-execution-form')?.addEventListener('submit',async e=>{e.preventDefault();try{await updateCfdhActionExecution(a.id,parseForm(e.target));document.querySelector('#modal')?.remove();toast('Execução CFDH registrada');await render()}catch(err){toast(err.message,'danger')}});
+  }));
+
+  document.querySelectorAll('[data-cfdh-open-checkin]').forEach(btn=>btn.addEventListener('click',async()=>{
+    try{
+      const x=await openCfdhCheckin(btn.dataset.cfdhOpenCheckin),url=new URL('checkin.html',location.href);url.searchParams.set('cfdh',x.public_token);
+      modal('Lista de presença · CFDH','<div class="stack"><div class="notice success"><b>Lista CFDH aberta.</b><br>Somente jovens com pelo menos Formulário Inicial parcial podem participar. Quem ainda não possuir trajetória poderá iniciar o Formulário Inicial parcial e se inscrever no circuito pela própria lista.</div><input class="input" value="'+esc(url.href)+'" readonly data-cfdh-checkin-url><div class="actions"><a class="btn primary" href="'+esc(url.href)+'" target="_blank">Abrir lista</a><button class="btn secondary" data-copy-cfdh-checkin>Copiar link</button></div></div>');
+      document.querySelector('[data-copy-cfdh-checkin]')?.addEventListener('click',async()=>{await navigator.clipboard.writeText(url.href);toast('Link CFDH copiado')});
+    }catch(err){toast(err.message,'danger')}
+  }));
+  document.querySelectorAll('[data-cfdh-list-preview]').forEach(btn=>btn.addEventListener('click',async()=>{
+    try{
+      const s=await getCfdhAttendanceSheet(btn.dataset.cfdhListPreview);
+      modal('Pré-visualização · Lista CFDH','<div class="methodology-preview-modal">'+methodologyAttendancePreviewHtml({activity:(s.activity||'CFDH')+' · '+(s.action_title||''),location:s.location,date:s.date,start_time:String(s.start_time||'').slice(0,5),end_time:String(s.end_time||'').slice(0,5),participants:s.participants||[]})+'</div>');document.querySelector('#modal .modal')?.classList.add('modal-wide');
+    }catch(err){toast(err.message,'danger')}
+  }));
+  const exportCfdhList=async(actionId,format,btn)=>{
+    const original=btn.textContent;btn.disabled=true;btn.textContent='...';
+    try{const sub=await createCfdhAttendanceSubmission(actionId);await downloadFormSubmission(sub.id,format);toast(String(format).toUpperCase()+' da lista CFDH gerado')}catch(err){toast(err.message,'danger')}finally{btn.disabled=false;btn.textContent=original}
+  };
+  document.querySelectorAll('[data-cfdh-list-pdf]').forEach(btn=>btn.addEventListener('click',()=>exportCfdhList(btn.dataset.cfdhListPdf,'pdf',btn)));
+  document.querySelectorAll('[data-cfdh-list-docx]').forEach(btn=>btn.addEventListener('click',()=>exportCfdhList(btn.dataset.cfdhListDocx,'docx',btn)));
+  document.querySelectorAll('[data-cfdh-list-print]').forEach(btn=>btn.addEventListener('click',async()=>{
+    try{const s=await getCfdhAttendanceSheet(btn.dataset.cfdhListPrint);openPrintableDocument('Lista CFDH · '+(s.action_title||''),methodologyAttendancePreviewHtml({activity:(s.activity||'CFDH')+' · '+(s.action_title||''),location:s.location,date:s.date,start_time:String(s.start_time||'').slice(0,5),end_time:String(s.end_time||'').slice(0,5),participants:s.participants||[]}))}catch(err){toast(err.message,'danger')}
+  }));
+
+  const reportForm=document.querySelector('#cfdh-report-editor');
+  if(reportForm){
+    const preview=document.querySelector('[data-cfdh-report-preview]'),workspace=document.querySelector('[data-cfdh-report-workspace]');
+    const refresh=()=>{if(preview)preview.innerHTML=cfdhReportPreviewHtml(bundle,cfdhReportDraft(bundle,reportForm))};
+    reportForm.addEventListener('input',refresh);reportForm.addEventListener('change',refresh);
+    document.querySelector('[data-toggle-cfdh-report-preview]')?.addEventListener('click',e=>{workspace?.classList.toggle('preview-open');e.currentTarget.textContent=workspace?.classList.contains('preview-open')?'Ocultar':'Abrir prévia'});
+    reportForm.addEventListener('submit',async e=>{e.preventDefault();const btn=reportForm.querySelector('[type="submit"]'),o=btn.textContent;btn.disabled=true;btn.textContent='Salvando...';try{await createEducatorReport(cfdhReportDraft(bundle,reportForm));toast('Relatório CFDH salvo');nav('cfdh?month='+month+'&plan='+planId+'&view=relatorio');await render()}catch(err){toast(err.message,'danger');btn.disabled=false;btn.textContent=o}});
+    refresh();
+  }
+  document.querySelectorAll('[data-cfdh-report-pdf]').forEach(btn=>btn.addEventListener('click',async()=>{const o=btn.textContent;btn.disabled=true;btn.textContent='...';try{await downloadCfdhReport(btn.dataset.cfdhReportPdf,'pdf');toast('PDF do relatório CFDH gerado')}catch(err){toast(err.message,'danger')}finally{btn.disabled=false;btn.textContent=o}}));
+  document.querySelectorAll('[data-cfdh-report-docx]').forEach(btn=>btn.addEventListener('click',async()=>{const o=btn.textContent;btn.disabled=true;btn.textContent='...';try{await downloadCfdhReport(btn.dataset.cfdhReportDocx,'docx');toast('DOCX do relatório CFDH gerado')}catch(err){toast(err.message,'danger')}finally{btn.disabled=false;btn.textContent=o}}));
+  document.querySelectorAll('[data-cfdh-report-print]').forEach(btn=>btn.addEventListener('click',()=>openPrintableDocument('Relatório CFDH · '+(bundle.plan.activity_title||''),cfdhReportPreviewHtml(bundle,reportForm?cfdhReportDraft(bundle,reportForm):bundle.report))));
 }
 
 async function bindEducatorPageV2(){
