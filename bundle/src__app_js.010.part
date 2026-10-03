@@ -61,6 +61,17 @@ function uiDraftLocalWrite(key,snapshot){
   try{localStorage.setItem(UI_DRAFT_LOCAL_PREFIX+key,JSON.stringify(snapshot))}catch(err){console.warn('Rascunho local indisponível:',err)}
 }
 function uiDraftLocalDelete(key){try{localStorage.removeItem(UI_DRAFT_LOCAL_PREFIX+key)}catch{}}
+function clearLocalUiDraftsForUser(userId){
+  const marker=String(userId||'')+'::';if(!marker)return;
+  try{
+    const remove=[];
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i);
+      if(k&&k.startsWith(UI_DRAFT_LOCAL_PREFIX)&&k.includes(marker))remove.push(k);
+    }
+    remove.forEach(k=>localStorage.removeItem(k));
+  }catch{}
+}
 function uiDraftApply(form,snapshot,{dispatch=true}={}){
   if(!snapshot?.controls?.length||!form.isConnected)return;
   form.dataset.draftRestoring='1';
