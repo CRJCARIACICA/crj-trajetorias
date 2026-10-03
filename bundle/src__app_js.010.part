@@ -110,6 +110,19 @@ async function uiDraftRestore(form){
   if(!uiDraftEligibleForm(form)||form.dataset.draftAttached==='1')return;
   form.dataset.draftAttached='1';
   const key=uiDraftKey(form);
+  form.addEventListener('input',()=>{
+    if(form.dataset.draftRestoring==='1')return;
+    form.dataset.draftTouched='1';uiDraftSave(form);
+  },true);
+  form.addEventListener('change',()=>{
+    if(form.dataset.draftRestoring==='1')return;
+    form.dataset.draftTouched='1';uiDraftSave(form);
+  },true);
+  form.addEventListener('submit',()=>{
+    uiDraftSave(form);
+    const keyAtSubmit=key;
+    [800,2500,7000].forEach(ms=>setTimeout(()=>{if(!form.isConnected)uiDraftClear(form,keyAtSubmit)},ms));
+  },true);
   const local=uiDraftLocalRead(key);
   if(local){
     uiDraftApply(form,local);
@@ -131,19 +144,6 @@ async function uiDraftRestore(form){
       form.dataset.draftRestored='1';
     }
   }catch(err){console.warn('Falha ao consultar rascunho remoto:',err)}
-  form.addEventListener('input',()=>{
-    if(form.dataset.draftRestoring==='1')return;
-    form.dataset.draftTouched='1';uiDraftSave(form);
-  },true);
-  form.addEventListener('change',()=>{
-    if(form.dataset.draftRestoring==='1')return;
-    form.dataset.draftTouched='1';uiDraftSave(form);
-  },true);
-  form.addEventListener('submit',()=>{
-    uiDraftSave(form);
-    const keyAtSubmit=key;
-    [800,2500,7000].forEach(ms=>setTimeout(()=>{if(!form.isConnected)uiDraftClear(form,keyAtSubmit)},ms));
-  },true);
 }
 function uiDraftFormsIn(node){
   if(!(node instanceof Element))return [];
