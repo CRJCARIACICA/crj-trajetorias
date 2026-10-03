@@ -65,6 +65,7 @@ async function bindCfdhShared(){
         title:v('title')||('Ação '+(i+1)),objective:v('objective')||'',activities:v('activities')||'',resources:v('resources')||'',
         nucleus_code:v('nucleus_code')||'',axis_code:axis||'',item_code:item||null,
         item_label:cat.find(x=>x.axis_code===axis&&x.item_code===item)?.item_label||'',
+        classification_group_id:v('classification_group_id')||null,
         execution_status:(bundle.actions.find(x=>x.id===card.dataset.actionId)?.execution_status)||'planejada'
       };
     });
