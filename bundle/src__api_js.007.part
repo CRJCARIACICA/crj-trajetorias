@@ -101,6 +101,44 @@ function cfdhMonthRange(month){
     end:new Date(Date.UTC(y,m,1)).toISOString().slice(0,10)
   };
 }
+function localCalendarParts(iso){
+  const d=new Date(iso);
+  if(Number.isNaN(d.getTime()))return {date:'',time:''};
+  const p=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(d);
+  const get=t=>p.find(x=>x.type===t)?.value||'';
+  return {date:get('year')+'-'+get('month')+'-'+get('day'),time:get('hour')+':'+get('minute')};
+}
+export async function listCrjPlanningCalendar(month=monthKey()){
+  if(mode==='mock')return [];
+  const range=cfdhMonthRange(month),fromIso=range.start+'T00:00:00-03:00',toIso=range.end+'T00:00:00-03:00';
+  const [workshopQ,eventsQ,cfdhQ,eventPlansQ]=await Promise.all([
+    supabase.from('workshop_calendar').select('id,workshop_id,scheduled_date,start_time,end_time,location_type,location_other,status,workshops(name)').gte('scheduled_date',range.start).lt('scheduled_date',range.end).neq('status','cancelada').order('scheduled_date').order('start_time'),
+    supabase.from('calendar_events').select('id,title,event_type,starts_at,ends_at,status,location_type,location_details,team').gte('starts_at',fromIso).lt('starts_at',toIso).neq('status','cancelled').order('starts_at'),
+    supabase.from('cfdh_actions').select('id,plan_id,action_number,title,scheduled_date,start_time,end_time,location_type,location_other,execution_status').gte('scheduled_date',range.start).lt('scheduled_date',range.end).order('scheduled_date').order('start_time'),
+    supabase.from('educator_plans').select('id,activity_title,planned_start,start_time,end_time,status,plan_type').eq('plan_type','evento').gte('planned_start',range.start).lt('planned_start',range.end).neq('status','cancelado').order('planned_start').order('start_time')
+  ]);
+  for(const q of [workshopQ,eventsQ,cfdhQ,eventPlansQ])if(q.error)throw q.error;
+  const rows=[];
+  for(const x of workshopQ.data||[])rows.push({
+    source:'workshop',id:x.id,workshop_id:x.workshop_id,date:x.scheduled_date,
+    start:String(x.start_time||'').slice(0,5),end:String(x.end_time||'').slice(0,5),
+    title:x.workshops?.name||'Oficina',location:x.location_other||x.location_type||'CRJ Cariacica',status:x.status||'planejada'
+  });
+  for(const x of eventsQ.data||[]){
+    const s=localCalendarParts(x.starts_at),e=localCalendarParts(x.ends_at);
+    rows.push({source:'agenda',id:x.id,date:s.date,start:s.time,end:e.time,title:x.title||x.event_type||'Agenda CRJ',location:x.location_details||x.location_type||'CRJ Cariacica',status:x.status||'confirmed'});
+  }
+  for(const x of cfdhQ.data||[])rows.push({
+    source:'cfdh',id:x.id,plan_id:x.plan_id,action_number:x.action_number,date:x.scheduled_date,
+    start:String(x.start_time||'').slice(0,5),end:String(x.end_time||'').slice(0,5),
+    title:'CFDH · Ação '+x.action_number+(x.title?' · '+x.title:''),location:x.location_other||x.location_type||'CRJ Cariacica',status:x.execution_status||'planejada'
+  });
+  for(const x of eventPlansQ.data||[])rows.push({
+    source:'evento',id:x.id,plan_id:x.id,date:x.planned_start,start:String(x.start_time||'').slice(0,5),end:String(x.end_time||'').slice(0,5),
+    title:x.activity_title||'Evento / programação',location:'CRJ Cariacica',status:x.status||'planejado'
+  });
+  return rows.sort((a,b)=>String(a.date+a.start).localeCompare(String(b.date+b.start)));
+}
 export async function getCfdhPlanBundle(planId){
   if(mode==='mock'){
     const st=mock(),plan=(st.educatorPlans||[]).find(x=>x.id===planId);
@@ -160,13 +198,13 @@ export async function getCfdhPlanBundle(planId){
   };
 }
 export async function listCfdhMonthDashboard(month=monthKey()){
-  if(mode==='mock')return {plans:[],metrics:{planned_hours:0,executed_hours:0,structural_hours:0,countable_executed_hours:0,pending:0}};
+  if(mode==='mock')return {plans:[],actions:[],metrics:{planned_hours:0,countable_planned_hours:0,structural_planned_hours:0,transversal_planned_hours:0,executed_hours:0,structural_hours:0,countable_executed_hours:0,pending:0}};
   const range=cfdhMonthRange(month);
   const pq=await supabase.from('educator_plans').select('*').in('plan_type',['cfdh_estrutural','cfdh_transversal']).order('planned_start');
   if(pq.error)throw pq.error;
   const plans=(pq.data||[]).filter(p=>String(p.planned_start||'').slice(0,7)===month);
   const ids=plans.map(x=>x.id);
-  if(!ids.length)return {plans:[],actions:[],reports:[],metrics:{planned_hours:0,executed_hours:0,structural_hours:0,countable_executed_hours:0,pending:0}};
+  if(!ids.length)return {plans:[],actions:[],reports:[],month_theme:null,metrics:{planned_hours:0,countable_planned_hours:0,structural_planned_hours:0,transversal_planned_hours:0,executed_hours:0,structural_hours:0,countable_executed_hours:0,pending:0}};
   const [aq,rq,formsQ,monthThemeQ]=await Promise.all([
     supabase.from('cfdh_actions').select('*').in('plan_id',ids).gte('scheduled_date',range.start).lt('scheduled_date',range.end).order('scheduled_date'),
     supabase.from('educator_reports').select('*').in('plan_id',ids),
@@ -190,6 +228,8 @@ export async function listCfdhMonthDashboard(month=monthKey()){
     metrics:{
       planned_hours:Number(actions.reduce((n,x)=>n+Number(x.planned_duration_hours||0),0).toFixed(2)),
       countable_planned_hours:Number(actions.reduce((n,x)=>n+countable(x.planned_duration_hours),0).toFixed(2)),
+      structural_planned_hours:Number(actions.filter(x=>plans.find(p=>p.id===x.plan_id)?.plan_type==='cfdh_estrutural').reduce((n,x)=>n+countable(x.planned_duration_hours),0).toFixed(2)),
+      transversal_planned_hours:Number(actions.filter(x=>plans.find(p=>p.id===x.plan_id)?.plan_type==='cfdh_transversal').reduce((n,x)=>n+countable(x.planned_duration_hours),0).toFixed(2)),
       executed_hours:Number(actions.reduce((n,x)=>n+Number(x.actual_duration_hours||0),0).toFixed(2)),
       countable_executed_hours:Number(actions.reduce((n,x)=>n+countable(x.actual_duration_hours),0).toFixed(2)),
       structural_hours:Number(actions.filter(x=>plans.find(p=>p.id===x.plan_id)?.plan_type==='cfdh_estrutural').reduce((n,x)=>n+countable(x.actual_duration_hours),0).toFixed(2)),
