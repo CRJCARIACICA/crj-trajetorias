@@ -311,6 +311,99 @@ function cfdhActionGoalFlyoutHtml(bundle,a,index){
   const links=cfdhActionGoalLinks(bundle,a);
   return '<div class="cfdh-action-goal-zone" data-cfdh-action-goals><span class="cfdh-action-goal-badge">Metas e etapas · '+links.length+'</span><div class="cfdh-action-goal-flyout" role="tooltip">'+cfdhActionGoalFlyoutContent(bundle,a,index)+'</div></div>';
 }
+function cfdhMonthlyPlanningStatus(bundle,actionsOverride=null){
+  const dash=bundle?.month_dashboard||{plans:[],actions:[]},p=bundle?.plan||{},current=actionsOverride||bundle?.actions||[];
+  const planType=new Map((dash.plans||[]).map(x=>[x.id,x.plan_type]));
+  const rows=(dash.actions||[]).filter(x=>x.plan_id!==p.id).map(x=>({...x,_plan_type:planType.get(x.plan_id)}));
+  for(const a of current)rows.push({...a,_plan_type:p.plan_type});
+  const countable=a=>cfdhActionCountableHours(a);
+  const structural=Number(rows.filter(x=>x._plan_type==='cfdh_estrutural').reduce((n,x)=>n+countable(x),0).toFixed(2));
+  const transversal=Number(rows.filter(x=>x._plan_type==='cfdh_transversal').reduce((n,x)=>n+countable(x),0).toFixed(2));
+  const total=Number((structural+transversal).toFixed(2));
+  return {
+    structural,transversal,total,
+    structural_ok:structural>=CFDH_STRUCTURAL_MIN,
+    total_ok:total>=CFDH_MONTH_TARGET,
+    structural_missing:Number(Math.max(0,CFDH_STRUCTURAL_MIN-structural).toFixed(2)),
+    total_missing:Number(Math.max(0,CFDH_MONTH_TARGET-total).toFixed(2))
+  };
+}
+function cfdhTimeMinutes(v){
+  const m=String(v||'').match(/^(\d{1,2}):(\d{2})/);if(!m)return null;
+  return Number(m[1])*60+Number(m[2]);
+}
+function cfdhMinutesTime(m){
+  if(m==null||m<0||m>=24*60)return '';
+  return String(Math.floor(m/60)).padStart(2,'0')+':'+String(Math.round(m%60)).padStart(2,'0');
+}
+function cfdhAutoEndTime(start,hours){
+  const s=cfdhTimeMinutes(start),mins=Math.round(Number(hours||0)*60);
+  if(s==null||!mins)return '';
+  return cfdhMinutesTime(s+mins);
+}
+function cfdhCalendarEntriesForDay(bundle,date,action={}){
+  return (bundle?.crj_calendar||[]).filter(x=>{
+    if(x.date!==date)return false;
+    if(x.source==='cfdh'&&action.id&&x.id===action.id)return false;
+    if(x.source==='workshop'&&action.workshop_calendar_id&&x.id===action.workshop_calendar_id)return false;
+    return true;
+  }).sort((a,b)=>String(a.start||'').localeCompare(String(b.start||'')));
+}
+function cfdhCalendarFreeWindows(entries,start='08:00',end='22:00'){
+  const floor=cfdhTimeMinutes(start),ceil=cfdhTimeMinutes(end);
+  const ranges=(entries||[]).map(x=>[cfdhTimeMinutes(x.start),cfdhTimeMinutes(x.end)]).filter(x=>x[0]!=null&&x[1]!=null&&x[1]>x[0]).sort((a,b)=>a[0]-b[0]);
+  const merged=[];
+  for(const r of ranges){
+    const a=Math.max(floor,r[0]),b=Math.min(ceil,r[1]);if(b<=floor||a>=ceil)continue;
+    const last=merged[merged.length-1];if(last&&a<=last[1])last[1]=Math.max(last[1],b);else merged.push([a,b]);
+  }
+  const free=[];let cur=floor;
+  for(const [a,b] of merged){if(a>cur)free.push([cur,a]);cur=Math.max(cur,b)}
+  if(cur<ceil)free.push([cur,ceil]);
+  return free.map(([a,b])=>cfdhMinutesTime(a)+'–'+cfdhMinutesTime(b));
+}
+function cfdhCalendarDayDetailHtml(bundle,date,action={}){
+  if(!date)return '<div class="cfdh-calendar-day-empty">Selecione um dia para consultar a agenda do CRJ.</div>';
+  const rows=cfdhCalendarEntriesForDay(bundle,date,action),free=cfdhCalendarFreeWindows(rows);
+  return '<div class="cfdh-calendar-day-title"><b>'+esc(fmtDate(date))+'</b><span>'+(rows.length?rows.length+' compromisso(s) registrado(s)':'sem compromissos registrados')+'</span></div>'+
+    '<div class="cfdh-calendar-busy-list">'+(rows.map(x=>'<div class="cfdh-calendar-busy"><span>'+esc((x.start||'--:--')+(x.end?'–'+x.end:''))+'</span><b>'+esc(x.title||'Atividade CRJ')+'</b><small>'+esc(x.location||'CRJ Cariacica')+'</small></div>').join('')||'<div class="notice success compact">Dia livre no calendário registrado.</div>')+'</div>'+
+    '<div class="cfdh-calendar-free"><b>Janelas sem atividade registrada</b><small>Referência visual entre 08:00 e 22:00. Confirme a disponibilidade operacional do equipamento quando necessário.</small><div>'+free.map(x=>'<span class="pill success">'+esc(x)+'</span>').join('')+'</div></div>';
+}
+function cfdhCalendarPickerHtml(bundle,a,index){
+  const month=String(bundle?.plan?.planned_start||currentMonth()).slice(0,7),[y,m]=month.split('-').map(Number),last=new Date(y,m,0).getDate();
+  const firstDow=(new Date(y,m-1,1).getDay()+6)%7,selected=a.scheduled_date||'',cells=[];
+  for(let i=0;i<firstDow;i++)cells.push('<span class="cfdh-calendar-pad"></span>');
+  for(let d=1;d<=last;d++){
+    const date=month+'-'+String(d).padStart(2,'0'),entries=cfdhCalendarEntriesForDay(bundle,date,a),busy=entries.length;
+    cells.push('<button type="button" class="cfdh-calendar-day '+(selected===date?'selected ':'')+(busy?'busy':'free')+'" data-cfdh-calendar-day="'+date+'"><b>'+d+'</b><small>'+(busy?busy+' ocup.':'livre')+'</small></button>');
+  }
+  return '<div class="cfdh-calendar-picker" data-cfdh-calendar-picker>'+
+    '<div class="page-head compact"><div><label>Data pelo calendário do CRJ</label><small>Escolha o dia visualizando oficinas, CFDHs, agenda técnica e eventos já registrados.</small></div><button type="button" class="btn secondary" data-cfdh-toggle-calendar>'+(selected?'Trocar data':'Escolher data')+'</button></div>'+
+    '<input type="hidden" name="scheduled_date" value="'+esc(selected)+'" required>'+
+    '<div class="cfdh-calendar-panel '+(selected?'hidden':'')+'" data-cfdh-calendar-panel>'+
+      '<div class="cfdh-calendar-month-title">'+esc(month.split('-').reverse().join('/'))+'</div>'+
+      '<div class="cfdh-calendar-weekdays"><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span><span>Dom</span></div>'+
+      '<div class="cfdh-calendar-grid">'+cells.join('')+'</div>'+
+      '<div class="cfdh-calendar-day-detail" data-cfdh-calendar-day-detail>'+cfdhCalendarDayDetailHtml(bundle,selected,a)+'</div>'+
+    '</div>'+
+    '<div class="cfdh-calendar-selected '+(selected?'':'hidden')+'" data-cfdh-calendar-selected><b>Dia selecionado:</b> <span>'+esc(selected?fmtDate(selected):'')+'</span></div>'+
+  '</div>';
+}
+function cfdhActionCalendarConflicts(bundle,a,draftActions=[]){
+  if(!a.scheduled_date||!a.start_time||!a.end_time)return [];
+  const s=cfdhTimeMinutes(a.start_time),e=cfdhTimeMinutes(a.end_time);if(s==null||e==null||e<=s)return [];
+  const conflicts=[];
+  for(const x of cfdhCalendarEntriesForDay(bundle,a.scheduled_date,a)){
+    const xs=cfdhTimeMinutes(x.start),xe=cfdhTimeMinutes(x.end);if(xs==null||xe==null)continue;
+    if(s<xe&&e>xs)conflicts.push(x);
+  }
+  for(const other of draftActions||[]){
+    if(other===a||other.action_number===a.action_number||other.scheduled_date!==a.scheduled_date)continue;
+    const os=cfdhTimeMinutes(other.start_time),oe=cfdhTimeMinutes(other.end_time);if(os==null||oe==null)continue;
+    if(s<oe&&e>os)conflicts.push({source:'draft',title:'CFDH · Ação '+other.action_number,start:other.start_time,end:other.end_time,location:other.location_other||other.location_type||'CRJ Cariacica'});
+  }
+  return conflicts;
+}
 function cfdhPlanAlerts(bundle){
   const p=bundle?.plan||{},actions=bundle?.actions||[],selected=bundle?.workshop_ids||[],calendar=bundle?.calendar||[],evals=bundle?.evaluations||[],alerts=[],themeState=cfdhMonthlyThemeState(bundle,actions);
   if(!themeState.code&&!String(themeState.custom||'').trim())alerts.push('Defina o tema mensal ao criar o circuito CFDH.');
@@ -332,7 +425,12 @@ function cfdhPlanAlerts(bundle){
     }
     if(['realizada','parcial'].includes(a.execution_status)&&!(bundle.attendance_counts?.[a.id]>0))alerts.push('Ação '+a.action_number+': execução registrada sem presença nominal.');
   }
-  if(actions.some(x=>x.execution_status==='realizada')&&!evals.some(x=>x.form_slug==='cfdh-avaliacao-jovens'))alerts.push('Há ação realizada sem aplicação registrada da Avaliação dos Jovens (Anexo 12).');
+  const monthly=cfdhMonthlyPlanningStatus(bundle,actions);
+  if(!monthly.structural_ok)alerts.push('ALERTA DE META: o planejamento mensal soma '+monthly.structural.toLocaleString('pt-BR')+'h de CFDH estrutural. Faltam '+monthly.structural_missing.toLocaleString('pt-BR')+'h para o mínimo de '+CFDH_STRUCTURAL_MIN+'h.');
+  if(!monthly.total_ok)alerts.push('ALERTA DE META: estrutural + transversal somam '+monthly.total.toLocaleString('pt-BR')+'h. Com o planejamento atual, a meta mínima mensal de '+CFDH_MONTH_TARGET+'h não será batida; faltam '+monthly.total_missing.toLocaleString('pt-BR')+'h.');
+  const conflicts=actions.flatMap(a=>cfdhActionCalendarConflicts(bundle,a,actions).map(x=>'Ação '+a.action_number+': conflito de horário com '+(x.title||'atividade do CRJ')+' ('+(x.start||'--:--')+'–'+(x.end||'--:--')+').'));
+  alerts.push(...conflicts);
+    if(actions.some(x=>x.execution_status==='realizada')&&!evals.some(x=>x.form_slug==='cfdh-avaliacao-jovens'))alerts.push('Há ação realizada sem aplicação registrada da Avaliação dos Jovens (Anexo 12).');
   if(actions.some(x=>x.execution_status==='realizada')&&!evals.some(x=>x.form_slug==='cfdh-avaliacao-equipe'))alerts.push('Há ação realizada sem Avaliação de Educadores e Oficineiros (Anexo 13).');
   if(actions.length>1){
     const dates=actions.map(x=>x.scheduled_date).filter(Boolean),uniqueDates=new Set(dates);
@@ -396,12 +494,12 @@ function cfdhActionEditorCard(bundle,a,index){
     '<div class="field"><label>Eixo</label><select name="axis_code" data-cfdh-axis required><option value="">Selecione o Núcleo</option>'+opts.axes+'</select></div>'+
     '<div class="field"><label>Item A/B/C...</label><select name="item_code" data-cfdh-item '+(hasItems?'required':'')+'><option value="">'+(hasItems?'Selecione o Item':'Sem subdivisão por Item')+'</option>'+opts.items+'</select><input type="hidden" name="item_label" value="'+esc(a.item_label||'')+'"></div></div></div>'+
     (p.plan_type==='cfdh_transversal'
-      ?'<div class="cfdh-transversal-schedule"><div class="form-grid"><div class="field"><label>Oficina vinculada</label><select name="workshop_id" data-cfdh-action-workshop required><option value="">Selecione</option>'+selectedWorkshops.map(w=>'<option value="'+w.id+'" '+(w.id===a.workshop_id?'selected':'')+'>'+esc(w.name)+'</option>').join('')+'</select></div><div class="field"><label>Agenda da ação</label><select name="schedule_mode" data-cfdh-schedule-mode required><option value="workshop_planned" '+(a.schedule_mode!=='atypical'?'selected':'')+'>Usar dia planejado da oficina</option><option value="atypical" '+(a.schedule_mode==='atypical'?'selected':'')+'>Propor dia e horário atípico</option></select></div></div>'+
-        '<div class="field '+(a.schedule_mode==='atypical'?'hidden':'')+'" data-cfdh-planned-date-wrap><label>Dia planejado disponível</label><select name="workshop_calendar_id" data-cfdh-calendar-entry><option value="">Selecione uma data</option>'+dates.map(d=>'<option value="'+d.id+'" '+(d.id===a.workshop_calendar_id?'selected':'')+'>'+fmtDate(d.scheduled_date)+' · '+esc(String(d.start_time||'').slice(0,5))+'–'+esc(String(d.end_time||'').slice(0,5))+'</option>').join('')+'</select><small>Ao salvar, esta ação será inserida no planejamento da oficina correspondente.</small></div>'+
-        '<div class="'+(a.schedule_mode==='atypical'?'':'hidden')+'" data-cfdh-atypical-wrap><div class="notice warn compact">Dia atípico: o sistema criará uma nova entrada no calendário e no planejamento da oficina.</div></div></div>'
+      ?'<div class="cfdh-transversal-schedule"><div class="form-grid"><div class="field"><label>Oficina vinculada</label><select name="workshop_id" data-cfdh-action-workshop required><option value="">Selecione</option>'+selectedWorkshops.map(w=>'<option value="'+w.id+'" '+(w.id===a.workshop_id?'selected':'')+'>'+esc(w.name)+'</option>').join('')+'</select></div><div class="field"><label>Vínculo com a agenda da oficina</label><div class="input read-only" data-cfdh-schedule-link-status>'+(a.schedule_mode==='workshop_planned'?'Dentro de uma aula planejada da oficina':'Dia/horário atípico ou ainda não identificado')+'</div><input type="hidden" name="schedule_mode" value="'+esc(a.schedule_mode||'atypical')+'"><input type="hidden" name="workshop_calendar_id" value="'+esc(a.workshop_calendar_id||'')+'"></div></div><small>Ao escolher data e horário, o sistema identifica automaticamente se a ação cabe dentro de uma aula já planejada da oficina.</small></div>'
       :'<div class="notice info compact"><b>CFDH estrutural:</b> a oficina vinculada fica indisponível. Esta é uma ação própria do circuito.</div>')+
-    '<div class="form-grid three"><div class="field"><label>Data</label><input class="input" type="date" name="scheduled_date" value="'+esc(a.scheduled_date||'')+'" '+(p.plan_type==='cfdh_transversal'&&a.schedule_mode!=='atypical'?'readonly':'')+' required></div><div class="field"><label>Início</label><input class="input" type="time" name="start_time" value="'+esc(String(a.start_time||'').slice(0,5))+'" '+(p.plan_type==='cfdh_transversal'&&a.schedule_mode!=='atypical'?'readonly':'')+'></div><div class="field"><label>Término</label><input class="input" type="time" name="end_time" value="'+esc(String(a.end_time||'').slice(0,5))+'" '+(p.plan_type==='cfdh_transversal'&&a.schedule_mode!=='atypical'?'readonly':'')+'></div></div>'+
-    '<div class="form-grid"><div class="field"><label>Duração planejada (h)</label><input class="input" type="number" min="0.25" step="0.25" name="planned_duration_hours" value="'+esc(a.planned_duration_hours??2)+'" required><small>Referência mínima operacional para contabilização: 2h por ação.</small></div><div class="field"><label>Local</label><select name="location_type"><option value="" '+(!a.location_type?'selected':'')+'>CRJ Cariacica</option><option value="LABPoca" '+(a.location_type==='LABPoca'?'selected':'')+'>LABPoca</option><option value="Sala de computadores" '+(a.location_type==='Sala de computadores'?'selected':'')+'>Sala de computadores</option><option value="Sala de dança" '+(a.location_type==='Sala de dança'?'selected':'')+'>Sala de dança</option><option value="Trampo Coletivo" '+(a.location_type==='Trampo Coletivo'?'selected':'')+'>Trampo Coletivo</option><option value="Externa" '+(a.location_type==='Externa'?'selected':'')+'>Externa</option><option value="Outro" '+(a.location_type==='Outro'?'selected':'')+'>Outro</option></select></div></div>'+
+    cfdhCalendarPickerHtml(bundle,a,index)+
+    '<div class="form-grid three"><div class="field"><label>Duração planejada (h)</label><input class="input" type="number" min="0.25" step="0.25" name="planned_duration_hours" value="'+esc(a.planned_duration_hours??2)+'" required><small>Referência mínima operacional para contabilização: 2h por ação.</small></div><div class="field"><label>Horário de início</label><input class="input" type="time" name="start_time" value="'+esc(String(a.start_time||'').slice(0,5))+'" required><small>Preencha somente o início.</small></div><div class="field"><label>Término calculado</label><input class="input read-only" type="time" name="end_time" value="'+esc(String(a.end_time||cfdhAutoEndTime(a.start_time,a.planned_duration_hours)||'').slice(0,5))+'" readonly><small>Calculado automaticamente pela carga horária.</small></div></div>'+
+    '<div class="cfdh-calendar-conflict hidden" data-cfdh-calendar-conflict></div>'+
+    '<div class="form-grid"><div class="field"><label>Local</label><select name="location_type"><option value="" '+(!a.location_type?'selected':'')+'>CRJ Cariacica</option><option value="LABPoca" '+(a.location_type==='LABPoca'?'selected':'')+'>LABPoca</option><option value="Sala de computadores" '+(a.location_type==='Sala de computadores'?'selected':'')+'>Sala de computadores</option><option value="Sala de dança" '+(a.location_type==='Sala de dança'?'selected':'')+'>Sala de dança</option><option value="Trampo Coletivo" '+(a.location_type==='Trampo Coletivo'?'selected':'')+'>Trampo Coletivo</option><option value="Externa" '+(a.location_type==='Externa'?'selected':'')+'>Externa</option><option value="Outro" '+(a.location_type==='Outro'?'selected':'')+'>Outro</option></select></div></div>'+
     '<div class="field"><label>Local externo / outro — descrição</label><input class="input" name="location_other" value="'+esc(a.location_other||'')+'"></div>'+
     '<div class="field"><div class="page-head compact cfdh-field-head"><div><label>Atividades propostas</label></div>'+(p.plan_type==='cfdh_transversal'?'<button type="button" class="cfdh-inline-tool" data-cfdh-copy-activities>↗ Repetir dinâmica</button>':'')+'</div><textarea name="activities">'+esc(a.activities||'')+'</textarea>'+(p.plan_type==='cfdh_transversal'?'<small>Use o botão para repetir esta mesma dinâmica somente nas ações que você selecionar.</small>':'')+'</div>'+
     '<div class="field"><div class="page-head compact cfdh-field-head"><div><label>Recursos necessários</label></div>'+(p.plan_type==='cfdh_transversal'?'<button type="button" class="cfdh-inline-tool" data-cfdh-copy-resources>↗ Repetir recursos</button>':'')+'</div><textarea name="resources">'+esc(a.resources||'')+'</textarea>'+(p.plan_type==='cfdh_transversal'?'<small>Copie apenas os recursos para as ações selecionadas.</small>':'')+'</div>'+
@@ -499,14 +597,17 @@ async function pageCfdhShared(){
   if(!permitted('cfdh_shared'))return '<div class="notice danger">Seu perfil não possui acesso ao CFDH compartilhado.</div>';
   const rr=route(),month=rr.params.get('month')||currentMonth(),planId=rr.params.get('plan')||'',view=rr.params.get('view')||'planejamento';
   if(planId){
-    const [bundle,themes,classification,indicators]=await Promise.all([getCfdhPlanBundle(planId),listCfdhThemes(),listMethodologyClassificationCatalog(),listIndicatorCatalog()]);
-    bundle.themes=themes;bundle.classification=classification;bundle.indicators=indicators;
+    const [bundle,themes,classification,indicators,monthDashboard,crjCalendar]=await Promise.all([getCfdhPlanBundle(planId),listCfdhThemes(),listMethodologyClassificationCatalog(),listIndicatorCatalog(),listCfdhMonthDashboard(month),listCrjPlanningCalendar(month)]);
+    bundle.themes=themes;bundle.classification=classification;bundle.indicators=indicators;bundle.month_dashboard=monthDashboard;bundle.crj_calendar=crjCalendar;
     if(view==='relatorio')return cfdhReportEditorHtml(bundle);
     return cfdhPlanEditorHtml(bundle);
   }
   const [dash,themes]=await Promise.all([listCfdhMonthDashboard(month),listCfdhThemes()]);
   const monthThemeText=dash.month_theme?(dash.month_theme.theme_custom||themes.find(t=>Number(t.code)===Number(dash.month_theme.theme_code))?.theme||'Tema definido'):'Ainda não definido — será definido ao criar o primeiro circuito CFDH do mês';
   const target=Math.min(100,(Number(dash.metrics.countable_executed_hours||0)/CFDH_MONTH_TARGET)*100),struct=Math.min(100,(Number(dash.metrics.structural_hours||0)/CFDH_STRUCTURAL_MIN)*100);
+  const plannedTotal=Number(dash.metrics.countable_planned_hours||0),plannedStructural=Number(dash.metrics.structural_planned_hours||0),plannedTransversal=Number(dash.metrics.transversal_planned_hours||0);
+  const plannedOk=plannedTotal>=CFDH_MONTH_TARGET&&plannedStructural>=CFDH_STRUCTURAL_MIN;
+  const plannedGoalNotice='<div class="notice '+(plannedOk?'success':'danger')+'" style="margin-top:16px"><b>'+(plannedOk?'Planejamento mensal atende os mínimos de CFDH.':'Meta mensal não será batida com o planejamento atual.')+'</b><br>CFDH estrutural: <b>'+plannedStructural.toLocaleString('pt-BR')+'h / '+CFDH_STRUCTURAL_MIN+'h mínimas</b> · CFDH transversal: <b>'+plannedTransversal.toLocaleString('pt-BR')+'h</b> · Total planejado contabilizável: <b>'+plannedTotal.toLocaleString('pt-BR')+'h / '+CFDH_MONTH_TARGET+'h mínimas</b>'+(plannedOk?'':'<br><small>Inclua ou amplie ações planejadas antes do fechamento do mês.</small>')+'</div>';
   const reportMap=new Map((dash.reports||[]).map(x=>[x.plan_id,x]));
   const cards=(dash.plans||[]).map(p=>{
     const aa=(dash.actions||[]).filter(x=>x.plan_id===p.id),rep=reportMap.get(p.id),count=aa.reduce((n,a)=>n+cfdhActionCountableHours(a,true),0),pending=aa.filter(a=>!['realizada','parcial'].includes(a.execution_status)).length,isSource=dash.month_theme?.source_plan_id===p.id;
@@ -514,6 +615,7 @@ async function pageCfdhShared(){
   }).join('');
   return '<div class="page-head"><div><h2>CFDH compartilhado</h2><p>Tema mensal → planejamento por ações → execução → presença → avaliação → relatório.</p></div><div class="actions"><button class="btn primary" data-new-cfdh-plan>+ Novo circuito CFDH</button></div></div>'+
     '<div class="card"><div class="form-grid"><div class="field"><label>Mês de referência</label><input class="input" type="month" data-cfdh-month value="'+esc(month)+'"></div><div class="field"><label>Participação na construção</label><div class="input read-only">Educadores · Psicologia · Serviço Social · Terapia Ocupacional</div></div></div><div class="notice '+(dash.month_theme?'success':'warn')+'" style="margin-top:12px"><b>Tema oficial do mês:</b> '+esc(monthThemeText)+'<br><small>'+(dash.month_theme?'Usa como referência o primeiro planejamento CFDH criado no mês. O tema pode ser alterado depois quando houver necessidade pontual, e a mudança passa a valer para os demais circuitos do mês.':'Clique em <b>Novo circuito CFDH</b> para definir o tema inicial deste mês.')+'</small></div></div>'+
+    plannedGoalNotice+
     '<div class="grid cards cfdh-progress-grid" style="margin-top:16px"><div class="card kpi"><div class="label">CFDH executado</div><div class="value">'+Number(dash.metrics.countable_executed_hours||0).toLocaleString('pt-BR')+'h</div><div class="progress"><span style="width:'+target+'%"></span></div><div class="meta">Referência mensal: '+CFDH_MONTH_TARGET+'h</div></div><div class="card kpi"><div class="label">CFDH estrutural</div><div class="value">'+Number(dash.metrics.structural_hours||0).toLocaleString('pt-BR')+'h</div><div class="progress"><span style="width:'+struct+'%"></span></div><div class="meta">Referência mínima estrutural: '+CFDH_STRUCTURAL_MIN+'h</div></div><div class="card kpi"><div class="label">Pendências</div><div class="value">'+Number(dash.metrics.pending||0)+'</div><div class="meta">relatórios, avaliações ou execução</div></div></div>'+
     '<div class="page-head educator-subhead"><div><h3>Circuitos do mês</h3><p>Ações com menos de 2h permanecem registradas, mas ficam sinalizadas fora da contagem operacional mínima configurada.</p></div></div><div class="grid two">'+(cards||'<div class="card empty">Nenhum planejamento CFDH neste mês.</div>')+'</div>'+
     '<div class="page-head educator-subhead" style="margin-top:20px"><div><h3>Formulários de avaliação do CFDH</h3><p>As avaliações também ficam disponíveis dentro de cada circuito, já contextualizadas ao planejamento.</p></div></div><div class="grid three"><div class="card"><span class="pill">Anexo 11</span><h3>Planejamento CFDH</h3><p class="muted">O editor do circuito estrutura as mesmas informações em ações e mantém pré-visualização documental.</p></div><div class="card"><span class="pill">Anexo 12</span><h3>Avaliação dos Jovens</h3><p class="muted">Aplicação periódica e ao final do circuito.</p></div><div class="card"><div class="actions"><span class="pill">Anexo 13</span><span class="pill warn">Exclusivo Educadores</span></div><h3>Avaliação Educadores e Oficineiros</h3><p class="muted">Avaliação da execução e condução do CFDH pela equipe de referência.</p></div></div>';
