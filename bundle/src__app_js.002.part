@@ -85,6 +85,25 @@ async function pageForm(slug,youthId){
   }
   if(f.youthRequired&&!youthId)return `<div class="page-head"><div><h2>${esc(f.title)}</h2><p>Este documento precisa estar vinculado a um jovem.</p></div></div><div class="notice">Abra a ficha do jovem em <b>Jovens → Abrir trajetória</b> e utilize uma das ações disponíveis.</div><div class="actions" style="margin-top:16px"><button class="btn primary" data-nav="jovens">Selecionar jovem</button></div>`;
   const values=youthId?await youthPrefill(youthId):{};
+  const cfdhPlanId=route().params.get('cfdh_plan');
+  if(cfdhPlanId&&['cfdh-planejamento','cfdh-avaliacao-jovens','cfdh-avaliacao-equipe'].includes(slug)){
+    try{
+      const bundle=await getCfdhPlanBundle(cfdhPlanId),owner=(bundle.team||[]).find(x=>x.id===bundle.plan.educator_user_id);
+      values.class_name=values.class_name||bundle.plan.activity_title||'CFDH';
+      values.date=values.date||new Date().toISOString().slice(0,10);
+      values.reference_educator=values.reference_educator||owner?.display_name||'';
+      values.reference_team=values.reference_team||owner?.display_name||'';
+      values.initial_count=values.initial_count??bundle.plan.expected_participants??'';
+      values.start_date=values.start_date||bundle.plan.planned_start||'';
+      values.end_date=values.end_date||bundle.plan.planned_end||bundle.plan.planned_start||'';
+      values.planning_version=values.planning_version||'Primeira versão';
+      values.previous_date=values.previous_date||new Date().toISOString().slice(0,10);
+      if(slug==='cfdh-planejamento'){
+        values.topics=values.topics||(bundle.actions||[]).map(a=>'Ação '+a.action_number+' · '+(a.title||'')+' | '+(a.objective||'')+' | '+(a.activities||'')+' | '+(a.resources||'')+' | '+Number(a.planned_duration_hours||0)+'h').join('\n');
+        values.notes=values.notes||bundle.plan.cfdh_monthly_notes||'';
+      }
+    }catch(err){console.warn('Não foi possível pré-preencher o formulário CFDH:',err)}
+  }
   if(slug==='lista-presenca-contato'&&route().params.get('context')==='uso-livre'){
     values.activity=values.activity||'Uso livre';
     values.date=values.date||new Date().toISOString().slice(0,10);
