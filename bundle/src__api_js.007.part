@@ -121,6 +121,62 @@ function localCalendarParts(iso){
   const get=t=>p.find(x=>x.type===t)?.value||'';
   return {date:get('year')+'-'+get('month')+'-'+get('day'),time:get('hour')+':'+get('minute')};
 }
+export async function getCfdhStructuralDistributionSignals(month=monthKey()){
+  if(mode==='mock')return {weekday_flow:[0,0,0,0,0,0,0],hour_flow:Array(24).fill(0),historical_success:[],samples:{attendance:0,visitors:0,services:0,educator_participants:0,structural_actions:0},free_use_list_available:false};
+  const range=cfdhMonthRange(month),monthStart=new Date(range.start+'T12:00:00Z'),historyStart=new Date(monthStart);historyStart.setUTCMonth(historyStart.getUTCMonth()-6);
+  const historyDate=historyStart.toISOString().slice(0,10),historyIso=historyDate+'T00:00:00-03:00';
+  const [plansQ,actionsQ,cfdhAttQ,sessionsQ,attQ,visitorsQ,servicesQ,educatorQ]=await Promise.all([
+    supabase.from('educator_plans').select('id,plan_type,planned_start').in('plan_type',['cfdh_estrutural','cfdh_transversal']).gte('planned_start',historyDate),
+    supabase.from('cfdh_actions').select('id,plan_id,scheduled_date,start_time,end_time,planned_duration_hours,execution_status,actual_date,actual_start,actual_end,actual_duration_hours').gte('scheduled_date',historyDate),
+    supabase.from('cfdh_attendance').select('action_id,attendance_date,present').gte('attendance_date',historyDate).eq('present',true),
+    supabase.from('workshop_sessions').select('id,session_date,start_time,end_time,duration_hours').gte('session_date',historyDate),
+    supabase.from('attendance').select('session_id,attendance_date,present').gte('attendance_date',historyDate).eq('present',true),
+    supabase.from('provisional_people').select('id,created_at,visitor_mode').eq('visitor_mode',true).gte('created_at',historyIso),
+    supabase.from('service_records').select('service_date').gte('service_date',historyDate),
+    supabase.from('educator_records').select('record_date,participants_count').gte('record_date',historyDate).gt('participants_count',0)
+  ]);
+  for(const q of [plansQ,actionsQ,cfdhAttQ,sessionsQ,attQ,visitorsQ,servicesQ,educatorQ])if(q.error)throw q.error;
+
+  const weekdayFlow=[0,0,0,0,0,0,0],hourFlow=Array(24).fill(0);
+  const dow=ds=>{const d=new Date(String(ds)+'T12:00:00Z');return Number.isNaN(d.getTime())?null:d.getUTCDay()};
+  const addDay=(ds,qty=1)=>{const d=dow(ds);if(d!=null)weekdayFlow[d]+=Number(qty||0)};
+  const sessionMap=new Map((sessionsQ.data||[]).map(s=>[s.id,s]));
+  for(const a of attQ.data||[]){
+    addDay(a.attendance_date,1);
+    const s=sessionMap.get(a.session_id),h=Number(String(s?.start_time||'').slice(0,2));
+    if(Number.isFinite(h)&&h>=0&&h<24)hourFlow[h]+=1;
+  }
+  for(const v of visitorsQ.data||[]){
+    const p=localCalendarParts(v.created_at);addDay(p.date,1);
+    const h=Number(String(p.time||'').slice(0,2));if(Number.isFinite(h)&&h>=0&&h<24)hourFlow[h]+=0.5;
+  }
+  for(const s of servicesQ.data||[])addDay(s.service_date,0.5);
+  for(const e of educatorQ.data||[])addDay(e.record_date,Math.min(10,Number(e.participants_count||0))*0.25);
+
+  const structuralPlanIds=new Set((plansQ.data||[]).filter(p=>p.plan_type==='cfdh_estrutural').map(p=>p.id));
+  const attByAction=new Map();
+  for(const a of cfdhAttQ.data||[])attByAction.set(a.action_id,(attByAction.get(a.action_id)||0)+1);
+  const historicalSuccess=(actionsQ.data||[]).filter(a=>structuralPlanIds.has(a.plan_id)&&['realizada','parcial'].includes(a.execution_status)).map(a=>{
+    const date=a.actual_date||a.scheduled_date,start=String(a.actual_start||a.start_time||'').slice(0,5),attendance=attByAction.get(a.id)||0,actualHours=Number(a.actual_duration_hours||0);
+    return {weekday:dow(date),start,attendance,actual_hours:actualHours,status:a.execution_status,score:Number((attendance*2+(actualHours>=2?3:0)+(a.execution_status==='realizada'?2:1)).toFixed(2))};
+  });
+
+  return {
+    weekday_flow:weekdayFlow.map(x=>Number(x.toFixed(2))),
+    hour_flow:hourFlow.map(x=>Number(x.toFixed(2))),
+    historical_success:historicalSuccess,
+    samples:{
+      attendance:(attQ.data||[]).length,
+      visitors:(visitorsQ.data||[]).length,
+      services:(servicesQ.data||[]).length,
+      educator_participants:(educatorQ.data||[]).reduce((n,x)=>n+Number(x.participants_count||0),0),
+      structural_actions:historicalSuccess.length
+    },
+    free_use_list_available:false,
+    history_start:historyDate
+  };
+}
+
 export async function listCrjPlanningCalendar(month=monthKey()){
   if(mode==='mock')return [];
   const range=cfdhMonthRange(month),fromIso=range.start+'T00:00:00-03:00',toIso=range.end+'T00:00:00-03:00';
