@@ -66,6 +66,8 @@ async function bindCfdhShared(){
         monthly_theme_code:v('monthly_theme_code')||null,
         monthly_theme_custom:v('monthly_theme_custom')||'',
         responsible_user_ids:[...card.querySelectorAll('[name="responsible_user_id"]:checked')].map(x=>x.value),
+        responsible_names:[...card.querySelectorAll('[name="responsible_user_id"]:checked')].map(x=>bundle.team.find(t=>t.id===x.value)?.display_name).filter(Boolean),
+        responsible_roles:[...card.querySelectorAll('[name="responsible_user_id"]:checked')].map(x=>bundle.team.find(t=>t.id===x.value)?.role).filter(Boolean),
         execution_status:(bundle.actions.find(x=>x.id===card.dataset.actionId)?.execution_status)||'planejada'
       };
     });
