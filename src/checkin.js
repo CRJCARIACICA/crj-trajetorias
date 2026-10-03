@@ -5,7 +5,10 @@ const app=document.querySelector('#checkin-app');
 const esc=(v='')=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const fmtDate=v=>v?new Date(String(v).slice(0,10)+'T12:00:00').toLocaleDateString('pt-BR'):'—';
 const onlyDigits=v=>String(v||'').replace(/\D/g,'');
-const token=new URLSearchParams(location.search).get('token');
+const qs=new URLSearchParams(location.search);
+const cfdhMode=Boolean(qs.get('cfdh'));
+const token=qs.get('cfdh')||qs.get('token');
+const rpcName=(workshop,cfdh)=>cfdhMode?cfdh:workshop;
 let db=null,ctx=null,lastCpf='',currentCandidate=null,visitorSnapshot=null;
 
 const FIELD_LABELS={
@@ -28,9 +31,12 @@ function pendingBox(state){
     '</div>';
 }
 function mainButtons(){
+  const contextTitle=cfdhMode?(ctx.circuit_title||'Circuito Formativo em Direitos Humanos'):(ctx.workshop_name||'Oficina');
+  const contextSub=cfdhMode?((ctx.action_title?ctx.action_title+' · ':'')+fmtDate(ctx.scheduled_date)+' · '+String(ctx.start_time||'').slice(0,5)+'–'+String(ctx.end_time||'').slice(0,5)+(ctx.workshop_name?' · '+ctx.workshop_name:'')):(fmtDate(ctx.session_date)+' · '+String(ctx.start_time||'').slice(0,5)+'–'+String(ctx.end_time||'').slice(0,5));
   app.innerHTML=
     '<div class="checkin-step-head"><span class="step-badge">1</span><div><h2>Identificação</h2><p>Um jovem por vez.</p></div></div>'+
-    '<div class="notice success"><b>'+esc(ctx.workshop_name)+'</b><br>'+fmtDate(ctx.session_date)+' · '+String(ctx.start_time||'').slice(0,5)+'–'+String(ctx.end_time||'').slice(0,5)+'</div>'+
+    '<div class="notice success"><b>'+esc(contextTitle)+'</b><br>'+esc(contextSub)+'</div>'+
+    (cfdhMode?'<div class="notice info"><b>Lista CFDH</b><br>Para participar é necessário possuir ao menos o Formulário Inicial parcial e estar inscrito no circuito. Se faltar uma dessas etapas, o sistema fará o encaminhamento aqui.</div>':'')+
     '<div class="question-card"><h3>Já possui Formulário Inicial no CRJ?</h3><div class="choice-grid"><button class="choice-card" data-has-initial="yes"><b>Sim</b><span>Pesquisar meu cadastro por nome ou CPF</span></button><button class="choice-card" data-has-initial="no"><b>Não / não tenho certeza</b><span>Confirmar primeiro pelo CPF</span></button></div></div>';
   app.querySelector('[data-has-initial="yes"]').addEventListener('click',showRegisteredSearch);
   app.querySelector('[data-has-initial="no"]').addEventListener('click',showCpfCheck);
@@ -58,7 +64,7 @@ async function showRegisteredSearch(){
     }
     timer=setTimeout(async()=>{
       box.innerHTML='<div class="empty">Pesquisando...</div>';
-      const {data,error}=await db.rpc('workshop_checkin_lookup',{p_token:token,p_query:q});
+      const {data,error}=await db.rpc(rpcName('workshop_checkin_lookup','cfdh_checkin_lookup'),{p_token:token,p_query:q});
       if(my!==seq)return;
       if(error){box.innerHTML=notice('danger','Erro na pesquisa',error.message);return}
       const rows=data||[];
@@ -78,7 +84,7 @@ async function showCpfCheck(){
   app.querySelector('#cpf-check-form').addEventListener('submit',async e=>{
     e.preventDefault();const btn=e.target.querySelector('button'),cpf=e.target.cpf.value,last=onlyDigits(cpf);lastCpf=last;
     btn.disabled=true;btn.textContent='Verificando...';
-    const {data,error}=await db.rpc('workshop_checkin_cpf_status',{p_token:token,p_cpf:cpf});
+    const {data,error}=await db.rpc(rpcName('workshop_checkin_cpf_status','cfdh_checkin_cpf_status'),{p_token:token,p_cpf:cpf});
     btn.disabled=false;btn.textContent='Verificar CPF';
     if(error){e.target.insertAdjacentHTML('afterbegin',notice('danger','Não foi possível verificar',error.message));return}
     if(data.kind==='youth'){
@@ -114,7 +120,7 @@ function showVisitorKnown(data){
   app.querySelector('[data-visitor]')?.addEventListener('click',()=>showVisitorForm({cpf:visitorSnapshot.cpf,full_name:data.display_name,birth_date:data.birth_date}));
 }
 async function resolveCandidate(id,prefix=''){
-  const {data,error}=await db.rpc('workshop_checkin_candidate_state',{p_token:token,p_youth_id:id});
+  const {data,error}=await db.rpc(rpcName('workshop_checkin_candidate_state','cfdh_checkin_candidate_state'),{p_token:token,p_youth_id:id});
   if(error){shell('Cadastro',notice('danger','Não foi possível consultar o cadastro',error.message));backButton();return}
   currentCandidate=data;
   if(data.attendance_already_confirmed){
@@ -134,7 +140,7 @@ function showPinForm(state,prefix=''){
   backButton(showRegisteredSearch);
   app.querySelector('#pin-form').addEventListener('submit',async e=>{
     e.preventDefault();const btn=e.target.querySelector('button');btn.disabled=true;btn.textContent='Confirmando...';
-    const {data,error}=await db.rpc('workshop_checkin_mark',{p_token:token,p_enrollment_id:state.enrollment_id,p_secret:e.target.secret.value});
+    const {data,error}=await db.rpc(rpcName('workshop_checkin_mark','cfdh_checkin_mark'),{p_token:token,p_enrollment_id:state.enrollment_id,p_secret:e.target.secret.value});
     if(error){btn.disabled=false;btn.textContent='Confirmar presença';e.target.querySelector('.notice.danger')?.remove();e.target.insertAdjacentHTML('afterbegin',notice('danger','Senha não confirmada',error.message));return}
     showSuccess('Presença confirmada','Seu registro foi incluído na aula.',data);
   });
@@ -232,7 +238,7 @@ function showProvisionalForm(prefill={}){
     btn.disabled=true;btn.textContent='Salvando cadastro e presença...';
     status.innerHTML=notice('info','Registrando','Estamos salvando o Formulário Inicial parcial, a inscrição e a presença desta aula.');
     try{
-      const result=await rpcWithTimeout('workshop_checkin_create_provisional',{
+      const result=await rpcWithTimeout(rpcName('workshop_checkin_create_provisional','cfdh_checkin_create_provisional'),{
         p_token:token,
         p_full_name:String(fd.get('full_name')||'').trim(),
         p_birth_date:fd.get('birth_date'),
@@ -323,7 +329,7 @@ try{
   try{mod=await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm')}
   catch{mod=await import('https://esm.sh/@supabase/supabase-js@2.117.2')}
   db=mod.createClient(CONFIG.supabaseUrl,CONFIG.supabasePublishableKey,{auth:{persistSession:false,autoRefreshToken:false}});
-  const {data,error}=await db.rpc('workshop_checkin_context',{p_token:token});
+  const {data,error}=await db.rpc(rpcName('workshop_checkin_context','cfdh_checkin_context'),{p_token:token});
   if(error)throw error;
   ctx=Array.isArray(data)?data[0]:data;
   if(!ctx)throw new Error('A lista não está disponível neste momento.');
