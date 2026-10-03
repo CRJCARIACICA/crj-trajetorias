@@ -156,14 +156,14 @@ function methodologyPreviewHtml(form,values){
   if(fields.some(function(f){return f.type==='rating';})){
     const first=fields.findIndex(function(f){return f.type==='rating';});
     let last=first;while(last+1<fields.length&&fields[last+1].type==='rating')last++;
-    fields.slice(0,first).forEach(function(f){body+=officialPreviewField(f,values[f.key]);});
+    body+=methodologyFieldsAsColumns(fields.slice(0,first),values,4);
     body+=methodologyRatingMatrix(fields.slice(first,last+1),values);
-    fields.slice(last+1).forEach(function(f){body+=officialPreviewField(f,values[f.key]);});
+    body+=methodologyFieldsAsColumns(fields.slice(last+1),values,4);
   }else if(form.slug==='cfdh-planejamento'){
     const topicIndex=fields.findIndex(function(f){return f.key==='topics';});
-    fields.slice(0,topicIndex).forEach(function(f){body+=officialPreviewField(f,values[f.key]);});
+    body+=methodologyFieldsAsColumns(fields.slice(0,topicIndex),values,4);
     body+=methodologyPlanningMatrix(values.topics);
-    fields.slice(topicIndex+1).forEach(function(f){body+=officialPreviewField(f,values[f.key]);});
+    body+=methodologyFieldsAsColumns(fields.slice(topicIndex+1),values,4);
   }else{
     form.sections.forEach(function(section){
       const sectionLabel=officialSectionLabel(form,section);
