@@ -386,3 +386,30 @@ d);font-size:12px;margin:16px 0}.divider:before,.divider:after{content:"";height
   .educator-planned-list-row{align-items:flex-start;flex-direction:column}
   .educator-planned-list-row .actions{justify-content:flex-start}
 }
+
+/* CFDH — planejamento induzido, ações, pendências e execução */
+.cfdh-alerts{display:grid;gap:8px;margin-bottom:16px}
+.cfdh-progress-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.cfdh-progress-grid .progress{height:9px;border-radius:999px;background:#e2e9e6;overflow:hidden;margin:9px 0 5px}
+.cfdh-progress-grid .progress span{display:block;height:100%;background:var(--brand);border-radius:inherit}
+.cfdh-dashboard-card{display:flex;flex-direction:column;gap:10px}
+.cfdh-dashboard-card>.actions:last-child{margin-top:auto}
+.cfdh-card-stats{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.cfdh-card-stats span{display:grid;gap:2px;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:#fafcfb}
+.cfdh-card-stats b{font-size:1.12rem}.cfdh-card-stats small{color:var(--muted)}
+.cfdh-workshop-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.cfdh-workshop-check{align-items:flex-start}
+.cfdh-workshop-check span{display:grid;gap:2px}
+.cfdh-workshop-check small{color:var(--muted);font-size:.78rem}
+.cfdh-action-card{display:grid;gap:12px;border-left:4px solid var(--brand)}
+.cfdh-action-card h4{margin:5px 0 2px}
+.cfdh-action-card .page-head.compact{margin-bottom:0}
+.cfdh-transversal-schedule{display:grid;gap:10px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#f7faf9}
+.cfdh-plan-paper,.cfdh-report-paper{max-width:1180px}
+.cfdh-plan-table{font-size:8px}
+.cfdh-plan-table th:nth-child(1){width:13%}.cfdh-plan-table th:nth-child(2){width:18%}.cfdh-plan-table th:nth-child(3){width:18%}.cfdh-plan-table th:nth-child(4){width:16%}.cfdh-plan-table th:nth-child(5){width:17%}.cfdh-plan-table th:nth-child(6){width:12%}.cfdh-plan-table th:nth-child(7){width:6%}
+.cfdh-report-table{font-size:8px}
+.cfdh-report-table th:nth-child(1){width:14%}.cfdh-report-table th:nth-child(2){width:22%}.cfdh-report-table th:nth-child(3){width:12%}.cfdh-report-table th:nth-child(4){width:34%}.cfdh-report-table th:nth-child(5){width:9%}.cfdh-report-table th:nth-child(6){width:9%}
+.cfdh-operation-card{border-left:4px solid #92b9ad}
+.cfdh-operation-card .page-head.compact{margin-bottom:8px}
+@media(max-width:900px){.cfdh-progress-grid,.cfdh-workshop-grid{grid-template-columns:1fr}}
