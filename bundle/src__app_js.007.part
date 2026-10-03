@@ -284,13 +284,28 @@ function cfdhPlanPreviewHtml(bundle,draft=null){
   '</div>';
 }
 function cfdhActionEditorCard(bundle,a,index){
-  const p=bundle.plan,workshops=bundle.workshops||[],catalog=bundle.classification||[],selected=bundle.workshop_ids||[],calendar=bundle.calendar||[],opts=cfdhClassificationOptions(catalog,a);
+  const p=bundle.plan,workshops=bundle.workshops||[],catalog=bundle.classification||[],selected=bundle.workshop_ids||[],calendar=bundle.calendar||[],opts=cfdhClassificationOptions(catalog,a),themes=bundle.themes||[];
   const selectedWorkshops=workshops.filter(w=>selected.includes(w.id));
   const dates=calendar.filter(x=>x.workshop_id===a.workshop_id);
   const hasItems=Boolean(catalog.find(x=>x.axis_code===a.axis_code&&x.item_code));
+  const eligibleTeam=(bundle.team||[]).filter(x=>x.active!==false&&['educador','assistente_social','psicologo','terapeuta_ocupacional'].includes(x.role));
+  const responsibleSet=new Set(a.responsible_user_ids||[]);
+  const sourceId=bundle.month_theme?.source_action_id||null,isThemeSource=sourceId?Boolean(a.id&&a.id===sourceId):index===0;
+  const themeCode=isThemeSource?(a.monthly_theme_code??bundle.month_theme?.theme_code??null):null;
+  const themeCustom=isThemeSource?(a.monthly_theme_custom??bundle.month_theme?.theme_custom??''):'';
+  const themeOptions=themes.map(t=>'<option value="'+t.code+'" '+(Number(t.code)===Number(themeCode)?'selected':'')+'>'+esc(t.code+'. '+t.theme)+'</option>').join('');
+  const themeBlock=isThemeSource
+    ?'<div class="field cfdh-month-theme-source"><div class="page-head compact cfdh-field-head"><div><label>Tema mensal do CFDH</label><small>Definido pela primeira ação do mês</small></div><span class="pill info">Tema oficial do mês</span></div>'+
+      '<div class="form-grid"><div class="field"><label>Tema da Metodologia</label><select name="monthly_theme_code"><option value="">Selecione</option>'+themeOptions+'</select></div><div class="field"><label>Outro tema / adaptação territorial</label><input class="input" name="monthly_theme_custom" value="'+esc(themeCustom)+'"></div></div>'+
+      '<div class="notice info compact">'+(bundle.month_theme?'Esta é a primeira ação que originou o tema mensal. Alterar o tema aqui atualizará a referência do mês para os demais planejamentos.':'Ao salvar esta primeira ação, o tema escolhido se tornará a referência imutável dos próximos planejamentos deste mês.')+'</div></div>'
+    :'';
+  const responsibleChecks=eligibleTeam.map(t=>'<label class="check cfdh-responsible-option"><input type="checkbox" name="responsible_user_id" value="'+t.id+'" '+(responsibleSet.has(t.id)?'checked':'')+'><span><b>'+esc(t.display_name)+'</b><small>'+esc(roleLabel(t.role))+'</small></span></label>').join('');
+
   return '<div class="card cfdh-action-card" data-cfdh-action-card data-action-id="'+esc(a.id||'')+'" data-action-number="'+(index+1)+'">'+
     '<div class="page-head compact"><div><span class="pill info">Ação '+(index+1)+'</span><h4>'+esc(a.title||('Ação '+(index+1)))+'</h4><p>Planeje cada encontro separadamente.</p></div><div class="actions"><span class="pill '+(Number(a.planned_duration_hours||0)>=2?'success':'warn')+'" data-cfdh-count-status>'+(Number(a.planned_duration_hours||0)>=2?'Contabilizável':'Menos de 2h')+'</span></div></div>'+
+    themeBlock+
     '<div class="field"><label>Título / tema desta ação</label><input class="input" name="title" value="'+esc(a.title||'')+'" required></div>'+
+    '<div class="field"><div class="page-head compact cfdh-field-head"><div><label>Responsável(is) pela ação</label><small>Educadores e Equipe Técnica podem compartilhar a responsabilidade</small></div></div><div class="check-grid cfdh-responsible-grid">'+(responsibleChecks||'<div class="notice warn compact">Nenhum Educador ou profissional da Equipe Técnica ativo encontrado.</div>')+'</div><small>Selecione ao menos uma pessoa. Os nomes serão registrados no planejamento e no relatório desta ação.</small></div>'+
     '<div class="field"><div class="page-head compact cfdh-field-head"><div><label>Objetivo específico</label></div>'+(p.plan_type==='cfdh_transversal'?'<button type="button" class="cfdh-inline-tool" data-cfdh-copy-objective>↗ Repetir objetivo</button>':'')+'</div><textarea name="objective">'+esc(a.objective||'')+'</textarea>'+(p.plan_type==='cfdh_transversal'?'<small>Use o botão para repetir este objetivo específico somente nas ações selecionadas.</small>':'')+'</div>'+
     '<div class="field cfdh-classification-block"><div class="page-head compact cfdh-field-head"><div><label>Classificação metodológica</label><small>Núcleo → Eixo → Item</small></div>'+(p.plan_type==='cfdh_transversal'?'<button type="button" class="cfdh-inline-tool" data-cfdh-link-classification>'+(a.classification_group_id?'🔗 Gerenciar vínculo':'🔗 Vincular ações')+'</button>':'')+'</div>'+
     '<input type="hidden" name="classification_group_id" value="'+esc(a.classification_group_id||'')+'">'+
@@ -310,7 +325,6 @@ function cfdhActionEditorCard(bundle,a,index){
     '<div class="field"><div class="page-head compact cfdh-field-head"><div><label>Recursos necessários</label></div>'+(p.plan_type==='cfdh_transversal'?'<button type="button" class="cfdh-inline-tool" data-cfdh-copy-resources>↗ Repetir recursos</button>':'')+'</div><textarea name="resources">'+esc(a.resources||'')+'</textarea>'+(p.plan_type==='cfdh_transversal'?'<small>Copie apenas os recursos para as ações selecionadas.</small>':'')+'</div>'+
   '</div>';
 }
-
 function cfdhOperationsHtml(bundle){
   const p=bundle.plan,workshops=bundle.workshops||[],evals=bundle.evaluations||[];
   const youthEval=evals.filter(x=>x.form_slug==='cfdh-avaliacao-jovens').length;
