@@ -186,7 +186,7 @@ async function printEducatorPlannedAttendance(planId,lessonId){
 
 
 
-const CFDH_MONTH_TARGET=20,CFDH_STRUCTURAL_MIN=10,CFDH_ACTION_COUNT_MIN_HOURS=2;
+const CFDH_MONTH_TARGET=20,CFDH_STRUCTURAL_MIN=10,CFDH_ACTION_COUNT_MIN_HOURS=2,CRJ_OPEN_START='10:00',CRJ_OPEN_END='21:00',CRJ_ACTION_START='14:00',CRJ_ACTION_END='19:00',CRJ_MONDAY_MEETING_START='13:00',CRJ_MONDAY_MEETING_END='16:30';
 function cfdhTypeLabel(t){return t==='cfdh_transversal'?'CFDH transversal':'CFDH estrutural'}
 function cfdhThemeText(plan,themes=[]){
   return plan?.cfdh_theme_custom||themes.find(x=>Number(x.code)===Number(plan?.cfdh_theme_code))?.theme||'Tema não definido';
@@ -341,6 +341,42 @@ function cfdhAutoEndTime(start,hours){
   if(s==null||!mins)return '';
   return cfdhMinutesTime(s+mins);
 }
+function cfdhWeekday(date){
+  const d=new Date(String(date||'')+'T12:00:00Z');return Number.isNaN(d.getTime())?null:d.getUTCDay();
+}
+function cfdhSpecialDay(bundle,date){
+  return (bundle?.special_days||[]).find(x=>x.calendar_date===date)||null;
+}
+function cfdhSpecialDayState(bundle,date){
+  const day=cfdhSpecialDay(bundle,date);
+  if(!day)return {day:null,closed:false,pending:false,open:true};
+  const closed=day.closure_policy==='auto_closed'||day.approval_status==='closed';
+  const pending=day.closure_policy==='approval_required'&&day.approval_status==='pending';
+  return {day,closed,pending,open:!closed};
+}
+function cfdhStructuralWindow(date){
+  const dow=cfdhWeekday(date);
+  if(dow==null||dow===0||dow===6)return null;
+  if(dow===1)return {start:CRJ_MONDAY_MEETING_END,end:CRJ_ACTION_END,note:'Segunda-feira: reunião geral das 13:00 às 16:30; ações estruturais somente após 16:30.'};
+  return {start:CRJ_ACTION_START,end:CRJ_ACTION_END,note:'Ações estruturais entre 14:00 e 19:00.'};
+}
+function cfdhStructuralScheduleIssue(bundle,a){
+  if(bundle?.plan?.plan_type!=='cfdh_estrutural'||!a?.scheduled_date)return null;
+  const special=cfdhSpecialDayState(bundle,a.scheduled_date);
+  if(special.closed)return 'CRJ fechado em '+fmtDate(a.scheduled_date)+' — '+(special.day?.name||'feriado/fechamento confirmado')+'.';
+  const win=cfdhStructuralWindow(a.scheduled_date);
+  if(!win)return 'Ações estruturais devem ser planejadas de segunda a sexta-feira.';
+  if(!a.start_time||!a.end_time)return null;
+  const s=cfdhTimeMinutes(a.start_time),e=cfdhTimeMinutes(a.end_time),ws=cfdhTimeMinutes(win.start),we=cfdhTimeMinutes(win.end);
+  if(s<ws||e>we)return 'Horário estrutural inválido para '+fmtDate(a.scheduled_date)+'. Janela permitida: '+win.start+'–'+win.end+'.';
+  return null;
+}
+function cfdhSpecialDayBadge(day){
+  if(!day)return '';
+  if(day.closure_policy==='auto_closed'||day.approval_status==='closed')return 'fechado';
+  if(day.approval_status==='open')return 'aberto';
+  return 'aprovação';
+}
 function cfdhCalendarEntriesForDay(bundle,date,action={}){
   return (bundle?.crj_calendar||[]).filter(x=>{
     if(x.date!==date)return false;
@@ -350,7 +386,7 @@ function cfdhCalendarEntriesForDay(bundle,date,action={}){
     return true;
   }).sort((a,b)=>String(a.start||'').localeCompare(String(b.start||'')));
 }
-function cfdhCalendarFreeWindows(entries,start='08:00',end='22:00'){
+function cfdhCalendarFreeWindows(entries,start=CRJ_OPEN_START,end=CRJ_OPEN_END){
   const floor=cfdhTimeMinutes(start),ceil=cfdhTimeMinutes(end);
   const ranges=(entries||[]).map(x=>[cfdhTimeMinutes(x.start),cfdhTimeMinutes(x.end)]).filter(x=>x[0]!=null&&x[1]!=null&&x[1]>x[0]).sort((a,b)=>a[0]-b[0]);
   const merged=[];
@@ -365,18 +401,23 @@ function cfdhCalendarFreeWindows(entries,start='08:00',end='22:00'){
 }
 function cfdhCalendarDayDetailHtml(bundle,date,action={}){
   if(!date)return '<div class="cfdh-calendar-day-empty">Selecione um dia para consultar a agenda do CRJ.</div>';
-  const rows=cfdhCalendarEntriesForDay(bundle,date,action),free=cfdhCalendarFreeWindows(rows);
-  return '<div class="cfdh-calendar-day-title"><b>'+esc(fmtDate(date))+'</b><span>'+(rows.length?rows.length+' compromisso(s) registrado(s)':'sem compromissos registrados')+'</span></div>'+
+  const rows=cfdhCalendarEntriesForDay(bundle,date,action),free=cfdhCalendarFreeWindows(rows),special=cfdhSpecialDayState(bundle,date),win=cfdhStructuralWindow(date);
+  const specialHtml=special.day?'<div class="notice '+(special.closed?'danger':special.pending?'warn':'success')+' compact"><b>'+esc(special.day.name)+'</b> · '+esc(special.day.day_type==='holiday'?'Feriado':'Ponto facultativo')+'<br><small>'+(special.closed?'CRJ fechado nesta data.':special.pending?'Fechamento depende de aprovação; decisão ainda pendente.':'Funcionamento mantido por decisão registrada.')+'</small></div>':'';
+  const actionRule=win?'<div class="notice info compact"><b>Funcionamento do CRJ:</b> '+CRJ_OPEN_START+'–'+CRJ_OPEN_END+' · <b>janela para ação estrutural:</b> '+win.start+'–'+win.end+(cfdhWeekday(date)===1?' · reunião geral '+CRJ_MONDAY_MEETING_START+'–'+CRJ_MONDAY_MEETING_END:'')+'</div>':'<div class="notice warn compact">Ações estruturais não são distribuídas aos fins de semana.</div>';
+  return specialHtml+actionRule+
+    '<div class="cfdh-calendar-day-title"><b>'+esc(fmtDate(date))+'</b><span>'+(rows.length?rows.length+' compromisso(s) registrado(s)':'sem compromissos registrados')+'</span></div>'+
     '<div class="cfdh-calendar-busy-list">'+(rows.map(x=>'<div class="cfdh-calendar-busy"><span>'+esc((x.start||'--:--')+(x.end?'–'+x.end:''))+'</span><b>'+esc(x.title||'Atividade CRJ')+'</b><small>'+esc(x.location||'CRJ Cariacica')+'</small></div>').join('')||'<div class="notice success compact">Dia livre no calendário registrado.</div>')+'</div>'+
-    '<div class="cfdh-calendar-free"><b>Janelas sem atividade registrada</b><small>Referência visual entre 08:00 e 22:00. Confirme a disponibilidade operacional do equipamento quando necessário.</small><div>'+free.map(x=>'<span class="pill success">'+esc(x)+'</span>').join('')+'</div></div>';
+    '<div class="cfdh-calendar-free"><b>Janelas sem atividade registrada</b><small>Funcionamento cadastrado do CRJ: '+CRJ_OPEN_START+'–'+CRJ_OPEN_END+'.</small><div>'+free.map(x=>'<span class="pill success">'+esc(x)+'</span>').join('')+'</div></div>';
 }
 function cfdhCalendarPickerHtml(bundle,a,index){
   const month=String(bundle?.plan?.planned_start||currentMonth()).slice(0,7),[y,m]=month.split('-').map(Number),last=new Date(y,m,0).getDate();
   const firstDow=(new Date(y,m-1,1).getDay()+6)%7,selected=a.scheduled_date||'',cells=[];
   for(let i=0;i<firstDow;i++)cells.push('<span class="cfdh-calendar-pad"></span>');
   for(let d=1;d<=last;d++){
-    const date=month+'-'+String(d).padStart(2,'0'),entries=cfdhCalendarEntriesForDay(bundle,date,a),busy=entries.length;
-    cells.push('<button type="button" class="cfdh-calendar-day '+(selected===date?'selected ':'')+(busy?'busy':'free')+'" data-cfdh-calendar-day="'+date+'"><b>'+d+'</b><small>'+(busy?busy+' ocup.':'livre')+'</small></button>');
+    const date=month+'-'+String(d).padStart(2,'0'),entries=cfdhCalendarEntriesForDay(bundle,date,a),busy=entries.length,special=cfdhSpecialDayState(bundle,date),weekend=[0,6].includes(cfdhWeekday(date)),closed=special.closed;
+    const dayClass=closed?'closed':special.pending?'pending':busy?'busy':'free';
+    const label=closed?'fechado':special.pending?'aprovação':weekend?'fim semana':busy?busy+' ocup.':'livre';
+    cells.push('<button type="button" class="cfdh-calendar-day '+(selected===date?'selected ':'')+dayClass+'" data-cfdh-calendar-day="'+date+'" '+(closed?'disabled':'')+'><b>'+d+'</b><small>'+esc(label)+'</small></button>');
   }
   return '<div class="cfdh-calendar-picker" data-cfdh-calendar-picker>'+
     '<div class="page-head compact"><div><label>Data pelo calendário do CRJ</label><small>Escolha o dia visualizando oficinas, CFDHs, agenda técnica e eventos já registrados.</small></div><button type="button" class="btn secondary" data-cfdh-toggle-calendar>'+(selected?'Trocar data':'Escolher data')+'</button></div>'+
