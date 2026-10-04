@@ -100,6 +100,25 @@ function planDetail(){
   if(p.chatgpt_status==='connected')return 'Conta vinculada • uso do plano desativado';
   return 'Jhonatão operacional gratuito ativo';
 }
+async function checkGroqHealth(){
+  if(apiMode()!=='live')return;
+  try{
+    const c=supabaseClient();
+    const {data,error}=await c.functions.invoke('jhonatao-chat',{body:{health:true}});
+    if(error)throw error;
+    if(data?.ok){
+      const cap=qs('.jh-mm-capabilities');
+      if(cap){
+        const tags=[...cap.querySelectorAll('span')];
+        const ai=tags.find(x=>x.textContent.includes('IA provisória'));
+        if(ai)ai.textContent='✨ IA provisória: Groq ativa • OpenAI aguardando aprovação';
+      }
+      setStatus('IA provisória Groq conectada e pronta para uso.','ok');
+    }
+  }catch(err){
+    setStatus('Groq ainda não respondeu ao teste. O Jhonatão continua no modo operacional gratuito.','warn');
+  }
+}
 
 function ui(){
   const mic=SpeechRecognitionCtor?'Nativo do navegador':(navigator.mediaDevices&&window.MediaRecorder?'Transcrição Groq':'Indisponível neste navegador');
@@ -393,6 +412,7 @@ async function boot(){
   window.addEventListener('hashchange',()=>setTimeout(mount,50));
   mount();
   updateAccountUI();
+  checkGroqHealth();
 }
 
 boot();
