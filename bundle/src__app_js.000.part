@@ -3,7 +3,7 @@ import { initApi, apiMode, signIn, signUp, demoSignIn, signOut, getSession, dash
 import { FORMS, FORM_MAP, RATING_OPTIONS } from './forms.js?v=20261003-6';
 import { ROLES, can, roleLabel } from './permissions.js?v=20261003-6';
 import { renderAgendaPage, bindAgendaPage, agendaUnreadCount } from './agenda.js';
-import { renderJhonataoPage, bindJhonataoPage, checkJhonataoAlerts } from './jhonatao.js?v=20261004-3';
+import { renderJhonataoPage, bindJhonataoPage, checkJhonataoAlerts } from './jhonatao.js?v=20261004-5';
 
 const app=document.querySelector('#app');
 const state={session:null,user:null,agendaUnread:0,documentSettings:null};
