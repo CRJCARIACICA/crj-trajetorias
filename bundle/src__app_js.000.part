@@ -3,6 +3,7 @@ import { initApi, apiMode, signIn, signUp, demoSignIn, signOut, getSession, dash
 import { FORMS, FORM_MAP, RATING_OPTIONS } from './forms.js?v=20261003-6';
 import { ROLES, can, roleLabel } from './permissions.js?v=20261003-6';
 import { renderAgendaPage, bindAgendaPage, agendaUnreadCount } from './agenda.js';
+import { renderJhonataoPage, bindJhonataoPage, checkJhonataoAlerts } from './jhonatao.js?v=20261004-1';
 
 const app=document.querySelector('#app');
 const state={session:null,user:null,agendaUnread:0,documentSettings:null};
@@ -17,7 +18,7 @@ function nav(h){location.hash=h;}
 function route(){const raw=(location.hash||'#dashboard').slice(1);const [path,q='']=raw.split('?');return {parts:path.split('/').filter(Boolean),params:new URLSearchParams(q)}}
 function permitted(p){return can(state.user?.role,p)}
 
-function icon(name){const map={dashboard:'◫',jovens:'◎',forms:'▤',oficinas:'◇',agenda:'▦',metas:'▥',geral:'＋',educador:'✦',cfdh:'◆',tecnica:'✚',equipe:'♙',logout:'↪'};return map[name]||'•'}
+function icon(name){const map={dashboard:'◫',jovens:'◎',forms:'▤',oficinas:'◇',agenda:'▦',jhonatao:'✺',metas:'▥',geral:'＋',educador:'✦',cfdh:'◆',tecnica:'✚',equipe:'♙',logout:'↪'};return map[name]||'•'}
 function sidebarLink(hash,label,perm,key){if(perm&&!permitted(perm))return '';const active=location.hash.startsWith(`#${hash}`)||(!location.hash&&hash==='dashboard');return `<a class="${active?'active':''}" href="#${hash}"><span>${icon(key)}</span><span>${label}</span></a>`}
 function layout(content){
   const u=state.user;
@@ -29,6 +30,7 @@ function layout(content){
     ${sidebarLink('educador','Área do Educador','educador_area','educador')}
     ${sidebarLink('cfdh','CFDH compartilhado','cfdh_shared','cfdh')}
     ${sidebarLink('equipe-tecnica','Equipe Técnica','technical_area','tecnica')}
+    ${sidebarLink('jhonatao','Jhonatão','agenda','jhonatao')}
     ${sidebarLink('agenda',state.agendaUnread?`Agenda (${state.agendaUnread})`:'Agenda','agenda','agenda')}
     ${sidebarLink('metas','Metas e indicadores','metas','metas')}
     ${sidebarLink('lancamento-geral','Lançamento geral','lancamento_geral','geral')}
