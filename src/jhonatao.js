@@ -232,10 +232,12 @@ async function streamChat(message){
   const {error:insertError}=await c.from('jhonatao_chat_messages').insert({role:'user',content:message});
   if(insertError)throw insertError;
 
+  let media={};
+  try{media=await window.JhonataoGetPendingMedia?.()||{}}catch(err){console.warn('Falha ao preparar mídia:',err)}
   const response=await fetch(`${CONFIG.supabaseUrl}/functions/v1/jhonatao-chat`,{
     method:'POST',
     headers:{'Authorization':`Bearer ${sessionData.session.access_token}`,'Content-Type':'application/json','apikey':CONFIG.supabasePublishableKey},
-    body:JSON.stringify({message})
+    body:JSON.stringify({message,...media})
   });
   if(!response.ok){
     let detail='';try{const j=await response.json();detail=j.error||j.detail||''}catch{detail=await response.text()}
@@ -268,6 +270,7 @@ async function streamChat(message){
   if(target)target.textContent=answer;
   const {error:saveError}=await c.from('jhonatao_chat_messages').insert({role:'assistant',content:answer});
   if(saveError)console.warn('Não foi possível salvar a resposta do Jhonatão:',saveError);
+  try{window.JhonataoClearPendingMedia?.()}catch{}
   return answer;
 }
 
