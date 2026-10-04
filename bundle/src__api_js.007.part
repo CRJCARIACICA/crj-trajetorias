@@ -129,6 +129,7 @@ function cfdhApiActionPlanningComplete(planType,a={}){
   );
   if(!basics)return false;
   if(planType==='cfdh_transversal'&&!a.workshop_id)return false;
+  if(a.has_additional_methodology&&!(Array.isArray(a.additional_classifications)&&a.additional_classifications.length))return false;
   return true;
 }
 function cfdhApiPlanPlanningComplete(planType,plan={},actions=[]){
@@ -408,6 +409,7 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
     const [crjCalendar,specialDays]=await Promise.all([listCrjPlanningCalendar(refMonth),listCrjSpecialDays(Number(refMonth.slice(0,4)))]);
     for(let i=0;i<actions.length;i++){
       const a=actions[i],aEnd=cfdhApiAutoEndTime(a.start_time,a.planned_duration_hours);
+      if(!cfdhApiActionPlanningComplete(planType,a))continue;
       if(planType==='cfdh_estrutural'&&a.scheduled_date&&a.start_time&&aEnd){
         const special=specialDays.find(x=>x.calendar_date===a.scheduled_date);
         const closed=special&&(special.closure_policy==='auto_closed'||special.approval_status==='closed');
@@ -442,6 +444,8 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
     ...plan,
     plan_type:planType,
     workshop_id:null,
+    nucleus:'Núcleo Socioafirmativo e de Acesso',
+    axis:'Cola Aê · Circuito Formativo em Direitos Humanos',
     cfdh_theme_code:themeCode,
     cfdh_theme_custom:themeCustom,
     cfdh_action_count:actions.length||Number(plan.cfdh_action_count||0)||null,
@@ -476,9 +480,12 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
       title:a.title||('Ação '+(i+1)),
       action_theme:a.action_theme||null,
       objective:a.objective||null,activities:a.activities||null,resources:a.resources||null,
-      nucleus_code:a.nucleus_code||null,axis_code:a.axis_code||null,
-      item_code:a.item_code||null,item_label:a.item_label||null,
-      classification_group_id:a.classification_group_id||null,
+      nucleus_code:'N1',axis_code:'N1.E1',
+      item_code:'C',item_label:'Circuito Formativo em Direitos Humanos',
+      classification_group_id:null,
+      has_additional_methodology:Boolean(a.has_additional_methodology),
+      additional_classifications:Array.isArray(a.additional_classifications)?a.additional_classifications:[],
+      planning_status:cfdhApiActionPlanningComplete(planType,a)?'complete':'draft',
       monthly_theme_code:null,
       monthly_theme_custom:null,
       updated_at:now()
