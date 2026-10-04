@@ -471,7 +471,7 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
       scheduled_date:a.scheduled_date||null,
       start_time:a.start_time||null,
       end_time:a.start_time?cfdhApiAutoEndTime(a.start_time,a.planned_duration_hours):null,
-      planned_duration_hours:Number(a.planned_duration_hours||0)||0,
+      planned_duration_hours:(a.planned_duration_hours===''||a.planned_duration_hours==null)?null:Number(a.planned_duration_hours),
       location_type:a.location_type||null,location_other:a.location_other||null,
       title:a.title||('Ação '+(i+1)),
       action_theme:a.action_theme||null,
