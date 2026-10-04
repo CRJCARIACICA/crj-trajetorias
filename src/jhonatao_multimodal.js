@@ -115,13 +115,13 @@ function ui(){
       <button type="button" class="jh-mm-tool" data-jh-mm-photo title="Tirar ou anexar foto">📷 <span>Foto</span></button>
       <button type="button" class="jh-mm-tool ${state.voiceOutput?'active':''}" data-jh-mm-speak title="Ouvir respostas do Jhonatão">🔊 <span>Ouvir</span></button>
       <button type="button" class="jh-mm-tool live" data-jh-mm-live title="Conversa contínua por voz">🎧 <span>Modo voz</span></button>
-      <input id="jh-mm-photo-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" capture="environment" hidden>
+      <input id="jh-mm-photo-input" type="file" accept="image/png,image/jpeg,image/webp" capture="environment" hidden>
     </div>
     <div class="jh-mm-capabilities">
       <span>🎤 Voz: ${esc(mic)}</span>
       <span>🔊 Resposta falada: ${esc(speak)}</span>
       <span>📷 Foto: ${esc(photo)}</span>
-      <span>✨ Visão/OpenAI Live: aguardando conexão autorizada</span>
+      <span>✨ IA provisória: Groq • OpenAI aguardando aprovação</span>
     </div>
     <div id="jh-mm-photo-preview" class="jh-mm-photo-preview" hidden></div>
     <div id="jh-mm-status" class="jh-mm-status" aria-live="polite"></div>
@@ -297,19 +297,19 @@ function clearPhoto(){
 }
 function showPhoto(file){
   if(!file)return;
-  if(!/^image\/(png|jpeg|webp|gif)$/i.test(file.type)){
+  if(!/^image\/(png|jpeg|webp)$/i.test(file.type)){
     setStatus('Use uma imagem PNG, JPEG, WEBP ou GIF.','warn');return;
   }
-  if(file.size>12*1024*1024){
-    setStatus('A foto está muito grande. Use uma imagem de até 12 MB.','warn');return;
+  if(file.size>4*1024*1024){
+    setStatus('A foto está muito grande. Use uma imagem de até 4 MB.','warn');return;
   }
   clearPhoto();
   state.pendingImage=file;state.imageUrl=URL.createObjectURL(file);
   const box=qs('#jh-mm-photo-preview');if(!box)return;
   box.hidden=false;
-  box.innerHTML=`<img src="${state.imageUrl}" alt="Foto pronta para anexar"><div><b>${esc(file.name||'Foto')}</b><small>${Math.max(1,Math.round(file.size/1024))} KB</small><p>A foto permanece somente neste navegador por enquanto. A análise visual será liberada quando a conexão OpenAI autorizada estiver ativa.</p></div><button type="button" data-jh-mm-remove-photo aria-label="Remover foto">×</button>`;
+  box.innerHTML=`<img src="${state.imageUrl}" alt="Foto pronta para anexar"><div><b>${esc(file.name||'Foto')}</b><small>${Math.max(1,Math.round(file.size/1024))} KB</small><p>A foto será enviada somente quando você enviar a mensagem. A análise usa a IA provisória Groq; não há identificação facial automática.</p></div><button type="button" data-jh-mm-remove-photo aria-label="Remover foto">×</button>`;
   qs('[data-jh-mm-remove-photo]',box)?.addEventListener('click',clearPhoto);
-  setStatus('Foto preparada. Ela ainda não foi enviada para nenhum serviço externo.','info');
+  setStatus('Foto preparada. Ela só será enviada à IA provisória quando você enviar a mensagem.','info');
 }
 
 function bind(){
@@ -323,9 +323,7 @@ function bind(){
 
   const form=qs('#jh-chat-form');
   form?.addEventListener('submit',()=>{
-    if(state.pendingImage){
-      setTimeout(()=>setStatus('Sua mensagem textual foi enviada. A foto não foi transmitida porque a conexão de visão/OpenAI ainda não está autorizada.','info'),50);
-    }
+    if(state.pendingImage)setStatus('Enviando texto e foto para análise provisória…','working');
   },true);
 }
 
@@ -384,3 +382,17 @@ function freeOperationalAnswer(message){
   return 'Estou usando o modo operacional gratuito do Jhonatão, sem API externa. Posso responder sobre hoje, suas responsabilidades, oficinas específicas e cadastros pendentes.'+(next.length?'\n\nPróximas ações:\n'+next.map(fmt).join('\n'):'');
 }
 window.JhonataoFreeFallback=freeOperationalAnswer;
+
+function fileToDataUrl(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(String(reader.result||''));
+    reader.onerror=()=>reject(reader.error||new Error('Não foi possível ler a imagem.'));
+    reader.readAsDataURL(file);
+  });
+}
+window.JhonataoGetPendingMedia=async()=>{
+  if(!state.pendingImage)return {};
+  return {image_data_url:await fileToDataUrl(state.pendingImage)};
+};
+window.JhonataoClearPendingMedia=()=>clearPhoto();
