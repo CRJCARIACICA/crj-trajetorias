@@ -16,6 +16,7 @@ const state={
   speakTimer:null,
   lastSpoken:'',
   observer:null,
+  operationalRows:[],
 };
 
 function qs(s,r=document){return r.querySelector(s)}
@@ -36,6 +37,26 @@ async function currentUser(){
     const {data}=await c.auth.getUser();
     return data?.user||null;
   }catch{return null}
+}
+function shiftISO(iso,days){
+  const d=new Date(iso+'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate()+days);
+  return d.toISOString().slice(0,10);
+}
+async function loadOperationalRows(){
+  if(apiMode()!=='live')return [];
+  try{
+    const c=supabaseClient();
+    const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    const {data,error}=await c.rpc('get_jhonatao_calendar',{p_from:shiftISO(today,-7),p_to:shiftISO(today,60),p_only_mine:false});
+    if(error)throw error;
+    state.operationalRows=data||[];
+    return state.operationalRows;
+  }catch(err){
+    console.warn('Contexto operacional multimodal indisponivel:',err);
+    state.operationalRows=[];
+    return [];
+  }
 }
 async function loadPrefs(){
   const user=await currentUser(); state.user=user;
@@ -310,6 +331,7 @@ function bind(){
 
 async function boot(){
   await loadPrefs();
+  await loadOperationalRows();
   const watcher=new MutationObserver(()=>{if(isJhonatao())mount()});
   watcher.observe(document.documentElement,{childList:true,subtree:true});
   window.addEventListener('hashchange',()=>setTimeout(mount,50));
@@ -331,7 +353,7 @@ function localWhen(v){
 function norm(v=''){return String(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()}
 function freeOperationalAnswer(message){
   const q=norm(message);
-  const rows=Array.isArray(window.__JHONATAO_DATA__?.items)?window.__JHONATAO_DATA__.items:[];
+  const rows=state.operationalRows.length?state.operationalRows:(Array.isArray(window.__JHONATAO_DATA__?.items)?window.__JHONATAO_DATA__.items:[]);
   const mine=rows.filter(x=>x.is_mine);
   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const fmt=x=>'• '+localWhen(x.start_at)+' — '+x.title+(x.location?' • '+x.location:'');
