@@ -318,3 +318,47 @@ async function boot(){
 }
 
 boot();
+
+
+function localDay(v){
+  return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(v));
+}
+function localWhen(v){
+  const d=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit'}).format(new Date(v));
+  const t=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}).format(new Date(v));
+  return d+' '+t;
+}
+function norm(v=''){return String(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()}
+function freeOperationalAnswer(message){
+  const q=norm(message);
+  const rows=Array.isArray(window.__JHONATAO_DATA__?.items)?window.__JHONATAO_DATA__.items:[];
+  const mine=rows.filter(x=>x.is_mine);
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  const fmt=x=>'• '+localWhen(x.start_at)+' — '+x.title+(x.location?' • '+x.location:'');
+  const detailed=x=>{
+    const tasks=Array.isArray(x.responsibilities)?x.responsibilities:[];
+    return fmt(x)+(x.responsibility_basis?' • '+x.responsibility_basis:'')+(tasks.length?'\n  '+tasks.map(t=>'- '+t).join('\n  '):'');
+  };
+  const pending=[...new Set(mine.flatMap(x=>x.responsibilities||[]).filter(t=>/cadastro|pend[eê]ncia|procure/i.test(t)))];
+
+  if(/cadastro|pendencia|pendencias|quem.*procurar/.test(q)){
+    return pending.length?'Encontrei estas pendências operacionais:\n\n'+pending.map(x=>'• '+x).join('\n'):'Não encontrei pendências de cadastro ligadas às suas responsabilidades no período carregado.';
+  }
+  if(/hoje|agora|meu dia|o que.*fazer/.test(q)){
+    const r=mine.filter(x=>localDay(x.start_at)===today);
+    return r.length?'Hoje você tem '+r.length+' ação(ões) sob sua responsabilidade:\n\n'+r.map(detailed).join('\n\n'):'Não encontrei ações atribuídas a você para hoje.';
+  }
+  if(/responsabilidade|responsabilidades|ficou comigo|meu nome|minhas atividades/.test(q)){
+    const r=mine.filter(x=>new Date(x.start_at)>=new Date()).slice(0,10);
+    return r.length?'Estas são suas próximas responsabilidades:\n\n'+r.map(detailed).join('\n\n'):'Não encontrei próximas atividades atribuídas a você no período carregado.';
+  }
+  const names=[...new Set(rows.map(x=>x.title).filter(Boolean))].sort((a,b)=>b.length-a.length);
+  const title=names.find(n=>q.includes(norm(n)));
+  if(title){
+    const r=mine.filter(x=>x.title===title).slice(0,8);
+    return r.length?'Sobre '+title+', encontrei:\n\n'+r.map(detailed).join('\n\n'):'Não encontrei '+title+' entre as ações vinculadas a você neste período.';
+  }
+  const next=mine.filter(x=>new Date(x.start_at)>=new Date()).slice(0,5);
+  return 'Estou usando o modo operacional gratuito do Jhonatão, sem API externa. Posso responder sobre hoje, suas responsabilidades, oficinas específicas e cadastros pendentes.'+(next.length?'\n\nPróximas ações:\n'+next.map(fmt).join('\n'):'');
+}
+window.JhonataoFreeFallback=freeOperationalAnswer;
