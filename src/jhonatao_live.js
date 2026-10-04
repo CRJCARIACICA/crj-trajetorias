@@ -254,9 +254,20 @@ function interceptLiveButton(){
 }
 function restyleLiveButton(){
   const b=$('[data-jh-mm-live]');
-  if(b){b.innerHTML='◉ <span>Live</span>';b.title='Iniciar chamada com Jhonatão'}
+  if(!b||b.dataset.jhLiveReady==='1')return;
+  b.dataset.jhLiveReady='1';
+  b.innerHTML='◉ <span>Live</span>';
+  b.title='Iniciar chamada com Jhonatão';
 }
-const uiWatch=new MutationObserver(()=>restyleLiveButton());
+let uiWatchScheduled=false;
+const uiWatch=new MutationObserver(()=>{
+  if(uiWatchScheduled)return;
+  uiWatchScheduled=true;
+  requestAnimationFrame(()=>{
+    uiWatchScheduled=false;
+    restyleLiveButton();
+  });
+});
 uiWatch.observe(document.documentElement,{childList:true,subtree:true});
 interceptLiveButton();restyleLiveButton();
 
