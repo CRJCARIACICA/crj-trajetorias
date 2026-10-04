@@ -115,6 +115,26 @@ function cfdhApiStructuralWindow(date){
   if(dow==null||dow===0||dow===6)return null;
   return dow===1?{start:'16:30',end:'19:00'}:{start:'14:00',end:'19:00'};
 }
+function cfdhApiActionPlanningComplete(planType,a={}){
+  const basics=Boolean(
+    String(a.title||'').trim() &&
+    String(a.action_theme||'').trim() &&
+    String(a.objective||'').trim() &&
+    String(a.activities||'').trim() &&
+    String(a.resources||'').trim() &&
+    Number(a.planned_duration_hours||0)>0 &&
+    a.scheduled_date &&
+    a.start_time &&
+    (a.responsible_user_ids||[]).length
+  );
+  if(!basics)return false;
+  if(planType==='cfdh_transversal'&&!a.workshop_id)return false;
+  return true;
+}
+function cfdhApiPlanPlanningComplete(planType,plan={},actions=[]){
+  if(!String(plan.activity_title||'').trim()||!String(plan.description_objective||'').trim()||!actions.length)return false;
+  return actions.every(a=>cfdhApiActionPlanningComplete(planType,a));
+}
 function cfdhMonthRange(month){
   const [y,m]=String(month).slice(0,7).split('-').map(Number);
   return {
@@ -378,11 +398,9 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
   if(!actions.length)throw new Error('Crie ao menos uma ação CFDH antes de salvar.');
 
   for(let i=0;i<actions.length;i++){
-    const responsibleIds=[...new Set((actions[i].responsible_user_ids||[]).filter(Boolean))];
-    if(!responsibleIds.length)throw new Error('Ação '+(i+1)+': selecione ao menos um responsável entre Educadores e Equipe Técnica.');
-    if(!actions[i].scheduled_date)throw new Error('Ação '+(i+1)+': selecione a data pelo calendário do CRJ.');
-    if(!actions[i].start_time)throw new Error('Ação '+(i+1)+': informe o horário de início.');
-    if(!cfdhApiAutoEndTime(actions[i].start_time,actions[i].planned_duration_hours))throw new Error('Ação '+(i+1)+': não foi possível calcular um horário final válido a partir da carga horária.');
+    const h=Number(actions[i].planned_duration_hours||0);
+    if(h<0)throw new Error('Ação '+(i+1)+': carga horária inválida.');
+    if(actions[i].start_time&&h>0&&!cfdhApiAutoEndTime(actions[i].start_time,h))throw new Error('Ação '+(i+1)+': não foi possível calcular um horário final válido a partir da carga horária.');
   }
 
   const refMonth=String(plan.planned_start||current.plan.planned_start||actions[0]?.scheduled_date||'').slice(0,7);
@@ -390,7 +408,7 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
     const [crjCalendar,specialDays]=await Promise.all([listCrjPlanningCalendar(refMonth),listCrjSpecialDays(Number(refMonth.slice(0,4)))]);
     for(let i=0;i<actions.length;i++){
       const a=actions[i],aEnd=cfdhApiAutoEndTime(a.start_time,a.planned_duration_hours);
-      if(planType==='cfdh_estrutural'){
+      if(planType==='cfdh_estrutural'&&a.scheduled_date&&a.start_time&&aEnd){
         const special=specialDays.find(x=>x.calendar_date===a.scheduled_date);
         const closed=special&&(special.closure_policy==='auto_closed'||special.approval_status==='closed');
         if(closed)throw new Error('Ação '+(i+1)+': '+(special.name||'data fechada')+' — o CRJ está fechado nesta data.');
@@ -399,16 +417,16 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
         const s=cfdhApiMinutes(a.start_time),e=cfdhApiMinutes(aEnd),ws=cfdhApiMinutes(win.start),we=cfdhApiMinutes(win.end);
         if(s<ws||e>we)throw new Error('Ação '+(i+1)+': horário fora da janela permitida para CFDH estrutural em '+a.scheduled_date+'. Use '+win.start+'–'+win.end+'.');
       }
-      const existingConflict=crjCalendar.find(x=>{
+      const existingConflict=(a.scheduled_date&&a.start_time&&aEnd)?crjCalendar.find(x=>{
         if(x.date!==a.scheduled_date)return false;
         if(x.source==='cfdh'&&x.plan_id===planId)return false;
         if(x.source==='workshop'&&a.workshop_calendar_id&&x.id===a.workshop_calendar_id)return false;
         return cfdhApiOverlaps(a.start_time,aEnd,x.start,x.end);
-      });
+      }):null;
       if(existingConflict)throw new Error('Ação '+(i+1)+': conflito com '+(existingConflict.title||'atividade do CRJ')+' em '+a.scheduled_date+' ('+(existingConflict.start||'--:--')+'–'+(existingConflict.end||'--:--')+'). Escolha outro horário no calendário do CRJ.');
       for(let j=0;j<i;j++){
         const b=actions[j],bEnd=cfdhApiAutoEndTime(b.start_time,b.planned_duration_hours);
-        if(a.scheduled_date===b.scheduled_date&&cfdhApiOverlaps(a.start_time,aEnd,b.start_time,bEnd))throw new Error('Ação '+(i+1)+': conflito com a Ação '+(j+1)+' do mesmo planejamento. Escolha outro horário.');
+        if(a.scheduled_date&&a.start_time&&aEnd&&b.scheduled_date&&b.start_time&&bEnd&&a.scheduled_date===b.scheduled_date&&cfdhApiOverlaps(a.start_time,aEnd,b.start_time,bEnd))throw new Error('Ação '+(i+1)+': conflito com a Ação '+(j+1)+' do mesmo planejamento. Escolha outro horário.');
       }
     }
   }
@@ -427,6 +445,7 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
     cfdh_theme_code:themeCode,
     cfdh_theme_custom:themeCustom,
     cfdh_action_count:actions.length||Number(plan.cfdh_action_count||0)||null,
+    cfdh_planning_status:cfdhApiPlanPlanningComplete(planType,plan,actions)?'complete':'draft',
     planned_duration_hours:Number(actions.reduce((n,a)=>n+Number(a.planned_duration_hours||0),0).toFixed(2)),
     planned_start:plan.planned_start||current.plan.planned_start||actions.map(a=>a.scheduled_date).filter(Boolean).sort()[0]||null,
     planned_end:actions.map(a=>a.scheduled_date).filter(Boolean).sort().slice(-1)[0]||plan.planned_end||current.plan.planned_end||plan.planned_start||current.plan.planned_start
@@ -449,9 +468,9 @@ export async function saveCfdhPlanBundle(planId,{plan={},workshop_ids=[],actions
       workshop_id:planType==='cfdh_transversal'?(a.workshop_id||null):null,
       schedule_mode:planType==='cfdh_estrutural'?'structural':(a.schedule_mode||'workshop_planned'),
       workshop_calendar_id:planType==='cfdh_transversal'?(a.workshop_calendar_id||null):null,
-      scheduled_date:a.scheduled_date,
+      scheduled_date:a.scheduled_date||null,
       start_time:a.start_time||null,
-      end_time:cfdhApiAutoEndTime(a.start_time,a.planned_duration_hours),
+      end_time:a.start_time?cfdhApiAutoEndTime(a.start_time,a.planned_duration_hours):null,
       planned_duration_hours:Number(a.planned_duration_hours||0)||0,
       location_type:a.location_type||null,location_other:a.location_other||null,
       title:a.title||('Ação '+(i+1)),
