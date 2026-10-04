@@ -252,6 +252,7 @@ async function render(){
     else if(p1==='educador') content=await pageEducatorV2();
     else if(p1==='cfdh') content=await pageCfdhShared();
     else if(p1==='equipe-tecnica') content=await pageTechnicalTeam();
+    else if(p1==='jhonatao') content=await renderJhonataoPage(state.user);
     else if(p1==='agenda') content=await renderAgendaPage(state.user);
     else if(p1==='metas') content=await pageGoals();
     else if(p1==='lancamento-geral') content=await pageAggregate();
@@ -262,6 +263,7 @@ async function render(){
     if(p1==='cfdh') await bindCfdhShared();
     if(p1==='equipe-tecnica') await bindTechnicalPage();
     if(p1==='oficina') await bindWorkshopDetailV2(p2);
+    if(p1==='jhonatao') await bindJhonataoPage(state.user,{toast,rerender:render,nav});
     if(p1==='agenda') await bindAgendaPage(state.user,{toast,rerender:render,nav});
   }catch(err){console.error(err);app.innerHTML=layout(`<div class="notice danger"><strong>Erro ao carregar.</strong><br>${esc(err.message)}</div>`);await bindRoute();}
 }
