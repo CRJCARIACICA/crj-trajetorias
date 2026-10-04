@@ -315,7 +315,17 @@ export async function bindJhonataoPage(user,{toast,rerender,nav}={}){
     const btn=form.querySelector('button[type="submit"]'),status=document.querySelector('#jh-chat-status');
     appendUserMessage(message);input.value='';btn.disabled=true;if(status)status.textContent='Jhonatão está consultando sua agenda e responsabilidades…';
     try{await streamChat(message);if(status)status.textContent='';}
-    catch(err){if(status)status.innerHTML=`<span class="notice danger">${esc(err.message)}</span>`;toast?.(err.message,'danger')}
+    catch(err){
+      const fallback=window.JhonataoFreeFallback?.(message);
+      if(fallback){
+        const target=appendLiveAssistant();if(target)target.textContent=fallback;
+        try{const c=supabaseClient();await c.from('jhonatao_chat_messages').insert({role:'assistant',content:fallback})}catch{}
+        if(status)status.innerHTML='<span class="notice">Modo operacional gratuito ativo — nenhuma API externa foi usada.</span>';
+      }else{
+        if(status)status.innerHTML=`<span class="notice danger">${esc(err.message)}</span>`;
+        toast?.(err.message,'danger');
+      }
+    }
     finally{btn.disabled=false;input.focus();}
   });
   scrollChat();
