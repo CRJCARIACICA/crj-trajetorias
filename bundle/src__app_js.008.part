@@ -118,7 +118,12 @@ async function bindCfdhShared(){
     const selectedWorkshopIds=()=>[...planForm.querySelectorAll('[name="cfdh_workshop_id"]:checked')].map(x=>x.value);
     const collectActions=()=>[...planForm.querySelectorAll('[data-cfdh-action-card]')].map((card,i)=>{
       const v=n=>card.querySelector('[name="'+n+'"]')?.value||'';
-      const axis=v('axis_code'),item=v('item_code'),cat=bundle.classification||[];
+      const cat=bundle.classification||[];
+      const additional=[...card.querySelectorAll('[name="additional_classification_key"]:checked')].map(el=>{
+        const [axisCode,itemCodeRaw='']=String(el.value||'').split('|'),itemCode=itemCodeRaw||null;
+        const row=cat.find(x=>x.axis_code===axisCode&&(x.item_code||null)===itemCode);
+        return row?{nucleus_code:row.nucleus_code,nucleus_name:row.nucleus_name,axis_code:row.axis_code,axis_name:row.axis_name,item_code:row.item_code||null,item_label:row.item_label||null}:null;
+      }).filter(Boolean);
       return {
         id:card.dataset.actionId||null,action_number:i+1,
         workshop_id:v('workshop_id')||null,schedule_mode:v('schedule_mode')||'structural',
@@ -127,9 +132,10 @@ async function bindCfdhShared(){
         planned_duration_hours:Number(v('planned_duration_hours')||0),
         location_type:v('location_type')||null,location_other:v('location_other')||null,
         title:v('title')||('Ação '+(i+1)),action_theme:v('action_theme')||cfdhMonthlyThemeText(bundle),objective:v('objective')||'',activities:v('activities')||'',resources:v('resources')||'',
-        nucleus_code:v('nucleus_code')||'',axis_code:axis||'',item_code:item||null,
-        item_label:cat.find(x=>x.axis_code===axis&&x.item_code===item)?.item_label||'',
-        classification_group_id:v('classification_group_id')||null,
+        nucleus_code:'N1',axis_code:'N1.E1',item_code:'C',
+        item_label:'Circuito Formativo em Direitos Humanos',
+        additional_classifications:additional,
+        classification_group_id:null,
         responsible_user_ids:[...card.querySelectorAll('[name="responsible_user_id"]:checked')].map(x=>x.value),
         responsible_names:[...card.querySelectorAll('[name="responsible_user_id"]:checked')].map(x=>bundle.team.find(t=>t.id===x.value)?.display_name).filter(Boolean),
         responsible_roles:[...card.querySelectorAll('[name="responsible_user_id"]:checked')].map(x=>bundle.team.find(t=>t.id===x.value)?.role).filter(Boolean),
@@ -163,6 +169,8 @@ async function bindCfdhShared(){
         if(badge)badge.textContent='Metas e etapas · '+links.length;
         if(fly)fly.innerHTML=cfdhActionGoalFlyoutContent(d,action,i);
       });
+      const statusBox=document.querySelector('[data-cfdh-planning-status]'),completion=cfdhPlanCompleteness(d);
+      if(statusBox)statusBox.innerHTML=completion.complete?'<div class="notice success"><b>Planejamento concluído.</b> Todos os campos essenciais das ações estão preenchidos.</div>':'<div class="notice warn"><b>Planejamento não concluído.</b> Rascunho salvo/permitido. Pendências: '+esc(completion.missing.join(', ')||'campos obrigatórios')+'.</div>';
       if(alertsBox){
         const alerts=cfdhPlanAlerts(d);
         alertsBox.innerHTML=alerts.length?alerts.map(x=>'<div class="notice warn compact">⚠ '+esc(x)+'</div>').join(''):'<div class="notice success compact">Planejamento sem pendências estruturais.</div>';
@@ -241,6 +249,37 @@ async function bindCfdhShared(){
           syncLinkedClassification(card);refresh();
         });
         updateLinkedHint(card);
+        const additionalToggle=card.querySelector('[data-cfdh-has-additional]'),additionalBox=card.querySelector('[data-cfdh-additional-methodologies]');
+        additionalToggle?.addEventListener('change',()=>{
+          const yes=additionalToggle.value==='yes';additionalBox?.classList.toggle('hidden',!yes);
+          if(!yes)card.querySelectorAll('[name="additional_classification_key"]').forEach(x=>x.checked=false);
+          refresh();
+        });
+        card.querySelectorAll('[name="additional_classification_key"]').forEach(x=>x.addEventListener('change',refresh));
+
+        card.querySelectorAll('[data-cfdh-repeat-field]').forEach(btn=>btn.addEventListener('click',()=>{
+          const field=btn.dataset.cfdhRepeatField,source=card.querySelector('[name="'+field+'"]'),sourceText=source?.value||'';
+          if(!String(sourceText).trim()){toast('Preencha primeiro este campo antes de repetir a descrição.','warn');return}
+          const sourceNumber=Number(card.dataset.actionNumber||0),cards=[...planForm.querySelectorAll('[data-cfdh-action-card]')].filter(x=>Number(x.dataset.actionNumber)!==sourceNumber);
+          if(!cards.length){toast('Crie pelo menos duas ações para repetir a descrição.','warn');return}
+          const labels={action_theme:'Tema desta ação',title:'Título da ação',objective:'Objetivo específico',activities:'Atividades propostas',resources:'Recursos necessários',location_other:'Descrição do local'};
+          modal('Repetir descrição · '+(labels[field]||field),
+            '<form id="cfdh-repeat-field-form" class="stack"><div class="notice info"><b>Origem: Ação '+sourceNumber+'</b><br>Somente <b>'+esc(labels[field]||field)+'</b> será copiado. Os demais campos continuam independentes.</div>'+
+            '<div class="cfdh-copy-preview">'+esc(sourceText)+'</div>'+
+            '<div class="actions"><button type="button" class="btn secondary" data-repeat-all>Selecionar todas</button><button type="button" class="btn ghost" data-repeat-none>Desmarcar todas</button></div>'+
+            '<div class="check-grid">'+cards.map(t=>{const n=Number(t.dataset.actionNumber||0),cur=t.querySelector('[name="'+field+'"]')?.value||'';return '<label class="check"><input type="checkbox" name="target_action" value="'+n+'"><span><b>Ação '+n+'</b><small>'+(String(cur).trim()?'Já possui conteúdo — será substituído.':'Campo vazio.')+'</small></span></label>'}).join('')+'</div>'+
+            '<button type="submit" class="btn primary">Repetir nas ações selecionadas</button></form>');
+          const form=document.querySelector('#cfdh-repeat-field-form');
+          document.querySelector('[data-repeat-all]')?.addEventListener('click',()=>form?.querySelectorAll('[name="target_action"]').forEach(x=>x.checked=true));
+          document.querySelector('[data-repeat-none]')?.addEventListener('click',()=>form?.querySelectorAll('[name="target_action"]').forEach(x=>x.checked=false));
+          form?.addEventListener('submit',e=>{
+            e.preventDefault();const selected=[...form.querySelectorAll('[name="target_action"]:checked')].map(x=>Number(x.value));
+            if(!selected.length){toast('Selecione pelo menos uma ação.','warn');return}
+            for(const n of selected){const target=planForm.querySelector('[data-cfdh-action-card][data-action-number="'+n+'"] [name="'+field+'"]');if(target){target.value=sourceText;target.dispatchEvent(new Event('input',{bubbles:true}))}}
+            document.querySelector('#modal')?.remove();refresh();toast('Descrição repetida em '+selected.length+' ação(ões).');
+          });
+        }));
+
         const workshop=card.querySelector('[data-cfdh-action-workshop]');
         const dateInput=card.querySelector('[name="scheduled_date"]'),startInput=card.querySelector('[name="start_time"]'),endInput=card.querySelector('[name="end_time"]'),durationInput=card.querySelector('[name="planned_duration_hours"]');
         const modeInput=card.querySelector('[name="schedule_mode"]'),calendarIdInput=card.querySelector('[name="workshop_calendar_id"]'),scheduleStatus=card.querySelector('[data-cfdh-schedule-link-status]');
@@ -565,19 +604,18 @@ async function bindCfdhShared(){
     });
     document.querySelector('[data-toggle-cfdh-plan-preview]')?.addEventListener('click',e=>{workspace?.classList.toggle('preview-open');e.currentTarget.textContent=workspace?.classList.contains('preview-open')?'Ocultar':'Abrir prévia'});
     planForm.addEventListener('input',refresh);planForm.addEventListener('change',refresh);
-    planForm.addEventListener('submit',async e=>{
-      e.preventDefault();
-      if(!planForm.reportValidity())return;
-      const draft=draftBundle(),alerts=cfdhPlanAlerts(draft).filter(x=>!/avaliação|presença nominal|relatório/i.test(x));
-      const blocking=alerts.filter(x=>!/menor que 2h|Distribuição sugerida|ALERTA DE META|AVISO DE CALENDÁRIO/i.test(x));
-      if(blocking.length){toast('Complete as pendências do planejamento antes de salvar.','danger');refresh();return}
-      const btn=planForm.querySelector('[type="submit"]'),original=btn.textContent;btn.disabled=true;btn.textContent='Salvando e sincronizando...';
+    const saveCurrentCfdh=async({navigateBack=false}={})=>{
+      const draft=draftBundle(),completion=cfdhPlanCompleteness(draft),btn=planForm.querySelector('[type="submit"]'),original=btn?.textContent||'Salvar planejamento CFDH';
+      if(btn){btn.disabled=true;btn.textContent=completion.complete?'Salvando...':'Salvando rascunho...'}
       try{
-        const saved=await saveCfdhPlanBundle(planId,{plan:draft.plan,workshop_ids:draft.workshop_ids,actions:draft.actions});
-        toast('Planejamento CFDH salvo e sincronizado');
-        nav('cfdh?month='+month+'&plan='+planId);await render();
-      }catch(err){toast(err.message,'danger');btn.disabled=false;btn.textContent=original}
-    });
+        await saveCfdhPlanBundle(planId,{plan:draft.plan,workshop_ids:draft.workshop_ids,actions:draft.actions});
+        toast(completion.complete?'Planejamento CFDH concluído e salvo.':'Rascunho salvo · planejamento não concluído.','success');
+        if(navigateBack){nav('cfdh?month='+month);await render();return true}
+        nav('cfdh?month='+month+'&plan='+planId);await render();return true;
+      }catch(err){toast(err.message,'danger');if(btn){btn.disabled=false;btn.textContent=original}return false}
+    };
+    document.querySelector('[data-cfdh-save-back]')?.addEventListener('click',()=>saveCurrentCfdh({navigateBack:true}));
+    planForm.addEventListener('submit',async e=>{e.preventDefault();await saveCurrentCfdh()});
     refresh();
   }
 
