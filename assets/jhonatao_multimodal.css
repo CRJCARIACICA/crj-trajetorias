@@ -1,0 +1,13 @@
+.jh-mm-wrap{margin:12px 0 10px;border:1px solid var(--line,#dfe7e4);border-radius:16px;padding:12px;background:linear-gradient(180deg,rgba(11,91,76,.045),rgba(255,255,255,.7))}
+.jh-mm-account{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--line,#e3e9e6)}
+.jh-mm-account-title{display:flex;align-items:center;gap:8px}.jh-mm-account small{display:block;margin-top:3px;color:var(--muted,#66736f)}
+.jh-mm-dot{width:9px;height:9px;border-radius:999px;background:#1b9c72;box-shadow:0 0 0 4px rgba(27,156,114,.12)}
+.jh-mm-tools{display:flex;gap:8px;flex-wrap:wrap;padding-top:10px}
+.jh-mm-tool{border:1px solid var(--line,#dfe7e4);background:var(--card,#fff);border-radius:999px;padding:8px 11px;cursor:pointer;font-weight:700;font-size:13px;display:inline-flex;align-items:center;gap:6px;transition:.15s ease}
+.jh-mm-tool:hover{transform:translateY(-1px);border-color:#7fb1a5}.jh-mm-tool.active{background:#0b5b4c;color:#fff;border-color:#0b5b4c}.jh-mm-tool.live.active{box-shadow:0 0 0 4px rgba(11,91,76,.13)}
+.jh-mm-capabilities{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}.jh-mm-capabilities span{font-size:11px;padding:4px 7px;background:rgba(11,91,76,.06);border-radius:8px;color:var(--muted,#5d6965)}
+.jh-mm-status{font-size:12px;margin-top:8px;min-height:0;color:var(--muted,#56635f)}.jh-mm-status.ok{color:#0b6f52}.jh-mm-status.warn{color:#986200}.jh-mm-status.info{color:#365e75}.jh-mm-status.listening,.jh-mm-status.working,.jh-mm-status.speaking{font-weight:700;color:#0b5b4c}
+.jh-mm-photo-preview{display:grid;grid-template-columns:72px 1fr auto;gap:10px;align-items:center;margin-top:10px;padding:9px;border:1px dashed #9fbcb4;border-radius:12px;background:rgba(255,255,255,.78)}
+.jh-mm-photo-preview img{width:72px;height:72px;object-fit:cover;border-radius:9px}.jh-mm-photo-preview b,.jh-mm-photo-preview small{display:block}.jh-mm-photo-preview small{color:var(--muted,#66736f);margin-top:2px}.jh-mm-photo-preview p{font-size:11px;line-height:1.35;margin:5px 0 0;color:var(--muted,#66736f)}
+.jh-mm-photo-preview button{border:0;background:transparent;font-size:25px;cursor:pointer;color:#687570;align-self:start}
+@media(max-width:700px){.jh-mm-account{align-items:flex-start;flex-direction:column}.jh-mm-account .btn{width:100%}.jh-mm-tools{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.jh-mm-tool{justify-content:center}.jh-mm-capabilities{display:grid}.jh-mm-photo-preview{grid-template-columns:58px 1fr auto}.jh-mm-photo-preview img{width:58px;height:58px}}
