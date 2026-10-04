@@ -30,12 +30,12 @@ jobs:
           rm -rf _site
           mkdir -p _site/src _site/assets
           cp index.html checkin.html .nojekyll _site/
-          cp src/config.js src/permissions.js src/register.js src/checkin.js _site/src/
+          cp src/config.js src/permissions.js src/register.js src/checkin.js src/jhonatao.js _site/src/
           cat bundle/src__app_js.*.part > _site/src/app.js
           cat bundle/src__api_js.*.part > _site/src/api.js
           cat bundle/src__forms_js.*.part > _site/src/forms.js
           cat bundle/src__agenda_js.*.part > _site/src/agenda.js
-          cat bundle/assets__app_css.*.part > _site/assets/app.css
+          cat bundle/assets__app_css.*.part assets/jhonatao.css > _site/assets/app.css
           node --check _site/src/app.js
           node --check _site/src/api.js
           node --check _site/src/forms.js
@@ -43,6 +43,7 @@ jobs:
           node --check _site/src/register.js
           node --check _site/src/agenda.js
           node --check _site/src/checkin.js
+          node --check _site/src/jhonatao.js
           # Validação real de ES Modules: detecta declarações duplicadas que
           # o node --check em modo script pode deixar passar.
           node --input-type=module --check < _site/src/app.js
@@ -50,6 +51,7 @@ jobs:
           node --input-type=module --check < _site/src/forms.js
           node --input-type=module --check < _site/src/agenda.js
           node --input-type=module --check < _site/src/checkin.js
+          node --input-type=module --check < _site/src/jhonatao.js
           test -s _site/index.html
           test -s _site/src/app.js
           test -s _site/src/api.js
