@@ -6,7 +6,7 @@ const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition||null
 const liveState={
   active:false, muted:false, speaker:true, recognition:null, overlay:null,
   startedAt:0, timer:null, observer:null, speaking:false, waiting:false,
-  lastSpoken:'', ended:false, naturalVoice:null, currentAudio:null, currentAudioUrl:null
+  lastSpoken:'', ended:false, naturalVoice:null, naturalVoiceProvider:null, currentAudio:null, currentAudioUrl:null
 };
 
 const $=(s,r=document)=>r.querySelector(s);
@@ -186,8 +186,13 @@ async function checkNaturalVoice(){
     });
     const data=await r.json().catch(()=>({}));
     liveState.naturalVoice=Boolean(r.ok&&data?.ok);
-  }catch{liveState.naturalVoice=false}
-  setVoiceLabel(liveState.naturalVoice?'voz natural • Sonic 3.6':'voz do dispositivo');
+    liveState.naturalVoiceProvider=data?.provider||null;
+  }catch{liveState.naturalVoice=false;liveState.naturalVoiceProvider=null}
+  setVoiceLabel(
+    liveState.naturalVoiceProvider==='fish_audio'?'voz natural • Fish Audio S2.1':
+    liveState.naturalVoiceProvider==='cartesia'?'voz natural • Sonic 3.6':
+    'voz do dispositivo'
+  );
   return liveState.naturalVoice;
 }
 function stopNaturalAudio(){
@@ -210,7 +215,15 @@ async function playNaturalSpeech(text){
       },
       body:JSON.stringify({text})
     });
-    if(!r.ok){liveState.naturalVoice=false;setVoiceLabel('voz do dispositivo');return false}
+    if(!r.ok){liveState.naturalVoice=false;liveState.naturalVoiceProvider=null;setVoiceLabel('voz do dispositivo');return false}
+    const provider=r.headers.get('X-Jhonatao-Voice')||'';
+    if(provider.includes('fish-audio')){
+      liveState.naturalVoiceProvider='fish_audio';
+      setVoiceLabel('voz natural • Fish Audio S2.1');
+    }else if(provider.includes('cartesia')){
+      liveState.naturalVoiceProvider='cartesia';
+      setVoiceLabel('voz natural • Sonic 3.6');
+    }
     const blob=await r.blob();
     if(!blob.size)return false;
     stopNaturalAudio();
@@ -224,7 +237,7 @@ async function playNaturalSpeech(text){
     stopNaturalAudio();
     return true;
   }catch{
-    stopNaturalAudio();liveState.naturalVoice=false;setVoiceLabel('voz do dispositivo');return false;
+    stopNaturalAudio();liveState.naturalVoice=false;liveState.naturalVoiceProvider=null;setVoiceLabel('voz do dispositivo');return false;
   }
 }
 async function speakResponse(raw){
