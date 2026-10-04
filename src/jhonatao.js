@@ -1,5 +1,5 @@
 import { CONFIG } from './config.js';
-import { apiMode, supabaseClient } from './api.js?v=20261004-1';
+import { apiMode, supabaseClient } from './api.js?v=20261004-2';
 
 const TZ='America/Sao_Paulo';
 const esc=(v='')=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
