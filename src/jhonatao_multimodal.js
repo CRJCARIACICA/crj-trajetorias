@@ -107,13 +107,14 @@ async function checkGroqHealth(){
     const {data,error}=await c.functions.invoke('jhonatao-chat',{body:{health:true}});
     if(error)throw error;
     if(data?.ok){
+      const count=Number(data?.context_modules||0);
       const cap=qs('.jh-mm-capabilities');
       if(cap){
         const tags=[...cap.querySelectorAll('span')];
         const ai=tags.find(x=>x.textContent.includes('IA provisória'));
-        if(ai)ai.textContent='✨ IA provisória: Groq ativa • OpenAI aguardando aprovação';
+        if(ai)ai.textContent='✨ IA provisória: Groq ativa • contexto completo '+(count?count+' módulos':'carregado');
       }
-      setStatus('IA provisória Groq conectada e pronta para uso.','ok');
+      setStatus('IA Groq conectada. Contexto do CRJ Trajetórias '+(data?.context_ready?'carregado':'indisponível')+(count?' • '+count+' módulos reconhecidos':'')+'.','ok');
     }
   }catch(err){
     setStatus('Groq ainda não respondeu ao teste. O Jhonatão continua no modo operacional gratuito.','warn');
