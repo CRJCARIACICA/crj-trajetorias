@@ -187,12 +187,23 @@ async function checkNaturalVoice(){
     const data=await r.json().catch(()=>({}));
     liveState.naturalVoice=Boolean(r.ok&&data?.ok);
     liveState.naturalVoiceProvider=data?.provider||null;
-  }catch{liveState.naturalVoice=false;liveState.naturalVoiceProvider=null}
-  setVoiceLabel(
-    liveState.naturalVoiceProvider==='fish_audio'?'voz natural • Fish Audio S2.1':
-    liveState.naturalVoiceProvider==='cartesia'?'voz natural • Sonic 3.6':
-    'voz do dispositivo'
-  );
+    if(liveState.naturalVoice){
+      setVoiceLabel(
+        liveState.naturalVoiceProvider==='fish_audio'?'voz natural • Fish Audio S2.1':
+        liveState.naturalVoiceProvider==='cartesia'?'voz natural • Sonic 3.6':
+        'voz natural'
+      );
+    }else if(data?.provider==='fish_audio'){
+      setVoiceLabel('Fish Audio indisponível'+(data?.fish_status?' • erro '+data.fish_status:''));
+    }else if(data?.fish_secret_found===false){
+      setVoiceLabel('chave Fish não detectada');
+    }else{
+      setVoiceLabel('voz do dispositivo');
+    }
+  }catch{
+    liveState.naturalVoice=false;liveState.naturalVoiceProvider=null;
+    setVoiceLabel('voz do dispositivo');
+  }
   return liveState.naturalVoice;
 }
 function stopNaturalAudio(){
