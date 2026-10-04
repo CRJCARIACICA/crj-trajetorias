@@ -15,20 +15,19 @@ async function bindCfdhShared(){
           '<div class="form-grid"><div class="field"><label>Tema da Metodologia</label><select name="cfdh_theme_code"><option value="">Selecione um tema</option>'+themeOptions+'</select></div><div class="field"><label>Outro tema / adaptação territorial</label><input class="input" name="cfdh_theme_custom" placeholder="Descreva o tema, se necessário"></div></div>';
       modal('Novo circuito CFDH','<form id="new-cfdh-plan-form" class="stack">'+
         themeFields+
-        '<div class="form-grid"><div class="field"><label>Modalidade</label><select name="plan_type" required><option value="cfdh_estrutural">CFDH estrutural</option><option value="cfdh_transversal">CFDH transversal</option></select></div><div class="field"><label>Quantidade inicial de ações</label><input class="input" type="number" min="1" max="60" name="cfdh_action_count" value="1" required></div></div>'+
-        '<div class="field"><label>Título do circuito</label><input class="input" name="activity_title" required></div>'+
-        '<div class="field"><label>Objetivo geral</label><textarea name="description_objective" required></textarea></div>'+
+        '<div class="form-grid"><div class="field"><label>Modalidade</label><select name="plan_type"><option value="cfdh_estrutural">CFDH estrutural</option><option value="cfdh_transversal">CFDH transversal</option></select></div><div class="field"><label>Quantidade inicial de ações</label><input class="input" type="number" min="1" max="60" name="cfdh_action_count" value="1"></div></div>'+
+        '<div class="field"><label>Título do circuito</label><input class="input" name="activity_title" placeholder="Pode completar depois"></div>'+
+        '<div class="field"><label>Objetivo geral</label><textarea name="description_objective" placeholder="Pode completar depois"></textarea></div>'+
         '<div data-cfdh-create-status></div><button class="btn primary" type="submit" data-cfdh-create-submit>Criar e estruturar ações</button></form>');
       document.querySelector('#new-cfdh-plan-form')?.addEventListener('submit',async e=>{
         e.preventDefault();
         const form=e.currentTarget,btn=form.querySelector('[data-cfdh-create-submit]')||form.querySelector('button[type="submit"]'),status=form.querySelector('[data-cfdh-create-status]');
-        if(!form.reportValidity())return;
         const p=parseForm(form);
         if(!cfg&&!p.cfdh_theme_code&&!String(p.cfdh_theme_custom||'').trim()){toast('Defina o tema mensal antes de criar o circuito.','danger');return}
         if(btn){btn.disabled=true;btn.textContent='Criando e estruturando...'}
         if(status)status.innerHTML='<div class="notice info compact">Criando o circuito e abrindo a estrutura das ações...</div>';
         try{
-          const created=await createEducatorPlan({...p,planned_start:month+'-01',planned_end:month+'-01',status:'planejado',workshop_id:null});
+          const created=await createEducatorPlan({...p,activity_title:String(p.activity_title||'').trim()||'Circuito Formativo em Direitos Humanos',description_objective:p.description_objective||'',planned_start:month+'-01',planned_end:month+'-01',status:'planejado',workshop_id:null,cfdh_planning_status:'draft'});
           if(!created?.id)throw new Error('O circuito foi enviado, mas o sistema não recebeu o identificador do planejamento.');
           document.querySelector('#modal')?.remove();
           nav('cfdh?month='+month+'&plan='+created.id);
