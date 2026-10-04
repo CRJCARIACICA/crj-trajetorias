@@ -135,6 +135,7 @@ async function bindCfdhShared(){
         nucleus_code:'N1',axis_code:'N1.E1',item_code:'C',
         item_label:'Circuito Formativo em Direitos Humanos',
         additional_classifications:additional,
+        has_additional_methodology:v('has_additional_methodology')==='yes',
         classification_group_id:null,
         responsible_user_ids:[...card.querySelectorAll('[name="responsible_user_id"]:checked')].map(x=>x.value),
         responsible_names:[...card.querySelectorAll('[name="responsible_user_id"]:checked')].map(x=>bundle.team.find(t=>t.id===x.value)?.display_name).filter(Boolean),
