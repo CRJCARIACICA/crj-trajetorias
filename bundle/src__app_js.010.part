@@ -185,5 +185,6 @@ setInterval(async()=>{
     const label=document.querySelector('a[href="#agenda"] span:last-child');
     if(label)label.textContent=next?`Agenda (${next})`:'Agenda';
     if(next>before)toast(`${next-before} nova(s) notificação(ões) da Agenda`,'info');
+    await checkJhonataoAlerts({toast,nav});
   }catch{}
 },30000);
