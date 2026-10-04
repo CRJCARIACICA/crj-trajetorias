@@ -17,6 +17,10 @@ const state={
   lastSpoken:'',
   observer:null,
   operationalRows:[],
+  recorder:null,
+  mediaStream:null,
+  audioChunks:[],
+  recording:false,
 };
 
 function qs(s,r=document){return r.querySelector(s)}
@@ -98,7 +102,7 @@ function planDetail(){
 }
 
 function ui(){
-  const mic=SpeechRecognitionCtor?'Disponível':'Indisponível neste navegador';
+  const mic=SpeechRecognitionCtor?'Nativo do navegador':(navigator.mediaDevices&&window.MediaRecorder?'Transcrição Groq':'Indisponível neste navegador');
   const speak=browserCanSpeak()?'Disponível':'Indisponível';
   const photo=browserCanPhoto()?'Captura disponível':'Indisponível';
   return `
@@ -213,9 +217,63 @@ function stopListening(){
   state.listening=false;
 }
 
+async function transcribeRecordedAudio(blob){
+  if(!blob||!blob.size)return;
+  setStatus('Transcrevendo áudio com a IA provisória…','working');
+  try{
+    const c=supabaseClient();
+    const ext=blob.type.includes('ogg')?'ogg':blob.type.includes('mp4')?'m4a':'webm';
+    const fd=new FormData();
+    fd.append('audio',new File([blob],`jhonatao-audio.${ext}`,{type:blob.type||'audio/webm'}));
+    const {data,error}=await c.functions.invoke('jhonatao-transcribe',{body:fd});
+    if(error)throw error;
+    const text=String(data?.text||'').trim();
+    if(!text)throw new Error('Não consegui entender o áudio.');
+    const input=qs('#jh-chat-form textarea');
+    if(input){input.value=text;input.focus()}
+    setStatus('Áudio transcrito. Você pode revisar ou enviar.','ok');
+  }catch(err){
+    setStatus(err?.message||'A transcrição por IA ainda não está disponível.','warn');
+  }
+}
+async function toggleGroqRecording(){
+  if(state.recording){
+    state.recorder?.stop();
+    return;
+  }
+  if(!navigator.mediaDevices||!window.MediaRecorder){
+    setStatus('Este navegador não oferece gravação de áudio compatível.','warn');return;
+  }
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    state.mediaStream=stream;state.audioChunks=[];
+    const recorder=new MediaRecorder(stream);
+    state.recorder=recorder;
+    recorder.ondataavailable=e=>{if(e.data?.size)state.audioChunks.push(e.data)};
+    recorder.onstart=()=>{
+      state.recording=true;
+      qs('[data-jh-mm-mic]')?.classList.add('active');
+      setStatus('Gravando… toque novamente em Falar para encerrar e transcrever.','listening');
+    };
+    recorder.onstop=async()=>{
+      state.recording=false;
+      qs('[data-jh-mm-mic]')?.classList.remove('active');
+      const blob=new Blob(state.audioChunks,{type:recorder.mimeType||'audio/webm'});
+      state.audioChunks=[];
+      state.mediaStream?.getTracks().forEach(t=>t.stop());state.mediaStream=null;
+      await transcribeRecordedAudio(blob);
+    };
+    recorder.start();
+  }catch(err){
+    setStatus('Não foi possível acessar o microfone. Verifique a permissão do navegador.','warn');
+  }
+}
 function toggleMic(){
-  if(state.listening){stopListening();setStatus('');return}
-  startListening();
+  if(SpeechRecognitionCtor){
+    if(state.listening){stopListening();setStatus('');return}
+    startListening();return;
+  }
+  toggleGroqRecording();
 }
 
 function chooseVoice(){
