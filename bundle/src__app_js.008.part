@@ -129,7 +129,7 @@ async function bindCfdhShared(){
         workshop_id:v('workshop_id')||null,schedule_mode:v('schedule_mode')||'structural',
         workshop_calendar_id:v('workshop_calendar_id')||null,
         scheduled_date:v('scheduled_date'),start_time:v('start_time')||null,end_time:v('end_time')||null,
-        planned_duration_hours:Number(v('planned_duration_hours')||0),
+        planned_duration_hours:v('planned_duration_hours')===''?null:Number(v('planned_duration_hours')),
         location_type:v('location_type')||null,location_other:v('location_other')||null,
         title:v('title')||('Ação '+(i+1)),action_theme:v('action_theme')||cfdhMonthlyThemeText(bundle),objective:v('objective')||'',activities:v('activities')||'',resources:v('resources')||'',
         nucleus_code:'N1',axis_code:'N1.E1',item_code:'C',
@@ -540,7 +540,7 @@ async function bindCfdhShared(){
     const resizeActions=()=>{
       const wanted=Math.max(1,Math.min(60,Number(planForm.querySelector('[data-cfdh-action-count]')?.value||1))),current=collectActions();
       if(current.length<wanted){
-        for(let i=current.length;i<wanted;i++){const me=bundle.team.find(t=>t.id===state.user?.id&&['educador','assistente_social','psicologo','terapeuta_ocupacional'].includes(t.role));current.push({action_number:i+1,title:'Ação '+(i+1),planned_duration_hours:2,schedule_mode:collectPlan().plan_type==='cfdh_estrutural'?'structural':'workshop_planned',scheduled_date:'',start_time:'',end_time:'',nucleus_code:'',axis_code:'',item_code:null,responsible_user_ids:me?[me.id]:[],responsible_names:me?[me.display_name]:[],responsible_roles:me?[me.role]:[],action_theme:cfdhMonthlyThemeText(bundle)})}
+        for(let i=current.length;i<wanted;i++){const me=bundle.team.find(t=>t.id===state.user?.id&&['educador','assistente_social','psicologo','terapeuta_ocupacional'].includes(t.role));current.push({action_number:i+1,title:'Ação '+(i+1),planned_duration_hours:2,schedule_mode:collectPlan().plan_type==='cfdh_estrutural'?'structural':'workshop_planned',scheduled_date:'',start_time:'',end_time:'',nucleus_code:'N1',axis_code:'N1.E1',item_code:'C',item_label:'Circuito Formativo em Direitos Humanos',additional_classifications:[],responsible_user_ids:me?[me.id]:[],responsible_names:me?[me.display_name]:[],responsible_roles:me?[me.role]:[],action_theme:cfdhMonthlyThemeText(bundle)})}
       }else if(current.length>wanted){
         const removed=current.slice(wanted);
         if(removed.some(x=>x.id&&['realizada','parcial'].includes(bundle.actions.find(a=>a.id===x.id)?.execution_status))){toast('Ação já executada não pode ser removida.','danger');planForm.querySelector('[data-cfdh-action-count]').value=current.length;return}
