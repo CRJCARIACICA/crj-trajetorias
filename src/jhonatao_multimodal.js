@@ -107,7 +107,7 @@ function ui(){
         <div class="jh-mm-account-title"><span class="jh-mm-dot"></span><b>${esc(accountLabel())}</b></div>
         <small>${esc(planDetail())}</small>
       </div>
-      <button type="button" class="btn secondary" data-jh-mm-connect>Continuar com ChatGPT</button>
+      <button type="button" class="btn secondary" data-jh-mm-connect>Integração ChatGPT</button>
     </div>
 
     <div class="jh-mm-tools" aria-label="Recursos multimodais do Jhonatão">
