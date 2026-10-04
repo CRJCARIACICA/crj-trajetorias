@@ -237,7 +237,7 @@ async function streamChat(message){
   const response=await fetch(`${CONFIG.supabaseUrl}/functions/v1/jhonatao-chat`,{
     method:'POST',
     headers:{'Authorization':`Bearer ${sessionData.session.access_token}`,'Content-Type':'application/json','apikey':CONFIG.supabasePublishableKey},
-    body:JSON.stringify({message,...media})
+    body:JSON.stringify({message,...media,live_mode:Boolean(window.JhonataoLiveActive?.())})
   });
   if(!response.ok){
     let detail='';try{const j=await response.json();detail=j.error||j.detail||''}catch{detail=await response.text()}
