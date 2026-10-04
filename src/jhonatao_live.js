@@ -1,9 +1,12 @@
+import { CONFIG } from './config.js';
+import { supabaseClient } from './api.js?v=20261004-2';
+
 const LANG='pt-BR';
 const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition||null;
 const liveState={
   active:false, muted:false, speaker:true, recognition:null, overlay:null,
   startedAt:0, timer:null, observer:null, speaking:false, waiting:false,
-  lastSpoken:'', ended:false
+  lastSpoken:'', ended:false, naturalVoice:null, currentAudio:null, currentAudioUrl:null
 };
 
 const $=(s,r=document)=>r.querySelector(s);
@@ -108,7 +111,7 @@ function overlayHTML(){
       <button type="button" data-call-speaker><span>🔊</span><small>áudio</small></button>
       <button type="button" class="hangup" data-call-end><span>☎</span><small>encerrar</small></button>
     </footer>
-    <div class="jh-call-privacy">modo chamada • conversa visual oculta</div>
+    <div class="jh-call-privacy">modo chamada • conversa visual oculta • <span id="jh-call-voice">voz do dispositivo</span></div>
   </div>`;
 }
 function makeOverlay(){
@@ -163,6 +166,67 @@ function startListening(){
 }
 function stopListening(){try{liveState.recognition?.abort()}catch{}}
 
+
+function setVoiceLabel(text){
+  const el=$('#jh-call-voice');if(el)el.textContent=text;
+}
+async function checkNaturalVoice(){
+  try{
+    const client=supabaseClient();
+    const {data:s}=await client.auth.getSession();
+    if(!s?.session)throw new Error('sem sessão');
+    const r=await fetch(CONFIG.supabaseUrl+'/functions/v1/jhonatao-tts',{
+      method:'POST',
+      headers:{
+        'Authorization':'Bearer '+s.session.access_token,
+        'Content-Type':'application/json',
+        'apikey':CONFIG.supabasePublishableKey
+      },
+      body:JSON.stringify({health:true})
+    });
+    const data=await r.json().catch(()=>({}));
+    liveState.naturalVoice=Boolean(r.ok&&data?.ok);
+  }catch{liveState.naturalVoice=false}
+  setVoiceLabel(liveState.naturalVoice?'voz natural • Sonic 3.6':'voz do dispositivo');
+  return liveState.naturalVoice;
+}
+function stopNaturalAudio(){
+  try{liveState.currentAudio?.pause()}catch{}
+  liveState.currentAudio=null;
+  if(liveState.currentAudioUrl){URL.revokeObjectURL(liveState.currentAudioUrl);liveState.currentAudioUrl=null}
+}
+async function playNaturalSpeech(text){
+  if(liveState.naturalVoice!==true)return false;
+  try{
+    const client=supabaseClient();
+    const {data:s}=await client.auth.getSession();
+    if(!s?.session)return false;
+    const r=await fetch(CONFIG.supabaseUrl+'/functions/v1/jhonatao-tts',{
+      method:'POST',
+      headers:{
+        'Authorization':'Bearer '+s.session.access_token,
+        'Content-Type':'application/json',
+        'apikey':CONFIG.supabasePublishableKey
+      },
+      body:JSON.stringify({text})
+    });
+    if(!r.ok){liveState.naturalVoice=false;setVoiceLabel('voz do dispositivo');return false}
+    const blob=await r.blob();
+    if(!blob.size)return false;
+    stopNaturalAudio();
+    const url=URL.createObjectURL(blob);
+    const audio=new Audio(url);
+    liveState.currentAudio=audio;liveState.currentAudioUrl=url;
+    await new Promise((resolve,reject)=>{
+      audio.onended=resolve;audio.onerror=reject;
+      audio.play().catch(reject);
+    });
+    stopNaturalAudio();
+    return true;
+  }catch{
+    stopNaturalAudio();liveState.naturalVoice=false;setVoiceLabel('voz do dispositivo');return false;
+  }
+}
 async function speakResponse(raw){
   if(!liveState.active)return;
   const text=conversationalize(raw);
@@ -171,17 +235,26 @@ async function speakResponse(raw){
   liveState.speaking=true;liveState.waiting=false;stopListening();
   setCallState('speaking','falando');
   speechSynthesis.cancel();
-  const chunks=splitSpeech(text),voice=chooseVoice();
-  for(const chunk of chunks){
-    if(!liveState.active||!liveState.speaker)break;
-    await new Promise(resolve=>{
-      const u=new SpeechSynthesisUtterance(chunk);
-      u.lang=LANG;if(voice)u.voice=voice;
-      u.rate=.96;u.pitch=.96;u.volume=1;
-      u.onend=resolve;u.onerror=resolve;
-      speechSynthesis.speak(u);
-    });
-    await new Promise(r=>setTimeout(r,75));
+
+  let naturalPlayed=false;
+  if(liveState.naturalVoice===null)await checkNaturalVoice();
+  if(liveState.naturalVoice===true&&liveState.active&&liveState.speaker){
+    naturalPlayed=await playNaturalSpeech(text);
+  }
+
+  if(!naturalPlayed&&liveState.active&&liveState.speaker){
+    const chunks=splitSpeech(text),voice=chooseVoice();
+    for(const chunk of chunks){
+      if(!liveState.active||!liveState.speaker)break;
+      await new Promise(resolve=>{
+        const u=new SpeechSynthesisUtterance(chunk);
+        u.lang=LANG;if(voice)u.voice=voice;
+        u.rate=.96;u.pitch=.96;u.volume=1;
+        u.onend=resolve;u.onerror=resolve;
+        speechSynthesis.speak(u);
+      });
+      await new Promise(r=>setTimeout(r,75));
+    }
   }
   liveState.speaking=false;
   if(liveState.active&&!liveState.muted){
@@ -223,12 +296,13 @@ function startCall(){
   liveState.waiting=false;liveState.speaking=false;liveState.lastSpoken='';
   makeOverlay();watchResponses();
   setCallState('thinking','conectando…');
+  checkNaturalVoice();
   setTimeout(()=>{setCallState('listening','ouvindo você');startListening()},550);
 }
 function endCall(){
   if(!liveState.active)return;
   liveState.active=false;liveState.ended=true;liveState.waiting=false;liveState.speaking=false;
-  stopListening();speechSynthesis.cancel();liveState.observer?.disconnect();liveState.observer=null;
+  stopListening();speechSynthesis.cancel();stopNaturalAudio();liveState.observer?.disconnect();liveState.observer=null;
   removeOverlay();
 }
 function toggleMute(){
@@ -240,7 +314,7 @@ function toggleMute(){
 function toggleSpeaker(){
   liveState.speaker=!liveState.speaker;
   $('[data-call-speaker]')?.classList.toggle('active',!liveState.speaker);
-  if(!liveState.speaker)speechSynthesis.cancel();
+  if(!liveState.speaker){speechSynthesis.cancel();stopNaturalAudio();}
   if(liveState.active&&!liveState.muted&&!liveState.waiting){setCallState('listening','ouvindo você');startListening()}
 }
 
