@@ -323,7 +323,7 @@ export async function bindJhonataoPage(user,{toast,rerender,nav}={}){
       if(fallback){
         const target=appendLiveAssistant();if(target)target.textContent=fallback;
         try{const c=supabaseClient();await c.from('jhonatao_chat_messages').insert({role:'assistant',content:fallback})}catch{}
-        if(status)status.innerHTML='<span class="notice">Modo operacional gratuito ativo — nenhuma API externa foi usada.</span>';
+        if(status)status.innerHTML='<span class="notice">IA externa indisponível nesta tentativa — Jhonatão respondeu pelo modo operacional local.</span>';
       }else{
         if(status)status.innerHTML=`<span class="notice danger">${esc(err.message)}</span>`;
         toast?.(err.message,'danger');
