@@ -39,7 +39,7 @@ export const FORM_FILL_ROLES = {
   'avaliacao-atividades': ['coordenacao_geral','educador'],
   'relatorio-mobilizacao': ['coordenacao_articulacao','articulador'],
   'emprestimo': ['coordenacao_geral','controlador_acesso'],
-  'emprestimo-canhoto': ['coordenacao_geral','controlador_acesso'],
+  'emprestimo-canhoto': [],
   'cfdh-planejamento': ['coordenacao_geral','educador','assistente_social','psicologo','terapeuta_ocupacional'],
   'cfdh-avaliacao-jovens': ['coordenacao_geral','educador','assistente_social','psicologo','terapeuta_ocupacional'],
   'cfdh-avaliacao-equipe': ['coordenacao_geral','educador'],
