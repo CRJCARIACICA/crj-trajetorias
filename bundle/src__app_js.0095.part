@@ -1,5 +1,5 @@
 
-// Integração nativa da Articulação e da Central de Comunicação ao roteador principal.
+// Integração nativa da Articulação, Central de Comunicação e Documentos ao roteador principal.
 // Este patch roda depois da definição de render/layout e antes do boot final.
 const __crjBaseLayoutForArticulation = layout;
 const __crjBaseRenderForArticulation = render;
@@ -11,18 +11,19 @@ function __crjIsArticulationProfile(user){
 }
 function __crjOperationalSpecialRoute(){
   const p1=route().parts?.[0]||'';
-  return p1==='articulacao'||p1==='planos-mobilizacao'||p1==='caixa-equipes';
+  return p1==='articulacao'||p1==='planos-mobilizacao'||p1==='caixa-equipes'||p1==='documentos-evidencias';
 }
 function __crjOperationalNavHtml(){
   const user=state.user;
   if(!user||user.role==='pendente'||user.active===false)return '';
   const path=route().parts?.[0]||'';
   const inbox=`<a href="#caixa-equipes" class="${path==='caixa-equipes'?'active':''}" data-team-inbox-link><span class="ico">✉</span><span data-team-inbox-label>Caixa das Equipes</span></a>`;
+  const docs=`<a href="#documentos-evidencias" class="${path==='documentos-evidencias'?'active':''}">${icon('forms')}<span>Documentos e Evidências</span></a>`;
   const shared=`<a href="#planos-mobilizacao" class="${path==='planos-mobilizacao'?'active':''}">${icon('forms')}<span>Planos de Mobilização</span></a>`;
   const own=__crjIsArticulationProfile(user)
     ?`<a href="#articulacao" class="${path==='articulacao'?'active':''}"><span class="ico">⌖</span><span>Área da Articulação</span></a>`
     :'';
-  return inbox+own+shared;
+  return inbox+docs+own+shared;
 }
 layout=function(content){
   const html=__crjBaseLayoutForArticulation(content);
@@ -35,7 +36,7 @@ layout=function(content){
 };
 
 function __crjSpecialHost(p1){
-  const label=p1==='caixa-equipes'?'Carregando Caixa das Equipes…':'Carregando ambiente da Articulação…';
+  const label=p1==='caixa-equipes'?'Carregando Caixa das Equipes…':p1==='documentos-evidencias'?'Carregando Documentos e Evidências…':'Carregando ambiente da Articulação…';
   return `<div data-operational-native-host="${p1}"><div class="card"><div class="empty">${label}</div></div></div>`;
 }
 async function __crjStabilizeOperationalRoute(){
@@ -52,6 +53,7 @@ async function __crjStabilizeOperationalRoute(){
   content.dataset.operationalNativeRoute=p1;
   if(p1==='articulacao'||p1==='planos-mobilizacao')content.dataset.articulationNativeRoute=p1;
   if(p1==='caixa-equipes')content.dataset.teamInboxNativeRoute='1';
+  if(p1==='documentos-evidencias')content.dataset.documentDraftsNativeRoute='1';
 }
 
 window.removeEventListener('hashchange',__crjBaseRenderForArticulation);
