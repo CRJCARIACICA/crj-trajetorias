@@ -37,7 +37,7 @@ export const FORM_FILL_ROLES = {
   'outras-demandas': ['coordenacao_geral','assistente_social','psicologo','terapeuta_ocupacional'],
   'ptrampo': ['coordenacao_geral','assistente_social','psicologo','terapeuta_ocupacional'],
   'avaliacao-atividades': ['coordenacao_geral','educador'],
-  'relatorio-mobilizacao': ['coordenacao_geral','coordenacao_articulacao','articulador'],
+  'relatorio-mobilizacao': ['coordenacao_articulacao','articulador'],
   'emprestimo': ['coordenacao_geral','controlador_acesso'],
   'emprestimo-canhoto': ['coordenacao_geral','controlador_acesso'],
   'cfdh-planejamento': ['coordenacao_geral','educador','assistente_social','psicologo','terapeuta_ocupacional'],
