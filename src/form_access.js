@@ -38,7 +38,7 @@ let scheduled=false;
 
 function slugFromHash(){
   const raw=(location.hash||'').replace(/^#/,'').split('?')[0];
-  if(raw==='novo-jovem')return 'formulario-inicial';
+  if(raw==='novo-jovem'||raw.startsWith('editar-jovem/'))return 'formulario-inicial';
   if(raw.startsWith('formulario/'))return decodeURIComponent(raw.split('/')[1]||'');
   return null;
 }
@@ -73,7 +73,7 @@ function addControllerNavigation(){
   });
 }
 function ensureRoleOption(){
-  document.querySelectorAll('select[name="role"]').forEach(select=>{
+  document.querySelectorAll('select[name="role"],select[data-team-role]').forEach(select=>{
     if(!select.querySelector('option[value="controlador_acesso"]')){
       const option=document.createElement('option');
       option.value='controlador_acesso';option.textContent='Controlador(a) de Acessos';
@@ -122,25 +122,38 @@ function decorateFormsPage(){
   }
 }
 function protectInitialButtons(){
-  document.querySelectorAll('[data-nav="novo-jovem"]').forEach(btn=>{
+  document.querySelectorAll('[data-nav="novo-jovem"],[data-nav^="editar-jovem/"]').forEach(btn=>{
     if(!allowed('formulario-inicial')){
       btn.dataset.formAccessBlocked='1';
       if(btn.tagName==='BUTTON')btn.disabled=true;
     }
   });
 }
+function protectModalButtons(){
+  document.querySelectorAll('[data-modal-nav]').forEach(btn=>{
+    const nav=String(btn.dataset.modalNav||'').split('?')[0];
+    if(!nav.startsWith('formulario/'))return;
+    const slug=nav.split('/')[1]||'';
+    if(!allowed(slug)){
+      btn.dataset.formAccessBlocked='1';
+      btn.disabled=true;
+      btn.title='Seu perfil não possui permissão para preencher este formulário.';
+    }
+  });
+}
 function apply(){
   if(!currentRole)return;
-  addControllerNavigation();ensureRoleOption();decorateFormsPage();protectInitialButtons();guardRoute();
+  addControllerNavigation();ensureRoleOption();decorateFormsPage();protectInitialButtons();protectModalButtons();guardRoute();
 }
 function schedule(){if(scheduled)return;scheduled=true;requestAnimationFrame(()=>{scheduled=false;apply()})}
 
 document.addEventListener('click',e=>{
-  const target=e.target.closest?.('[data-nav],a[href]');if(!target||!currentRole)return;
-  const nav=target.getAttribute('data-nav')||target.getAttribute('href')?.replace(/^#/,'')||'';
+  const target=e.target.closest?.('[data-nav],[data-modal-nav],a[href]');if(!target||!currentRole)return;
+  const nav=target.getAttribute('data-nav')||target.getAttribute('data-modal-nav')||target.getAttribute('href')?.replace(/^#/,'')||'';
   let slug=null;
-  if(nav.split('?')[0]==='novo-jovem')slug='formulario-inicial';
-  else if(nav.startsWith('formulario/'))slug=nav.split('?')[0].split('/')[1]||null;
+  const clean=nav.split('?')[0];
+  if(clean==='novo-jovem'||clean.startsWith('editar-jovem/'))slug='formulario-inicial';
+  else if(clean.startsWith('formulario/'))slug=clean.split('/')[1]||null;
   if(slug&&!allowed(slug)){
     e.preventDefault();e.stopImmediatePropagation();deny(slug);
   }
