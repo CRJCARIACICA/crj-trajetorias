@@ -6,6 +6,7 @@ export const ROLES = {
   assistente_social: 'Assistente Social',
   psicologo: 'Psicólogo(a)',
   terapeuta_ocupacional: 'Terapeuta Ocupacional',
+  controlador_acesso: 'Controlador(a) de Acessos',
   administrativo: 'Administrativo',
   oficineiro: 'Oficineiro(a)',
   monitoramento: 'Monitoramento / Gestão OSC',
@@ -16,16 +17,34 @@ const ALL = ['dashboard','jovens','jovem_core','forms_operacionais','oficinas','
 export const PERMISSIONS = {
   coordenacao_geral: [...ALL,'editar_cadastro','jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','beneficios','articulacao','equipe','validar','lancamento_geral','relatorios','educador_area','technical_area','document_settings','workshop_education_docs','cfdh_shared'],
   coordenacao_articulacao: [...ALL,'editar_cadastro','atendimentos','articulacao','encaminhamentos','beneficios','lancamento_geral','relatorios'],
-  articulador: ['dashboard','jovens','jovem_core','forms_operacionais','articulacao','presencas','oficinas','lancamento_geral','agenda'],
+  articulador: ['dashboard','jovens','jovem_core','editar_cadastro','forms_operacionais','articulacao','presencas','oficinas','lancamento_geral','agenda'],
   educador: [...ALL,'editar_cadastro','atendimentos','encaminhamentos','beneficios','lancamento_geral','relatorios','educador_area','workshop_education_docs','cfdh_shared'],
   assistente_social: [...ALL,'editar_cadastro','jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','beneficios','lancamento_geral','relatorios','technical_area','cfdh_shared'],
   psicologo: [...ALL,'editar_cadastro','jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','lancamento_geral','relatorios','technical_area','cfdh_shared'],
   terapeuta_ocupacional: [...ALL,'editar_cadastro','jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','beneficios','lancamento_geral','relatorios','technical_area','cfdh_shared'],
-  administrativo: ['dashboard','jovens','jovem_core','editar_cadastro','forms_operacionais','oficinas','presencas','beneficios','metas','equipe','lancamento_geral','relatorios','agenda'],
+  controlador_acesso: ['dashboard','forms_operacionais','agenda'],
+  administrativo: ['dashboard','jovens','jovem_core','forms_operacionais','oficinas','presencas','beneficios','metas','equipe','lancamento_geral','relatorios','agenda'],
   oficineiro: ['dashboard','oficinas','presencas','forms_operacionais','agenda'],
   monitoramento: [...ALL,'jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','beneficios','articulacao','equipe','validar','lancamento_geral','relatorios','educador_area','technical_area','document_settings'],
   pendente: [],
 };
 
+export const FORM_FILL_ROLES = {
+  'formulario-inicial': ['coordenacao_geral','coordenacao_articulacao','articulador','educador','assistente_social','psicologo','terapeuta_ocupacional'],
+  'lista-presenca-contato': ['coordenacao_geral','controlador_acesso'],
+  'acompanhamento': ['coordenacao_geral','assistente_social','psicologo','terapeuta_ocupacional'],
+  'pvida': ['coordenacao_geral','assistente_social','psicologo','terapeuta_ocupacional'],
+  'outras-demandas': ['coordenacao_geral','assistente_social','psicologo','terapeuta_ocupacional'],
+  'ptrampo': ['coordenacao_geral','assistente_social','psicologo','terapeuta_ocupacional'],
+  'avaliacao-atividades': ['coordenacao_geral','educador'],
+  'relatorio-mobilizacao': ['coordenacao_geral','coordenacao_articulacao','articulador'],
+  'emprestimo': ['coordenacao_geral','controlador_acesso'],
+  'emprestimo-canhoto': ['coordenacao_geral','controlador_acesso'],
+  'cfdh-planejamento': ['coordenacao_geral','educador','assistente_social','psicologo','terapeuta_ocupacional'],
+  'cfdh-avaliacao-jovens': ['coordenacao_geral','educador','assistente_social','psicologo','terapeuta_ocupacional'],
+  'cfdh-avaliacao-equipe': ['coordenacao_geral','educador'],
+};
+
 export function can(role, permission){ return (PERMISSIONS[role] || []).includes(permission); }
+export function canFillForm(role, formSlug){ return (FORM_FILL_ROLES[formSlug] || []).includes(role); }
 export function roleLabel(role){ return ROLES[role] || role || 'Sem perfil'; }
