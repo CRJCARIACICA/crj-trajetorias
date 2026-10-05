@@ -1,5 +1,5 @@
 import { getSession } from './api.js?v=20261004-2';
-import { canFillForm, roleLabel } from './permissions.js?v=20261005-1';
+import { canFillForm, roleLabel } from './permissions.js?v=20261005-2';
 
 const ANNEX_TO_SLUG={
   'Anexo 1':'formulario-inicial',
