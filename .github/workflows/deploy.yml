@@ -30,7 +30,7 @@ jobs:
           rm -rf _site
           mkdir -p _site/src _site/assets
           cp index.html checkin.html demanda.html .nojekyll _site/
-          cp src/config.js src/permissions.js src/register.js src/checkin.js src/jhonatao.js src/jhonatao_multimodal.js src/jhonatao_live.js src/educator_complementary.js src/form_access.js src/articulation_workspace.js src/articulation_demand_identity.js src/articulation_evidence.js src/document_drafts.js src/universal_drafts.js src/demand_public.js src/demand_identity_public.js src/demand_public_enrollment.js src/team_comms.js _site/src/
+          cp src/config.js src/permissions.js src/register.js src/checkin.js src/jhonatao.js src/jhonatao_multimodal.js src/jhonatao_live.js src/educator_complementary.js src/form_access.js src/articulation_workspace.js src/articulation_demand_identity.js src/articulation_evidence.js src/document_drafts.js src/universal_drafts.js src/youth_profile_enhancements.js src/demand_public.js src/demand_identity_public.js src/team_comms.js _site/src/
           cat bundle/src__app_js.*.part > _site/src/app.js
           cat bundle/src__api_js.*.part > _site/src/api.js
           cat bundle/src__forms_js.*.part > _site/src/forms.js
@@ -53,9 +53,9 @@ jobs:
           node --check _site/src/articulation_evidence.js
           node --check _site/src/document_drafts.js
           node --check _site/src/universal_drafts.js
+          node --check _site/src/youth_profile_enhancements.js
           node --check _site/src/demand_public.js
           node --check _site/src/demand_identity_public.js
-          node --check _site/src/demand_public_enrollment.js
           node --check _site/src/team_comms.js
           node --input-type=module --check < _site/src/app.js
           node --input-type=module --check < _site/src/api.js
@@ -72,9 +72,9 @@ jobs:
           node --input-type=module --check < _site/src/articulation_evidence.js
           node --input-type=module --check < _site/src/document_drafts.js
           node --input-type=module --check < _site/src/universal_drafts.js
+          node --input-type=module --check < _site/src/youth_profile_enhancements.js
           node --input-type=module --check < _site/src/demand_public.js
           node --input-type=module --check < _site/src/demand_identity_public.js
-          node --input-type=module --check < _site/src/demand_public_enrollment.js
           node --input-type=module --check < _site/src/team_comms.js
           test -s _site/index.html
           test -s _site/demanda.html
@@ -83,7 +83,7 @@ jobs:
           test -s _site/src/forms.js
           test -s _site/src/demand_public.js
           test -s _site/src/demand_identity_public.js
-          test -s _site/src/demand_public_enrollment.js
+          test -s _site/src/youth_profile_enhancements.js
           test -s _site/src/articulation_demand_identity.js
           test -s _site/src/team_comms.js
           test -s _site/src/articulation_evidence.js
