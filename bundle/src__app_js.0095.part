@@ -1,5 +1,5 @@
 
-// Integração nativa do workspace da Articulação ao roteador principal.
+// Integração nativa da Articulação e da Central de Comunicação ao roteador principal.
 // Este patch roda depois da definição de render/layout e antes do boot final.
 const __crjBaseLayoutForArticulation = layout;
 const __crjBaseRenderForArticulation = render;
@@ -9,23 +9,24 @@ function __crjIsArticulationProfile(user){
   const team=String(user?.team||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
   return ['articulador','coordenacao_articulacao','coordenacao_geral'].includes(role)||team.includes('articula');
 }
-function __crjArticulationSpecialRoute(){
+function __crjOperationalSpecialRoute(){
   const p1=route().parts?.[0]||'';
-  return p1==='articulacao'||p1==='planos-mobilizacao';
+  return p1==='articulacao'||p1==='planos-mobilizacao'||p1==='caixa-equipes';
 }
-function __crjArticulationNavHtml(){
+function __crjOperationalNavHtml(){
   const user=state.user;
   if(!user||user.role==='pendente'||user.active===false)return '';
   const path=route().parts?.[0]||'';
+  const inbox=`<a href="#caixa-equipes" class="${path==='caixa-equipes'?'active':''}" data-team-inbox-link><span class="ico">✉</span><span data-team-inbox-label>Caixa das Equipes</span></a>`;
   const shared=`<a href="#planos-mobilizacao" class="${path==='planos-mobilizacao'?'active':''}">${icon('forms')}<span>Planos de Mobilização</span></a>`;
   const own=__crjIsArticulationProfile(user)
     ?`<a href="#articulacao" class="${path==='articulacao'?'active':''}"><span class="ico">⌖</span><span>Área da Articulação</span></a>`
     :'';
-  return own+shared;
+  return inbox+own+shared;
 }
 layout=function(content){
   const html=__crjBaseLayoutForArticulation(content);
-  const extra=__crjArticulationNavHtml();
+  const extra=__crjOperationalNavHtml();
   if(!extra)return html;
   const marker='<div class="sep"></div>';
   const at=html.lastIndexOf(marker);
@@ -33,11 +34,12 @@ layout=function(content){
   return html.slice(0,at)+extra+html.slice(at);
 };
 
-function __crjArticulationHost(){
-  return `<div data-articulation-native-host><div class="card"><div class="empty">Carregando ambiente da Articulação…</div></div></div>`;
+function __crjSpecialHost(p1){
+  const label=p1==='caixa-equipes'?'Carregando Caixa das Equipes…':'Carregando ambiente da Articulação…';
+  return `<div data-operational-native-host="${p1}"><div class="card"><div class="empty">${label}</div></div></div>`;
 }
-async function __crjStabilizeArticulationRoute(){
-  if(!__crjArticulationSpecialRoute())return;
+async function __crjStabilizeOperationalRoute(){
+  if(!__crjOperationalSpecialRoute())return;
   const p1=route().parts?.[0]||'';
   const content=document.querySelector('.content');
   if(!content)return;
@@ -46,15 +48,15 @@ async function __crjStabilizeArticulationRoute(){
     return;
   }
   const text=String(content.textContent||'');
-  if(text.includes('Página não encontrada')||text.includes('Pagina nao encontrada'))content.innerHTML=__crjArticulationHost();
-  // O workspace é carregado como módulo separado logo após app.js. Quando já estiver
-  // disponível, qualquer mutação deste host faz o observador dele renderizar a rota.
-  content.dataset.articulationNativeRoute=p1;
+  if(text.includes('Página não encontrada')||text.includes('Pagina nao encontrada'))content.innerHTML=__crjSpecialHost(p1);
+  content.dataset.operationalNativeRoute=p1;
+  if(p1==='articulacao'||p1==='planos-mobilizacao')content.dataset.articulationNativeRoute=p1;
+  if(p1==='caixa-equipes')content.dataset.teamInboxNativeRoute='1';
 }
 
 window.removeEventListener('hashchange',__crjBaseRenderForArticulation);
 render=async function(){
   await __crjBaseRenderForArticulation();
-  await __crjStabilizeArticulationRoute();
+  await __crjStabilizeOperationalRoute();
 };
 window.addEventListener('hashchange',render);
