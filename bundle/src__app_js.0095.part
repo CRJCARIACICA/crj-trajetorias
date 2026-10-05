@@ -1,0 +1,60 @@
+
+// Integração nativa do workspace da Articulação ao roteador principal.
+// Este patch roda depois da definição de render/layout e antes do boot final.
+const __crjBaseLayoutForArticulation = layout;
+const __crjBaseRenderForArticulation = render;
+
+function __crjIsArticulationProfile(user){
+  const role=String(user?.role||'');
+  const team=String(user?.team||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  return ['articulador','coordenacao_articulacao','coordenacao_geral'].includes(role)||team.includes('articula');
+}
+function __crjArticulationSpecialRoute(){
+  const p1=route().parts?.[0]||'';
+  return p1==='articulacao'||p1==='planos-mobilizacao';
+}
+function __crjArticulationNavHtml(){
+  const user=state.user;
+  if(!user||user.role==='pendente'||user.active===false)return '';
+  const path=route().parts?.[0]||'';
+  const shared=`<a href="#planos-mobilizacao" class="${path==='planos-mobilizacao'?'active':''}">${icon('forms')}<span>Planos de Mobilização</span></a>`;
+  const own=__crjIsArticulationProfile(user)
+    ?`<a href="#articulacao" class="${path==='articulacao'?'active':''}"><span class="ico">⌖</span><span>Área da Articulação</span></a>`
+    :'';
+  return own+shared;
+}
+layout=function(content){
+  const html=__crjBaseLayoutForArticulation(content);
+  const extra=__crjArticulationNavHtml();
+  if(!extra)return html;
+  const marker='<div class="sep"></div>';
+  const at=html.lastIndexOf(marker);
+  if(at<0)return html;
+  return html.slice(0,at)+extra+html.slice(at);
+};
+
+function __crjArticulationHost(){
+  return `<div data-articulation-native-host><div class="card"><div class="empty">Carregando ambiente da Articulação…</div></div></div>`;
+}
+async function __crjStabilizeArticulationRoute(){
+  if(!__crjArticulationSpecialRoute())return;
+  const p1=route().parts?.[0]||'';
+  const content=document.querySelector('.content');
+  if(!content)return;
+  if(p1==='articulacao'&&!__crjIsArticulationProfile(state.user)){
+    content.innerHTML='<div class="notice danger">Seu perfil não possui acesso à Área da Articulação.</div>';
+    return;
+  }
+  const text=String(content.textContent||'');
+  if(text.includes('Página não encontrada')||text.includes('Pagina nao encontrada'))content.innerHTML=__crjArticulationHost();
+  // O workspace é carregado como módulo separado logo após app.js. Quando já estiver
+  // disponível, qualquer mutação deste host faz o observador dele renderizar a rota.
+  content.dataset.articulationNativeRoute=p1;
+}
+
+window.removeEventListener('hashchange',__crjBaseRenderForArticulation);
+render=async function(){
+  await __crjBaseRenderForArticulation();
+  await __crjStabilizeArticulationRoute();
+};
+window.addEventListener('hashchange',render);
