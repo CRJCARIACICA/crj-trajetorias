@@ -30,7 +30,7 @@ jobs:
           rm -rf _site
           mkdir -p _site/src _site/assets
           cp index.html checkin.html demanda.html .nojekyll _site/
-          cp src/config.js src/permissions.js src/register.js src/checkin.js src/jhonatao.js src/jhonatao_multimodal.js src/jhonatao_live.js src/educator_complementary.js src/form_access.js src/articulation_workspace.js src/demand_public.js _site/src/
+          cp src/config.js src/permissions.js src/register.js src/checkin.js src/jhonatao.js src/jhonatao_multimodal.js src/jhonatao_live.js src/educator_complementary.js src/form_access.js src/articulation_workspace.js src/demand_public.js src/team_comms.js _site/src/
           cat bundle/src__app_js.*.part > _site/src/app.js
           cat bundle/src__api_js.*.part > _site/src/api.js
           cat bundle/src__forms_js.*.part > _site/src/forms.js
@@ -50,6 +50,7 @@ jobs:
           node --check _site/src/form_access.js
           node --check _site/src/articulation_workspace.js
           node --check _site/src/demand_public.js
+          node --check _site/src/team_comms.js
           node --input-type=module --check < _site/src/app.js
           node --input-type=module --check < _site/src/api.js
           node --input-type=module --check < _site/src/forms.js
@@ -62,12 +63,14 @@ jobs:
           node --input-type=module --check < _site/src/form_access.js
           node --input-type=module --check < _site/src/articulation_workspace.js
           node --input-type=module --check < _site/src/demand_public.js
+          node --input-type=module --check < _site/src/team_comms.js
           test -s _site/index.html
           test -s _site/demanda.html
           test -s _site/src/app.js
           test -s _site/src/api.js
           test -s _site/src/forms.js
           test -s _site/src/demand_public.js
+          test -s _site/src/team_comms.js
           test -s _site/assets/app.css
 
       - name: Setup Pages
