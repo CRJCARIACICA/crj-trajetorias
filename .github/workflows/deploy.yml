@@ -30,7 +30,7 @@ jobs:
           rm -rf _site
           mkdir -p _site/src _site/assets
           cp index.html checkin.html demanda.html access.html .nojekyll _site/
-          cp src/config.js src/permissions.js src/register.js src/checkin.js src/jhonatao.js src/jhonatao_multimodal.js src/jhonatao_live.js src/educator_complementary.js src/form_access.js src/technical_team_enhancements.js src/access_controller.js src/access_public.js src/articulation_workspace.js src/articulation_demand_identity.js src/articulation_evidence.js src/document_drafts.js src/universal_drafts.js src/youth_profile_enhancements.js src/developer_view.js src/workshop_devices.js src/instructor_management.js src/instructor_portal.js src/workshop_collaboration.js src/workshop_live_sync.js src/demand_public.js src/demand_identity_public.js src/team_comms.js _site/src/
+          cp src/config.js src/permissions.js src/register.js src/checkin.js src/jhonatao.js src/jhonatao_multimodal.js src/jhonatao_live.js src/educator_complementary.js src/form_access.js src/technical_team_enhancements.js src/access_controller.js src/access_public.js src/articulation_workspace.js src/articulation_demand_identity.js src/articulation_evidence.js src/document_drafts.js src/universal_drafts.js src/youth_profile_enhancements.js src/developer_view.js src/workshop_devices.js src/instructor_management.js src/instructor_portal.js src/workshop_collaboration.js src/workshop_live_sync.js src/workshop_plan_delete.js src/demand_public.js src/demand_identity_public.js src/team_comms.js _site/src/
           cat bundle/src__app_js.*.part > _site/src/app.js
           cat bundle/src__api_js.*.part > _site/src/api.js
           cat bundle/src__forms_js.*.part > _site/src/forms.js
@@ -65,6 +65,7 @@ jobs:
           node --check _site/src/instructor_portal.js
           node --check _site/src/workshop_collaboration.js
           node --check _site/src/workshop_live_sync.js
+          node --check _site/src/workshop_plan_delete.js
           node --check _site/src/demand_public.js
           node --check _site/src/demand_identity_public.js
           node --check _site/src/team_comms.js
@@ -93,6 +94,7 @@ jobs:
           node --input-type=module --check < _site/src/instructor_portal.js
           node --input-type=module --check < _site/src/workshop_collaboration.js
           node --input-type=module --check < _site/src/workshop_live_sync.js
+          node --input-type=module --check < _site/src/workshop_plan_delete.js
           node --input-type=module --check < _site/src/demand_public.js
           node --input-type=module --check < _site/src/demand_identity_public.js
           node --input-type=module --check < _site/src/team_comms.js
@@ -111,6 +113,7 @@ jobs:
           test -s _site/src/instructor_portal.js
           test -s _site/src/workshop_collaboration.js
           test -s _site/src/workshop_live_sync.js
+          test -s _site/src/workshop_plan_delete.js
           test -s _site/src/demand_public.js
           test -s _site/src/demand_identity_public.js
           test -s _site/src/youth_profile_enhancements.js
