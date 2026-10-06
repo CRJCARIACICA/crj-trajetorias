@@ -9,6 +9,9 @@ function __crjIsArticulationProfile(user){
   const team=String(user?.team||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
   return ['articulador','coordenacao_articulacao','coordenacao_geral'].includes(role)||team.includes('articula');
 }
+function __crjIsInstructorProfile(user){
+  return String(user?.role||'')==='oficineiro';
+}
 function __crjOperationalSpecialRoute(){
   const p1=route().parts?.[0]||'';
   return p1==='articulacao'||p1==='planos-mobilizacao'||p1==='caixa-equipes'||p1==='documentos-evidencias';
@@ -17,9 +20,10 @@ function __crjOperationalNavHtml(){
   const user=state.user;
   if(!user||user.role==='pendente'||user.active===false)return '';
   const path=route().parts?.[0]||'';
+  const instructor=__crjIsInstructorProfile(user);
   const inbox=`<a href="#caixa-equipes" class="${path==='caixa-equipes'?'active':''}" data-team-inbox-link><span class="ico">✉</span><span data-team-inbox-label>Caixa das Equipes</span></a>`;
-  const docs=`<a href="#documentos-evidencias" class="${path==='documentos-evidencias'?'active':''}">${icon('forms')}<span>Documentos e Evidências</span></a>`;
-  const shared=`<a href="#planos-mobilizacao" class="${path==='planos-mobilizacao'?'active':''}">${icon('forms')}<span>Planos de Mobilização</span></a>`;
+  const docs=instructor?'':`<a href="#documentos-evidencias" class="${path==='documentos-evidencias'?'active':''}">${icon('forms')}<span>Documentos e Evidências</span></a>`;
+  const shared=instructor?'':`<a href="#planos-mobilizacao" class="${path==='planos-mobilizacao'?'active':''}">${icon('forms')}<span>Planos de Mobilização</span></a>`;
   const own=__crjIsArticulationProfile(user)
     ?`<a href="#articulacao" class="${path==='articulacao'?'active':''}"><span class="ico">⌖</span><span>Área da Articulação</span></a>`
     :'';
@@ -44,6 +48,10 @@ async function __crjStabilizeOperationalRoute(){
   const p1=route().parts?.[0]||'';
   const content=document.querySelector('.content');
   if(!content)return;
+  if(__crjIsInstructorProfile(state.user)&&['planos-mobilizacao','documentos-evidencias','articulacao'].includes(p1)){
+    content.innerHTML='<div class="notice danger">Seu perfil de oficineiro não possui acesso a esta área.</div>';
+    return;
+  }
   if(p1==='articulacao'&&!__crjIsArticulationProfile(state.user)){
     content.innerHTML='<div class="notice danger">Seu perfil não possui acesso à Área da Articulação.</div>';
     return;
