@@ -30,13 +30,13 @@ jobs:
           rm -rf _site
           mkdir -p _site/src _site/assets
           cp index.html checkin.html demanda.html access.html .nojekyll _site/
-          cp src/config.js src/permissions.js src/register.js src/checkin.js src/jhonatao.js src/jhonatao_multimodal.js src/jhonatao_live.js src/educator_complementary.js src/form_access.js src/technical_team_enhancements.js src/access_controller.js src/access_public.js src/articulation_workspace.js src/articulation_demand_identity.js src/articulation_evidence.js src/document_drafts.js src/universal_drafts.js src/youth_profile_enhancements.js src/developer_view.js src/workshop_devices.js src/instructor_management.js src/demand_public.js src/demand_identity_public.js src/team_comms.js _site/src/
+          cp src/config.js src/permissions.js src/register.js src/checkin.js src/jhonatao.js src/jhonatao_multimodal.js src/jhonatao_live.js src/educator_complementary.js src/form_access.js src/technical_team_enhancements.js src/access_controller.js src/access_public.js src/articulation_workspace.js src/articulation_demand_identity.js src/articulation_evidence.js src/document_drafts.js src/universal_drafts.js src/youth_profile_enhancements.js src/developer_view.js src/workshop_devices.js src/instructor_management.js src/instructor_portal.js src/demand_public.js src/demand_identity_public.js src/team_comms.js _site/src/
           cat bundle/src__app_js.*.part > _site/src/app.js
           cat bundle/src__api_js.*.part > _site/src/api.js
           cat bundle/src__forms_js.*.part > _site/src/forms.js
           cat bundle/src__agenda_js.*.part > _site/src/agenda.js
           # Força o app montado a usar a matriz de permissões mais recente, evitando cache de imports antigos.
-          sed -i 's#permissions.js?v=20261003-6#permissions.js?v=20261005-4#g' _site/src/app.js
+          sed -i 's#permissions.js?v=20261003-6#permissions.js?v=20261006-3#g' _site/src/app.js
           cat bundle/assets__app_css.*.part assets/jhonatao.css assets/jhonatao_multimodal.css assets/jhonatao_jarvis.css > _site/assets/app.css
           node --check _site/src/app.js
           node --check _site/src/api.js
@@ -62,6 +62,7 @@ jobs:
           node --check _site/src/developer_view.js
           node --check _site/src/workshop_devices.js
           node --check _site/src/instructor_management.js
+          node --check _site/src/instructor_portal.js
           node --check _site/src/demand_public.js
           node --check _site/src/demand_identity_public.js
           node --check _site/src/team_comms.js
@@ -87,6 +88,7 @@ jobs:
           node --input-type=module --check < _site/src/developer_view.js
           node --input-type=module --check < _site/src/workshop_devices.js
           node --input-type=module --check < _site/src/instructor_management.js
+          node --input-type=module --check < _site/src/instructor_portal.js
           node --input-type=module --check < _site/src/demand_public.js
           node --input-type=module --check < _site/src/demand_identity_public.js
           node --input-type=module --check < _site/src/team_comms.js
@@ -102,6 +104,7 @@ jobs:
           test -s _site/src/developer_view.js
           test -s _site/src/workshop_devices.js
           test -s _site/src/instructor_management.js
+          test -s _site/src/instructor_portal.js
           test -s _site/src/demand_public.js
           test -s _site/src/demand_identity_public.js
           test -s _site/src/youth_profile_enhancements.js
