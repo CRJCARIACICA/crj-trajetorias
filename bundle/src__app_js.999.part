@@ -1,0 +1,39 @@
+
+// Developer preview bridge — native layout + permission simulation for enabled profiles.
+// This does not change the real profile role and does not grant database write permissions.
+const __developerPreviewRealPermitted = permitted;
+const __developerPreviewRealLayout = layout;
+const __developerPreviewScopePermissions = {
+  geral: ['dashboard','jovens','jovem_core','forms_operacionais','oficinas','presencas','metas','agenda','editar_cadastro','jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','beneficios','articulacao','equipe','validar','lancamento_geral','relatorios','educador_area','technical_area','document_settings','workshop_education_docs','cfdh_shared'],
+  coordenacao: ['dashboard','jovens','jovem_core','forms_operacionais','oficinas','presencas','metas','agenda','editar_cadastro','jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','beneficios','articulacao','equipe','validar','lancamento_geral','relatorios','educador_area','technical_area','document_settings','workshop_education_docs','cfdh_shared'],
+  articulacao: ['dashboard','jovens','jovem_core','editar_cadastro','forms_operacionais','articulacao','presencas','oficinas','lancamento_geral','agenda','atendimentos','encaminhamentos','beneficios','relatorios'],
+  educadores: ['dashboard','jovens','jovem_core','forms_operacionais','oficinas','presencas','metas','agenda','editar_cadastro','atendimentos','encaminhamentos','beneficios','lancamento_geral','relatorios','educador_area','workshop_education_docs','cfdh_shared'],
+  equipe_tecnica: ['dashboard','jovens','jovem_core','forms_operacionais','oficinas','presencas','metas','agenda','editar_cadastro','jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','beneficios','lancamento_geral','relatorios','technical_area','cfdh_shared'],
+  administrativo: ['dashboard','jovens','jovem_core','forms_operacionais','oficinas','presencas','beneficios','metas','equipe','lancamento_geral','relatorios','agenda'],
+  controlador_acesso: ['dashboard','forms_operacionais','agenda'],
+  monitoramento: ['dashboard','jovens','jovem_core','forms_operacionais','oficinas','presencas','metas','agenda','jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','beneficios','articulacao','equipe','validar','lancamento_geral','relatorios','educador_area','technical_area','document_settings'],
+  oficineiros: ['dashboard','oficinas','presencas','forms_operacionais','agenda'],
+};
+function __developerPreviewScope(){
+  if(!state.user?.developer_preview_enabled)return null;
+  try{
+    const raw=sessionStorage.getItem('crj_developer_preview');
+    if(!raw)return null;
+    const parsed=JSON.parse(raw);
+    return parsed?.enabled && __developerPreviewScopePermissions[parsed.scope] ? parsed.scope : null;
+  }catch{return null}
+}
+permitted = function(permission){
+  const scope=__developerPreviewScope();
+  if(scope)return __developerPreviewScopePermissions[scope].includes(permission);
+  return __developerPreviewRealPermitted(permission);
+};
+layout = function(content){
+  let html=__developerPreviewRealLayout(content);
+  if(!state.user?.developer_preview_enabled)return html;
+  const scope=__developerPreviewScope();
+  const label=scope ? `◉ Desenvolvedor · ${scope.replaceAll('_',' ')}` : '◉ Visualizar como desenvolvedor';
+  const helper=scope ? 'Clique para trocar ou sair' : 'Geral ou por equipe';
+  const control=`<button type="button" class="dev-view-button${scope?' active':''}" data-developer-view-button="1">${label}<br><small style="font-weight:600;opacity:.82">${helper}</small></button>`;
+  return html.replace('</div></aside>',`${control}</div></aside>`);
+};
