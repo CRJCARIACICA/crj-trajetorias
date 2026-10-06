@@ -73,9 +73,13 @@ export async function printEvidence(submissionId){
         frame.contentWindow?.print();
         setTimeout(cleanup,60000);
       }catch{
-        cleanup();
+        try{frame.remove()}catch{}
         const win=window.open(url,'_blank','noopener,noreferrer');
-        if(!win)throw new Error('O navegador bloqueou a janela de impressão. Libere pop-ups para este sistema.');
+        if(!win){
+          URL.revokeObjectURL(url);
+          throw new Error('O navegador bloqueou a janela de impressão. Libere pop-ups para este sistema.');
+        }
+        setTimeout(()=>URL.revokeObjectURL(url),60000);
       }
     },450);
   };
