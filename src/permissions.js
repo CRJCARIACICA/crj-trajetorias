@@ -24,7 +24,7 @@ export const PERMISSIONS = {
   terapeuta_ocupacional: [...ALL,'editar_cadastro','jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','beneficios','lancamento_geral','relatorios','technical_area','cfdh_shared'],
   controlador_acesso: ['dashboard','forms_operacionais','agenda'],
   administrativo: ['dashboard','jovens','jovem_core','forms_operacionais','oficinas','presencas','beneficios','metas','equipe','lancamento_geral','relatorios','agenda'],
-  oficineiro: ['dashboard','oficinas','presencas','forms_operacionais','agenda'],
+  oficineiro: [],
   monitoramento: [...ALL,'jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','beneficios','articulacao','equipe','validar','lancamento_geral','relatorios','educador_area','technical_area','document_settings'],
   pendente: [],
 };
