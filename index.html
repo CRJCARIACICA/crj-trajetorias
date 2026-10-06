@@ -32,6 +32,65 @@
   <script type="module" src="./src/instructor_portal.js?v=20261006-1"></script>
   <script type="module" src="./src/workshop_collaboration.js?v=20261006-1"></script>
   <script type="module" src="./src/workshop_live_sync.js?v=20261006-1"></script>
+  <script type="module">
+    import { apiMode, supabaseClient } from './src/api.js?v=20261004-2';
+
+    const PREVIEW_KEY='crj_developer_preview';
+    let instructorView=false;
+
+    function developerInstructorView(){
+      try{
+        const value=JSON.parse(sessionStorage.getItem(PREVIEW_KEY)||'null');
+        return value?.enabled===true && value?.scope==='oficineiros';
+      }catch{return false;}
+    }
+
+    function normalizeText(value=''){
+      return String(value)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g,'')
+        .replace(/\s+/g,' ')
+        .trim()
+        .toLowerCase();
+    }
+
+    function removeMobilizationMenu(){
+      if(!instructorView && !developerInstructorView())return;
+      const roots=[...document.querySelectorAll('.sidebar,.sidebar-nav,aside nav,nav')];
+      for(const root of roots){
+        for(const node of root.querySelectorAll('a,button,[data-nav],li,.nav-item,.sidebar-item,.sidebar-link')){
+          const text=normalizeText(node.textContent);
+          if(!text.includes('planos de mobilizacao'))continue;
+          const target=node.closest('a,button,[data-nav],li,.nav-item,.sidebar-item,.sidebar-link')||node;
+          target.hidden=true;
+          target.setAttribute('aria-hidden','true');
+          target.style.setProperty('display','none','important');
+        }
+      }
+    }
+
+    async function resolveInstructorView(){
+      if(developerInstructorView()){
+        instructorView=true;
+        removeMobilizationMenu();
+        return;
+      }
+      for(let i=0;i<50 && apiMode()!=='live';i++)await new Promise(r=>setTimeout(r,100));
+      if(apiMode()!=='live')return;
+      const client=supabaseClient();
+      const {data:{user}}=await client.auth.getUser();
+      if(!user)return;
+      const {data}=await client.from('profiles').select('role,active').eq('id',user.id).maybeSingle();
+      instructorView=data?.role==='oficineiro' && data?.active!==false;
+      removeMobilizationMenu();
+    }
+
+    const observer=new MutationObserver(removeMobilizationMenu);
+    observer.observe(document.body,{childList:true,subtree:true});
+    window.addEventListener('hashchange',()=>setTimeout(removeMobilizationMenu,30));
+    window.addEventListener('storage',()=>setTimeout(removeMobilizationMenu,30));
+    resolveInstructorView().catch(err=>console.warn('Não foi possível aplicar o menu restrito do oficineiro:',err));
+  </script>
   <script type="module" src="./src/jhonatao_multimodal.js?v=20261004-8"></script>
   <script type="module" src="./src/jhonatao_live.js?v=20261004-5"></script>
 </body>
