@@ -45,6 +45,41 @@ export const FORM_FILL_ROLES = {
   'cfdh-avaliacao-equipe': ['coordenacao_geral','educador'],
 };
 
-export function can(role, permission){ return (PERMISSIONS[role] || []).includes(permission); }
+export const DEVELOPER_PREVIEW_KEY = 'crj_developer_preview';
+export const DEVELOPER_PREVIEW_SCOPES = {
+  geral: { label:'Visão geral', roles:['coordenacao_geral','coordenacao_articulacao','articulador','educador','assistente_social','psicologo','terapeuta_ocupacional','controlador_acesso','administrativo','oficineiro','monitoramento'] },
+  coordenacao: { label:'Coordenação', roles:['coordenacao_geral'] },
+  articulacao: { label:'Articulação', roles:['coordenacao_articulacao','articulador'] },
+  educadores: { label:'Educadores', roles:['educador'] },
+  equipe_tecnica: { label:'Equipe Técnica', roles:['assistente_social','psicologo','terapeuta_ocupacional'] },
+  administrativo: { label:'Administrativo', roles:['administrativo'] },
+  controlador_acesso: { label:'Controlador de Acessos', roles:['controlador_acesso'] },
+  monitoramento: { label:'Monitoramento / Gestão OSC', roles:['monitoramento'] },
+  oficineiros: { label:'Oficineiros', roles:['oficineiro'] },
+};
+
+function activeDeveloperScope(){
+  try{
+    const raw=sessionStorage.getItem(DEVELOPER_PREVIEW_KEY);
+    if(!raw)return null;
+    const parsed=JSON.parse(raw);
+    if(!parsed?.enabled || !DEVELOPER_PREVIEW_SCOPES[parsed.scope])return null;
+    return parsed.scope;
+  }catch{return null;}
+}
+function previewPermissions(scope){
+  const cfg=DEVELOPER_PREVIEW_SCOPES[scope];
+  if(!cfg)return [];
+  return [...new Set(cfg.roles.flatMap(role=>PERMISSIONS[role]||[]))];
+}
+export function developerPreviewScope(){return activeDeveloperScope();}
+export function developerPreviewLabel(){const scope=activeDeveloperScope();return scope?DEVELOPER_PREVIEW_SCOPES[scope]?.label||scope:null;}
+
+export function can(role, permission){
+  const scope=activeDeveloperScope();
+  if(scope)return previewPermissions(scope).includes(permission);
+  return (PERMISSIONS[role] || []).includes(permission);
+}
+// O modo desenvolvedor é deliberadamente somente leitura: não amplia preenchimento de formulários.
 export function canFillForm(role, formSlug){ return (FORM_FILL_ROLES[formSlug] || []).includes(role); }
 export function roleLabel(role){ return ROLES[role] || role || 'Sem perfil'; }
