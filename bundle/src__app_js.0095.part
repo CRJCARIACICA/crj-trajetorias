@@ -10,7 +10,14 @@ function __crjIsArticulationProfile(user){
   return ['articulador','coordenacao_articulacao','coordenacao_geral'].includes(role)||team.includes('articula');
 }
 function __crjIsInstructorProfile(user){
-  return String(user?.role||'')==='oficineiro';
+  if(String(user?.role||'')==='oficineiro')return true;
+  if(!user?.developer_preview_enabled)return false;
+  try{
+    const raw=sessionStorage.getItem('crj_developer_preview');
+    if(!raw)return false;
+    const parsed=JSON.parse(raw);
+    return parsed?.enabled===true&&parsed?.scope==='oficineiros';
+  }catch{return false;}
 }
 function __crjOperationalSpecialRoute(){
   const p1=route().parts?.[0]||'';
