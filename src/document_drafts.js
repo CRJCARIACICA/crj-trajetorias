@@ -1,3 +1,4 @@
+import './document_delete.js?v=20261007-1';
 import { apiMode, supabaseClient, updateYouth, saveFormSubmission } from './api.js?v=20261004-2';
 import { FORMS } from './forms.js';
 import { canFillForm } from './permissions.js';
