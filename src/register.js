@@ -8,6 +8,7 @@ const FUNCTIONS = [
   ['assistente_social','Assistente Social'],
   ['psicologo','Psicólogo(a)'],
   ['terapeuta_ocupacional','Terapeuta Ocupacional'],
+  ['controlador_acesso','Controlador(a) de Acessos'],
   ['administrativo','Administrativo'],
   ['oficineiro','Oficineiro(a)'],
   ['monitoramento','Monitoramento / Gestão OSC'],
