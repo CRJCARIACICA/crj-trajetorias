@@ -13,9 +13,257 @@
       <div class="brand-mark">CRJ</div>
       <h1>Lista de presença</h1>
       <p class="muted">Identifique sua situação e o sistema mostrará somente a próxima etapa necessária.</p>
+      <div id="checkin-draft-banner"></div>
       <div id="checkin-app"><div class="notice">Carregando lista...</div></div>
     </section>
   </main>
   <script type="module" src="./src/checkin.js?v=20261003-1"></script>
+  <script type="module">
+    import { CONFIG } from './src/config.js';
+
+    const qs=new URLSearchParams(location.search);
+    const cfdhMode=Boolean(qs.get('cfdh'));
+    const token=qs.get('cfdh')||qs.get('token');
+    const app=document.querySelector('#checkin-app');
+    const banner=document.querySelector('#checkin-draft-banner');
+    const localKey=token?'crj_checkin_draft_v3:'+token:null;
+    const candidateKey=token?'crj_checkin_candidate_v3:'+token:null;
+    const cpfKey=token?'crj_checkin_cpf_v3:'+token:null;
+    let candidateId=candidateKey?sessionStorage.getItem(candidateKey):null;
+    let dbPromise=null,saveTimer=null,lastPrepared=null;
+
+    const esc=(v='')=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+    const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+    async function getDb(){
+      if(dbPromise)return dbPromise;
+      dbPromise=(async()=>{
+        let mod;
+        try{mod=await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm')}
+        catch{mod=await import('https://esm.sh/@supabase/supabase-js@2.117.2')}
+        return mod.createClient(CONFIG.supabaseUrl,CONFIG.supabasePublishableKey,{auth:{persistSession:false,autoRefreshToken:false}});
+      })();
+      return dbPromise;
+    }
+
+    function getDraft(){
+      if(!localKey)return null;
+      try{return JSON.parse(localStorage.getItem(localKey)||'null')}catch{return null}
+    }
+    function formValues(form){
+      const values={};
+      for(const el of form.querySelectorAll('input,select,textarea')){
+        if(!el.name||el.name==='secret'||el.type==='password'||el.type==='file')continue;
+        if((el.type==='checkbox'||el.type==='radio')&&!el.checked)continue;
+        if(el.type==='checkbox'){
+          if(!Array.isArray(values[el.name]))values[el.name]=[];
+          values[el.name].push(el.value);
+        }else values[el.name]=el.value;
+      }
+      return values;
+    }
+    function saveLocal(form,reason='alteração'){
+      if(!localKey||!form)return null;
+      const draft={formId:form.id||'checkin-form',candidateId:candidateId||null,values:formValues(form),savedAt:new Date().toISOString(),reason};
+      try{localStorage.setItem(localKey,JSON.stringify(draft))}catch{}
+      renderBanner(draft);
+      updateDraftStatus(form,'Rascunho salvo automaticamente neste aparelho.');
+      return draft;
+    }
+    function renderBanner(draft=getDraft()){
+      if(!banner)return;
+      if(!draft){banner.innerHTML='';return}
+      const when=draft.savedAt?new Date(draft.savedAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'';
+      banner.innerHTML='<div class="notice info"><b>Rascunho protegido'+(when?' · '+esc(when):'')+'</b><br>Se a página for atualizada ou ocorrer erro, volte ao mesmo jovem/etapa. Os campos salvos serão restaurados automaticamente. Senha e assinatura precisam ser informadas novamente por segurança.</div>';
+    }
+    function updateDraftStatus(form,text){
+      let el=form.querySelector('[data-checkin-draft-status]');
+      if(!el){
+        el=document.createElement('small');
+        el.dataset.checkinDraftStatus='1';
+        el.style.display='block';el.style.margin='4px 0 10px';el.style.opacity='.8';
+        form.prepend(el);
+      }
+      el.textContent=text;
+    }
+    function restoreLocal(form){
+      const draft=getDraft();
+      if(!draft||draft.formId!==form.id)return false;
+      if(draft.candidateId&&candidateId&&draft.candidateId!==candidateId)return false;
+      for(const [name,value] of Object.entries(draft.values||{})){
+        const fields=[...form.querySelectorAll('[name="'+CSS.escape(name)+'"]')];
+        for(const el of fields){
+          if(el.type==='password'||el.name==='secret')continue;
+          if(el.type==='checkbox'||el.type==='radio')el.checked=Array.isArray(value)?value.includes(el.value):String(value)===el.value;
+          else if(!el.value)el.value=value??'';
+        }
+      }
+      updateDraftStatus(form,'Rascunho restaurado. Confira os dados, informe a senha e assine novamente se necessário.');
+      return true;
+    }
+    async function saveServer(form){
+      if(cfdhMode||!token||!candidateId||form?.id!=='enroll-existing-form')return;
+      const values=formValues(form);
+      try{
+        const db=await getDb();
+        await db.rpc('workshop_checkin_save_draft',{p_token:token,p_youth_id:candidateId,p_payload:{cpf:values.cpf||null,email:values.email||null,neighborhood:values.neighborhood||null,form_id:form.id}});
+      }catch{}
+    }
+    async function restoreServer(form){
+      if(cfdhMode||!token||!candidateId||form?.id!=='enroll-existing-form')return;
+      try{
+        const db=await getDb();
+        const {data,error}=await db.rpc('workshop_checkin_get_draft',{p_token:token,p_youth_id:candidateId});
+        if(error||!data)return;
+        for(const name of ['cpf','email','neighborhood']){
+          const el=form.elements.namedItem(name);
+          if(el&&!el.value&&data[name])el.value=data[name];
+        }
+        if(Object.keys(data).length)updateDraftStatus(form,'Rascunho recuperado do servidor. Informe a senha e assine novamente se necessário.');
+      }catch{}
+    }
+    async function clearDraft(){
+      if(localKey)try{localStorage.removeItem(localKey)}catch{}
+      renderBanner(null);
+      if(!cfdhMode&&token&&candidateId){
+        try{const db=await getDb();await db.rpc('workshop_checkin_clear_draft',{p_token:token,p_youth_id:candidateId})}catch{}
+      }
+    }
+    function canvasSignature(form){
+      const canvas=form.querySelector('[data-signature]');
+      if(!canvas)return null;
+      try{
+        const g=canvas.getContext('2d',{willReadFrequently:true});
+        if(!g)return null;
+        const pixels=g.getImageData(0,0,canvas.width,canvas.height).data;
+        let ink=false;
+        for(let i=3;i<pixels.length;i+=4){if(pixels[i]!==0){ink=true;break}}
+        return ink?canvas.toDataURL('image/png'):null;
+      }catch{return null}
+    }
+    async function rpcTimeout(name,args,ms=20000){
+      const db=await getDb();
+      let timer;
+      try{
+        return await Promise.race([
+          db.rpc(name,args),
+          new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('A operação demorou mais do que o esperado. O rascunho foi mantido; tente novamente.')),ms)})
+        ]);
+      }finally{clearTimeout(timer)}
+    }
+    function showError(form,message){
+      form.querySelector('[data-checkin-resilience-error]')?.remove();
+      const div=document.createElement('div');div.className='notice danger';div.dataset.checkinResilienceError='1';
+      div.innerHTML='<b>Não foi possível concluir</b><br>'+esc(message)+'<br><small>Os dados não sigilosos deste preenchimento permanecem salvos como rascunho.</small>';
+      form.prepend(div);
+    }
+    function showSuccess(message){
+      app.innerHTML='<div class="checkin-success"><div class="success-mark">✓</div><h2>Inscrição e presença confirmadas</h2><p>'+esc(message)+'</p><button type="button" class="btn primary" data-next-resilient>Registrar próxima pessoa</button></div>';
+      app.querySelector('[data-next-resilient]')?.addEventListener('click',()=>location.reload());
+    }
+    async function resolveCandidateFromCpf(){
+      if(candidateId||!token)return candidateId;
+      const cpf=cpfKey?sessionStorage.getItem(cpfKey):null;
+      if(!cpf)return null;
+      try{
+        const db=await getDb();
+        const rpc=cfdhMode?'cfdh_checkin_cpf_status':'workshop_checkin_cpf_status';
+        const {data,error}=await db.rpc(rpc,{p_token:token,p_cpf:cpf});
+        if(!error&&data?.kind==='youth'&&data.candidate_id){
+          candidateId=data.candidate_id;
+          sessionStorage.setItem(candidateKey,candidateId);
+        }
+      }catch{}
+      return candidateId;
+    }
+    async function completeExisting(form,isStartInitial=false){
+      saveLocal(form,'antes de concluir');
+      await resolveCandidateFromCpf();
+      await saveServer(form);
+      const btn=form.querySelector('button[type="submit"],button.btn.primary');
+      if(!candidateId){showError(form,'Não foi possível identificar o cadastro selecionado. Volte à pesquisa e selecione o jovem novamente; o rascunho continuará salvo.');return}
+      const secret=String(form.elements.namedItem('secret')?.value||'');
+      if(secret.length<4){showError(form,'Crie uma senha com pelo menos 4 caracteres.');return}
+      const canvas=form.querySelector('[data-signature]');
+      const signature=canvas?canvasSignature(form):null;
+      if(canvas&&!signature){showError(form,'Assine no quadro antes de continuar.');return}
+      const values=formValues(form);
+      btn.disabled=true;const original=btn.textContent;btn.textContent='Registrando...';
+      try{
+        let result;
+        if(isStartInitial){
+          result=await rpcTimeout('cfdh_checkin_start_initial_existing',{p_token:token,p_youth_id:candidateId,p_cpf_if_missing:values.cpf||null,p_email_if_missing:values.email||null,p_neighborhood_if_missing:values.neighborhood||null,p_signature_data:signature,p_secret:secret});
+        }else{
+          const rpc=cfdhMode?'cfdh_checkin_enroll_existing':'workshop_checkin_enroll_existing';
+          const args=cfdhMode
+            ?{p_token:token,p_youth_id:candidateId,p_signature_data:signature,p_secret:secret}
+            :{p_token:token,p_youth_id:candidateId,p_signature_data:signature,p_secret:secret,p_cpf_if_missing:values.cpf||null,p_email_if_missing:values.email||null,p_neighborhood_if_missing:values.neighborhood||null};
+          result=await rpcTimeout(rpc,args);
+        }
+        if(result?.error)throw result.error;
+        await clearDraft();
+        showSuccess(cfdhMode?'O jovem foi inscrito no CFDH e a presença desta ação foi registrada.':'O jovem foi inscrito na oficina e a presença desta aula foi registrada.');
+      }catch(err){
+        btn.disabled=false;btn.textContent=original;
+        saveLocal(form,'erro ao concluir');
+        await saveServer(form);
+        showError(form,err?.message||String(err));
+      }
+    }
+    async function prepareForm(form){
+      if(!form||lastPrepared===form)return;
+      lastPrepared=form;
+      const primary=form.querySelector('button.btn.primary:not([type]),button[type="submit"].btn.primary');
+      if(primary&&!primary.hasAttribute('type'))primary.type='submit';
+      restoreLocal(form);
+      await resolveCandidateFromCpf();
+      await restoreServer(form);
+      updateDraftStatus(form,form.querySelector('[data-checkin-draft-status]')?.textContent||'Rascunho automático ativo. Senha e assinatura não são armazenadas.');
+    }
+    function activeProtectedForm(){return app?.querySelector('#enroll-existing-form,#existing-cfdh-initial-form,#provisional-form,#visitor-form')||null}
+    function scheduleSave(form){
+      clearTimeout(saveTimer);
+      saveTimer=setTimeout(()=>{saveLocal(form);saveServer(form)},250);
+    }
+
+    document.addEventListener('click',e=>{
+      const candidate=e.target.closest?.('[data-candidate]');
+      if(candidate?.dataset?.candidate){candidateId=candidate.dataset.candidate;sessionStorage.setItem(candidateKey,candidateId)}
+      const primary=e.target.closest?.('#enroll-existing-form button.btn.primary,#existing-cfdh-initial-form button.btn.primary');
+      if(primary){const form=primary.closest('form');saveLocal(form,'antes do clique');saveServer(form)}
+    },true);
+
+    document.addEventListener('input',e=>{const form=e.target.closest?.('#enroll-existing-form,#existing-cfdh-initial-form,#provisional-form,#visitor-form');if(form)scheduleSave(form)},true);
+    document.addEventListener('change',e=>{const form=e.target.closest?.('#enroll-existing-form,#existing-cfdh-initial-form,#provisional-form,#visitor-form');if(form)scheduleSave(form)},true);
+    document.addEventListener('submit',e=>{
+      const form=e.target;
+      if(form?.id==='cpf-check-form'){
+        const cpf=String(form.elements.namedItem('cpf')?.value||'');
+        if(cpfKey)sessionStorage.setItem(cpfKey,cpf);
+        candidateId=null;if(candidateKey)sessionStorage.removeItem(candidateKey);
+        setTimeout(resolveCandidateFromCpf,350);
+        return;
+      }
+      if(!['enroll-existing-form','existing-cfdh-initial-form'].includes(form?.id)){
+        if(activeProtectedForm())saveLocal(activeProtectedForm(),'envio do formulário');
+        return;
+      }
+      e.preventDefault();e.stopImmediatePropagation();
+      completeExisting(form,form.id==='existing-cfdh-initial-form');
+    },true);
+
+    window.addEventListener('pagehide',()=>{const form=activeProtectedForm();if(form)saveLocal(form,'saída da página')});
+    window.addEventListener('unhandledrejection',()=>{const form=activeProtectedForm();if(form){saveLocal(form,'erro inesperado');saveServer(form)}});
+
+    const observer=new MutationObserver(()=>{
+      const form=activeProtectedForm();
+      if(form)prepareForm(form);
+      if(form?.querySelector('.notice.danger,[data-checkin-resilience-error]')){saveLocal(form,'erro exibido');saveServer(form)}
+      if(app?.querySelector('.checkin-success')&&!app.querySelector('#enroll-existing-form,#existing-cfdh-initial-form'))clearDraft();
+    });
+    observer.observe(app,{childList:true,subtree:true});
+    renderBanner();
+    const first=activeProtectedForm();if(first)prepareForm(first);
+  </script>
 </body>
 </html>
