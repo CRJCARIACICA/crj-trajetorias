@@ -36,7 +36,7 @@ export const FORM_FILL_ROLES = {
   'pvida': ['assistente_social','psicologo','terapeuta_ocupacional'],
   'outras-demandas': ['assistente_social','psicologo','terapeuta_ocupacional'],
   'ptrampo': ['assistente_social','psicologo','terapeuta_ocupacional'],
-  'avaliacao-atividades': ['coordenacao_geral','educador','controlador_acesso'],
+  'avaliacao-atividades': ['coordenacao_geral','educador'],
   'relatorio-mobilizacao': ['coordenacao_articulacao','articulador','controlador_acesso'],
   'emprestimo': ['coordenacao_geral','controlador_acesso'],
   'emprestimo-canhoto': [],
