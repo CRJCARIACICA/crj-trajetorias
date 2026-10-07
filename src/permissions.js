@@ -15,17 +15,17 @@ export const ROLES = {
 
 const ALL = ['dashboard','jovens','jovem_core','forms_operacionais','oficinas','presencas','metas','agenda'];
 export const PERMISSIONS = {
-  coordenacao_geral: [...ALL,'editar_cadastro','jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','beneficios','articulacao','equipe','validar','lancamento_geral','relatorios','educador_area','technical_area','document_settings','workshop_education_docs','cfdh_shared'],
+  coordenacao_geral: [...ALL,'editar_cadastro','jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','beneficios','articulacao','equipe','validar','lancamento_geral','relatorios','educador_area','technical_area','document_settings','workshop_education_docs','cfdh_shared','access_control'],
   coordenacao_articulacao: [...ALL,'editar_cadastro','atendimentos','articulacao','encaminhamentos','beneficios','lancamento_geral','relatorios'],
   articulador: ['dashboard','jovens','jovem_core','editar_cadastro','forms_operacionais','articulacao','presencas','oficinas','lancamento_geral','agenda'],
   educador: [...ALL,'editar_cadastro','atendimentos','encaminhamentos','beneficios','lancamento_geral','relatorios','educador_area','workshop_education_docs','cfdh_shared'],
   assistente_social: [...ALL,'editar_cadastro','jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','beneficios','lancamento_geral','relatorios','technical_area','cfdh_shared'],
   psicologo: [...ALL,'editar_cadastro','jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','lancamento_geral','relatorios','technical_area','cfdh_shared'],
   terapeuta_ocupacional: [...ALL,'editar_cadastro','jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','beneficios','lancamento_geral','relatorios','technical_area','cfdh_shared'],
-  controlador_acesso: ['dashboard','forms_operacionais','agenda'],
+  controlador_acesso: ['dashboard','forms_operacionais','agenda','access_control'],
   administrativo: ['dashboard','jovens','jovem_core','forms_operacionais','oficinas','presencas','beneficios','metas','equipe','lancamento_geral','relatorios','agenda'],
   oficineiro: [],
-  monitoramento: [...ALL,'jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','beneficios','articulacao','equipe','validar','lancamento_geral','relatorios','educador_area','technical_area','document_settings'],
+  monitoramento: [...ALL,'jovem_sensivel','atendimentos','acompanhamentos','pvida','ptrampo','encaminhamentos','beneficios','articulacao','equipe','validar','lancamento_geral','relatorios','educador_area','technical_area','document_settings','access_control'],
   pendente: [],
 };
 
