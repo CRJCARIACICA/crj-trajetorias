@@ -8,8 +8,10 @@ function officialExportUrl(input){
   try{
     const raw = input instanceof Request ? input.url : String(input ?? '');
     const url = new URL(raw, window.location.href);
-    if(url.pathname.endsWith('/functions/v1/crj-export-document')){
-      url.pathname = url.pathname.replace(/\/crj-export-document$/, '/crj-export-document-safe');
+    const isDocumentExport = url.pathname.endsWith('/functions/v1/crj-export-document');
+    const isAttendanceExport = url.pathname.endsWith('/functions/v1/crj-export-workshop-attendance');
+    if(isDocumentExport || isAttendanceExport){
+      url.pathname = url.pathname.replace(/\/(crj-export-document|crj-export-workshop-attendance)$/, '/crj-export-document-safe');
       return url.toString();
     }
   }catch{}
