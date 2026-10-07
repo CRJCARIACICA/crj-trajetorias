@@ -16,6 +16,82 @@
   <script type="module" src="./src/export_route_override.js?v=20261007-3"></script>
   <script type="module" src="./src/register.js?v=20261003-6"></script>
   <script type="module" src="./src/app.js?v=20261006-4"></script>
+  <script type="module">
+    // Identificação nominal reforçada na abertura de atendimentos da Equipe Técnica.
+    // O app-base já carrega preferred_name + full_name; esta camada garante que
+    // ambos permaneçam visíveis também depois que o jovem é selecionado.
+    const FULL_NAME_PREFIX='Nome completo: ';
+
+    function extractFullName(button){
+      if(!button)return '';
+      if(button.dataset.fullName)return button.dataset.fullName;
+      const detail=button.querySelector('span');
+      let text=String(detail?.textContent||'').trim();
+      if(text.startsWith(FULL_NAME_PREFIX))text=text.slice(FULL_NAME_PREFIX.length);
+      const cut=text.indexOf(' · CPF final');
+      const fullName=(cut>=0?text.slice(0,cut):text).trim();
+      if(fullName)button.dataset.fullName=fullName;
+      return fullName;
+    }
+
+    function decorateTechnicalYouthResults(root=document){
+      root.querySelectorAll?.('.person-result[data-kind="youth"]').forEach(button=>{
+        const detail=button.querySelector('span');
+        const fullName=extractFullName(button);
+        if(!detail||!fullName||detail.dataset.fullNameVisible==='1')return;
+        const original=String(detail.textContent||'').trim();
+        detail.textContent=FULL_NAME_PREFIX+original;
+        detail.dataset.fullNameVisible='1';
+      });
+    }
+
+    function showSelectedFullName(button){
+      const fullName=extractFullName(button);
+      if(!fullName)return;
+      const search=button.closest('.person-search');
+      setTimeout(()=>{
+        const selected=search?.querySelector('[data-person-selected]');
+        if(!selected||selected.classList.contains('hidden'))return;
+        selected.querySelector('[data-technical-full-name]')?.remove();
+        const line=document.createElement('small');
+        line.dataset.technicalFullName='1';
+        line.className='technical-selected-full-name';
+        line.textContent=FULL_NAME_PREFIX+fullName;
+        selected.appendChild(line);
+        selected.classList.add('technical-youth-selected');
+      },0);
+    }
+
+    const identityStyle=document.createElement('style');
+    identityStyle.textContent=`
+      .person-selected.technical-youth-selected{flex-wrap:wrap}
+      .person-selected.technical-youth-selected .technical-selected-full-name{
+        order:3;flex:0 0 100%;display:block;margin-top:2px;font-size:11px;
+        line-height:1.35;color:var(--muted,#687671)
+      }
+      .person-result[data-kind="youth"] span[data-full-name-visible="1"]{
+        display:block;margin-top:2px
+      }
+    `;
+    document.head.appendChild(identityStyle);
+
+    document.addEventListener('click',event=>{
+      const button=event.target.closest?.('.person-result[data-kind="youth"]');
+      if(button)showSelectedFullName(button);
+    },true);
+
+    const identityObserver=new MutationObserver(records=>{
+      for(const record of records){
+        for(const node of record.addedNodes){
+          if(node.nodeType!==1)continue;
+          if(node.matches?.('.person-result[data-kind="youth"]'))decorateTechnicalYouthResults(node.parentElement||document);
+          else if(node.querySelector?.('.person-result[data-kind="youth"]'))decorateTechnicalYouthResults(node);
+        }
+      }
+    });
+    identityObserver.observe(document.body,{childList:true,subtree:true});
+    decorateTechnicalYouthResults();
+  </script>
   <script type="module" src="./src/document_header_standard.js?v=20261007-2"></script>
   <script type="module" src="./src/attendance_export_fix.js?v=20261007-2"></script>
   <script type="module" src="./src/initial_form_numeric_guard.js?v=20261006-1"></script>
