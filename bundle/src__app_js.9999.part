@@ -1,0 +1,54 @@
+
+// Regra de visualização do menu para o perfil Controlador(a) de Acessos.
+// O módulo Plano(s) de Mobilização continua disponível para os perfis autorizados,
+// mas não deve aparecer na navegação do Controlador nem na pré-visualização dessa equipe.
+const __controllerMenuRealLayout = layout;
+function __controllerMenuIsController(){
+  try{
+    const preview = typeof __developerPreviewScope === 'function' ? __developerPreviewScope() : null;
+    return String(state.user?.role||'') === 'controlador_acesso' || preview === 'controlador_acesso';
+  }catch{
+    return String(state.user?.role||'') === 'controlador_acesso';
+  }
+}
+function __controllerMenuNorm(value=''){
+  return String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s+/g,' ')
+    .trim()
+    .toLowerCase();
+}
+function __controllerMenuRemoveMobilization(root){
+  if(!root || !__controllerMenuIsController()) return;
+  const candidates = root.querySelectorAll?.('.sidebar a,.sidebar button,.sidebar li,.sidebar .nav-item,.sidebar .sidebar-item,.sidebar .sidebar-link,aside nav a,aside nav button,aside nav li,nav a,nav button');
+  if(!candidates) return;
+  for(const node of candidates){
+    const text = __controllerMenuNorm(node.textContent||'');
+    const href = __controllerMenuNorm(node.getAttribute?.('href')||'');
+    const target = __controllerMenuNorm(node.getAttribute?.('data-nav')||'');
+    const isMobilization = text.includes('plano de mobilizacao') || text.includes('planos de mobilizacao') || href.includes('mobilizacao') || target.includes('mobilizacao');
+    if(!isMobilization) continue;
+    const item = node.closest?.('li,.nav-item,.sidebar-item,.sidebar-link,a,button') || node;
+    item.remove();
+  }
+}
+layout = function(content){
+  const html = __controllerMenuRealLayout(content);
+  if(!__controllerMenuIsController()) return html;
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  __controllerMenuRemoveMobilization(template.content);
+  return template.innerHTML;
+};
+
+if(typeof document!=='undefined'){
+  let __controllerMenuTimer=null;
+  const applyControllerMenuRule=()=>{
+    clearTimeout(__controllerMenuTimer);
+    __controllerMenuTimer=setTimeout(()=>__controllerMenuRemoveMobilization(document),30);
+  };
+  new MutationObserver(applyControllerMenuRule).observe(document.body,{childList:true,subtree:true});
+  window.addEventListener('hashchange',applyControllerMenuRule);
+  applyControllerMenuRule();
+}
