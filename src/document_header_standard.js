@@ -1,6 +1,7 @@
 import { apiMode, supabaseClient } from './api.js?v=20261004-2';
 
 let headerSrc='';
+let headerObjectUrl='';
 let observer=null;
 
 function replaceInstitutionalHeaders(root=document){
@@ -13,24 +14,33 @@ function replaceInstitutionalHeaders(root=document){
   for(const img of root.querySelectorAll(selectors.join(','))){
     if(img.src!==headerSrc)img.src=headerSrc;
     img.dataset.crjStandardHeader='1';
+    img.dataset.crjHeaderSource='binary-canonical';
   }
 }
 
 async function loadStandardHeader(){
   for(let i=0;i<80 && apiMode()!=='live';i++)await new Promise(r=>setTimeout(r,100));
   if(apiMode()!=='live')return;
+
   const client=supabaseClient();
-  const {data,error}=await client
-    .from('crj_document_settings')
-    .select('header_image_data,header_mime')
-    .eq('id',1)
-    .maybeSingle();
-  if(error)throw error;
-  if(!data?.header_image_data)return;
-  const mime=data.header_mime||'image/jpeg';
-  const raw=String(data.header_image_data).trim();
-  headerSrc=raw.startsWith('data:image/')?raw:`data:${mime};base64,${raw}`;
+  const base=String(client?.supabaseUrl||'').replace(/\/$/,'');
+  if(!base)throw new Error('URL do Supabase indisponível para o cabeçalho institucional.');
+
+  const response=await fetch(`${base}/functions/v1/crj-document-header`,{
+    method:'GET',
+    cache:'no-store'
+  });
+  if(!response.ok)throw new Error(`Falha ao carregar cabeçalho institucional (${response.status}).`);
+
+  const blob=await response.blob();
+  if(blob.type && blob.type!=='image/jpeg')throw new Error('Cabeçalho institucional retornou formato inesperado.');
+  if(!blob.size)throw new Error('Cabeçalho institucional retornou vazio.');
+
+  if(headerObjectUrl)URL.revokeObjectURL(headerObjectUrl);
+  headerObjectUrl=URL.createObjectURL(blob);
+  headerSrc=headerObjectUrl;
   window.__crjStandardDocumentHeader=headerSrc;
+  window.__crjStandardDocumentHeaderSource='crj-document-header';
   replaceInstitutionalHeaders();
 
   if(!observer){
@@ -41,6 +51,7 @@ async function loadStandardHeader(){
           if(node.matches?.('.methodology-institutional-header img,img[alt*="Cabeçalho institucional"],img[alt*="cabeçalho institucional"]')){
             if(node.src!==headerSrc)node.src=headerSrc;
             node.dataset.crjStandardHeader='1';
+            node.dataset.crjHeaderSource='binary-canonical';
           }
           replaceInstitutionalHeaders(node);
         }
@@ -52,4 +63,5 @@ async function loadStandardHeader(){
 
 window.addEventListener('hashchange',()=>setTimeout(()=>replaceInstitutionalHeaders(),40));
 window.addEventListener('focus',()=>replaceInstitutionalHeaders());
+window.addEventListener('beforeunload',()=>{if(headerObjectUrl)URL.revokeObjectURL(headerObjectUrl)});
 loadStandardHeader().catch(err=>console.warn('Não foi possível carregar o cabeçalho institucional padrão:',err));
