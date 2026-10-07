@@ -1,7 +1,7 @@
 import { apiMode, supabaseClient, getSession } from './api.js?v=20261004-2';
 import { canFillForm } from './permissions.js?v=20261005-3';
 
-const TECH_ROLES=new Set(['assistente_social','psicologo','terapeuta_ocupacional']);
+const TECH_ROLES=new Set(['coordenacao_geral','assistente_social','psicologo','terapeuta_ocupacional']);
 const FORM_OPTIONS=[
   ['acompanhamento','Anexo 3','Acompanhamento'],
   ['pvida','Anexo 4','PVida'],
@@ -27,9 +27,25 @@ function c(){if(apiMode()!=='live')throw new Error('Banco ainda não conectado.'
 function routeParts(){return (location.hash||'#dashboard').split('?')[0].replace(/^#/,'').split('/')}
 function youthId(){const p=routeParts();return p[0]==='jovem'?p[1]||null:null}
 function formRoute(){const p=routeParts();return p[0]==='formulario'?{slug:p[1]||'',youthId:p[2]||null}:null}
-function isTech(){return TECH_ROLES.has(String(me?.role||''))}
+function isTech(){return me?.active!==false&&TECH_ROLES.has(String(me?.role||''))}
 
-async function ready(){for(let i=0;i<100;i++){if(apiMode()==='live'){try{const s=await getSession();if(s?.user){me=s.user;return true}}catch{}}await sleep(120)}return false}
+async function ready(){
+  for(let i=0;i<100;i++){
+    if(apiMode()==='live'){
+      try{
+        const session=await getSession();
+        if(session?.user){
+          const {data:profile,error}=await c().from('profiles').select('id,display_name,role,team,active').eq('id',session.user.id).maybeSingle();
+          if(error)console.warn('Não foi possível resolver o perfil funcional do colaborador:',error);
+          me={...session.user,...(profile||{})};
+          return true;
+        }
+      }catch{}
+    }
+    await sleep(120);
+  }
+  return false;
+}
 function style(){if(document.querySelector('#youth-enh-style'))return;const s=document.createElement('style');s.id='youth-enh-style';s.textContent=`
 .workshop-enrolled{border-color:#36a878!important;background:#e9f8f0!important;color:#17633f!important;box-shadow:0 0 0 3px rgba(54,168,120,.12),0 0 18px rgba(54,168,120,.18)!important;cursor:default!important;opacity:1!important}.workshop-enrolled::before{content:'●';color:#25a66f;margin-right:7px}.youth-method-card{border:1px solid #cee5dc;background:#f4fbf8;border-radius:13px;padding:13px;margin:12px 0}.youth-method-card .method-chip{display:inline-block;padding:5px 8px;border-radius:999px;background:#e2f3ec;margin:4px 5px 0 0;font-size:12px}.delete-youth-btn{border-color:#e9bcbc!important;color:#963939!important}.doc-state{display:inline-flex;margin-top:5px}
 `;document.head.appendChild(s)}
@@ -78,7 +94,7 @@ function interceptFormsButton(e){const b=e.target.closest?.('[data-action="new-y
 document.addEventListener('click',protectTechnicalButton,true);
 document.addEventListener('click',interceptFormsButton,true);
 
-async function apply(){if(!me?.active)return;style();ensureBackButton();hideDeletedRows();decorateTechnicalForm();await decorateYouth()}
+async function apply(){if(!me||me.active===false)return;style();ensureBackButton();hideDeletedRows();decorateTechnicalForm();await decorateYouth()}
 function schedule(){clearTimeout(timer);timer=setTimeout(()=>apply().catch(console.warn),80)}
 async function boot(){if(!(await ready()))return;new MutationObserver(schedule).observe(document.body,{subtree:true,childList:true});window.addEventListener('hashchange',schedule);schedule()}
 boot();
