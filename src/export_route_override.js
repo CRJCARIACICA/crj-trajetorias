@@ -1,8 +1,10 @@
-// Roteamento global de exportação documental.
-// Mantém compatibilidade com módulos antigos que ainda chamam crj-export-document.
+// Contrato global de exportação documental do CRJ Trajetórias.
+// Todo PDF/DOCX/impressão deve sair exclusivamente do gerador oficial que
+// corresponde à pré-visualização e ao layout institucional dos anexos.
 const nativeFetch = window.fetch.bind(window);
+const OFFICIAL_LAYOUT_CONTRACT = 'official-preview-v1';
 
-function safeExportUrl(input){
+function officialExportUrl(input){
   try{
     const raw = input instanceof Request ? input.url : String(input ?? '');
     const url = new URL(raw, window.location.href);
@@ -14,15 +16,36 @@ function safeExportUrl(input){
   return null;
 }
 
-window.fetch = function crjSafeDocumentFetch(input, init){
-  const redirected = safeExportUrl(input);
+function layoutContractError(){
+  return new Response(JSON.stringify({
+    error: 'A exportação foi interrompida porque o servidor não confirmou o layout oficial do documento. Nenhuma versão alternativa foi baixada.'
+  }),{
+    status:502,
+    headers:{'Content-Type':'application/json','Cache-Control':'no-store'}
+  });
+}
+
+window.fetch = async function crjOfficialDocumentFetch(input, init){
+  const redirected = officialExportUrl(input);
   if(!redirected) return nativeFetch(input, init);
 
-  if(input instanceof Request){
-    const request = new Request(redirected, input);
-    return nativeFetch(request, init);
+  const target = input instanceof Request
+    ? new Request(redirected, input)
+    : redirected;
+
+  const response = await nativeFetch(target, init);
+  if(!response.ok) return response;
+
+  const source = response.headers.get('x-crj-layout-source');
+  const contract = response.headers.get('x-crj-layout-contract');
+  if(source !== 'official-canonical' || contract !== OFFICIAL_LAYOUT_CONTRACT){
+    console.error('CRJ_DOCUMENT_LAYOUT_CONTRACT_MISMATCH', {source, contract});
+    try{ response.body?.cancel?.(); }catch{}
+    return layoutContractError();
   }
-  return nativeFetch(redirected, init);
+
+  return response;
 };
 
 window.__crjSafeDocumentExport = true;
+window.__crjOfficialDocumentContract = OFFICIAL_LAYOUT_CONTRACT;
