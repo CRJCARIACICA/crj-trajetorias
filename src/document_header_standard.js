@@ -1,4 +1,5 @@
-import { apiMode, supabaseClient } from './api.js?v=20261004-2';
+import { apiMode } from './api.js?v=20261004-2';
+import { CONFIG } from './config.js';
 
 let headerSrc='';
 let headerObjectUrl='';
@@ -22,8 +23,7 @@ async function loadStandardHeader(){
   for(let i=0;i<80 && apiMode()!=='live';i++)await new Promise(r=>setTimeout(r,100));
   if(apiMode()!=='live')return;
 
-  const client=supabaseClient();
-  const base=String(client?.supabaseUrl||'').replace(/\/$/,'');
+  const base=String(CONFIG?.supabaseUrl||'').replace(/\/$/,'');
   if(!base)throw new Error('URL do Supabase indisponível para o cabeçalho institucional.');
 
   const response=await fetch(`${base}/functions/v1/crj-document-header`,{
