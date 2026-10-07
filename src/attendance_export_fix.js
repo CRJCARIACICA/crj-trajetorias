@@ -1,20 +1,9 @@
-const originalFetch=window.fetch.bind(window);
-
-function parseBody(body){
-  if(!body)return null;
-  if(typeof body==='string'){
-    try{return JSON.parse(body)}catch{return null}
-  }
-  return null;
-}
-
-window.fetch=async function(input,init={}){
-  const url=typeof input==='string'?input:(input instanceof Request?input.url:String(input||''));
-  const isLegacy=url.includes('/functions/v1/crj-export-document');
-  const payload=parseBody(init?.body);
-  if(isLegacy&&payload?.plan_lesson_id){
-    const target=url.replace('/functions/v1/crj-export-document','/functions/v1/crj-export-workshop-attendance');
-    return originalFetch(target,init);
-  }
-  return originalFetch(input,init);
-};
+// Compatibilidade: a exportação da lista de presença de aula agora é
+// roteada pelo mesmo gateway documental dos demais documentos.
+// O gateway identifica plan_lesson_id e encaminha ao gerador oficial do
+// Anexo 2, mantendo o mesmo contrato visual de PDF/DOCX/impressão.
+//
+// Este arquivo permanece carregado para não quebrar versões em cache que
+// esperam o módulo, mas não substitui mais window.fetch nem cria uma rota
+// paralela de exportação.
+window.__crjAttendanceExportHandledByCanonicalGateway = true;
