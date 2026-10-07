@@ -92,6 +92,146 @@
     identityObserver.observe(document.body,{childList:true,subtree:true});
     decorateTechnicalYouthResults();
   </script>
+  <script type="module">
+    import { apiMode, supabaseClient } from './src/api.js?v=20261004-2';
+
+    const TECH_ROLES=new Set(['coordenacao_geral','assistente_social','psicologo','terapeuta_ocupacional']);
+    const TECH_FORMS=new Set(['acompanhamento','pvida','outras-demandas','ptrampo']);
+    let technicalProfile=null;
+    let fillTimer=null;
+    let activeFillKey='';
+
+    const empty=value=>value===null||value===undefined||value===''||(Array.isArray(value)&&!value.length);
+    const routeInfo=()=>{
+      const path=(location.hash||'#dashboard').split('?')[0].replace(/^#/,'').split('/');
+      return {page:path[0]||'',slug:path[1]||'',youthId:path[2]||''};
+    };
+    const isTechnical=()=>technicalProfile?.active!==false&&TECH_ROLES.has(String(technicalProfile?.role||''));
+
+    async function resolveTechnicalProfile(){
+      for(let i=0;i<60&&apiMode()!=='live';i++)await new Promise(r=>setTimeout(r,100));
+      if(apiMode()!=='live')return null;
+      const client=supabaseClient();
+      const {data:{user}}=await client.auth.getUser();
+      if(!user)return null;
+      const {data,error}=await client.from('profiles').select('id,display_name,role,team,active').eq('id',user.id).maybeSingle();
+      if(error)throw error;
+      technicalProfile=data||null;
+      return technicalProfile;
+    }
+
+    function compatibleEducationLevel(value){
+      const v=String(value||'').toLowerCase();
+      if(v.includes('fundamental'))return 'Ensino Fundamental';
+      if(v.includes('médio')||v.includes('medio'))return 'Ensino Médio';
+      if(v.includes('técnico')||v.includes('tecnico')||v.includes('profissional'))return 'Ensino Técnico';
+      if(v.includes('superior'))return 'Ensino Superior';
+      if(v.includes('pós')||v.includes('pos'))return 'Pós-graduação';
+      return value||'';
+    }
+
+    function setField(form,name,value){
+      if(empty(value))return false;
+      const nodes=[...form.querySelectorAll(`[name="${CSS.escape(name)}"]`)];
+      if(!nodes.length)return false;
+      const first=nodes[0];
+      if(first.type==='checkbox'||first.type==='radio'){
+        if(nodes.some(x=>x.checked))return false;
+        const values=Array.isArray(value)?value.map(String):[String(value)];
+        let changed=false;
+        nodes.forEach(node=>{if(values.includes(String(node.value))){node.checked=true;changed=true;}});
+        if(changed)first.dispatchEvent(new Event('change',{bubbles:true}));
+        return changed;
+      }
+      if(String(first.value||'').trim())return false;
+      if(first.tagName==='SELECT'){
+        const candidate=String(value);
+        if(![...first.options].some(o=>o.value===candidate||o.textContent===candidate))return false;
+      }
+      first.value=Array.isArray(value)?value.join(', '):String(value);
+      first.dispatchEvent(new Event('input',{bubbles:true}));
+      first.dispatchEvent(new Event('change',{bubbles:true}));
+      return true;
+    }
+
+    async function fillTechnicalForm(){
+      const r=routeInfo();
+      if(!isTechnical()||r.page!=='formulario'||!TECH_FORMS.has(r.slug)||!r.youthId)return;
+      const form=document.querySelector('#dynamic-form');
+      if(!form)return;
+      const key=`${r.slug}:${r.youthId}`;
+      if(form.dataset.technicalYouthAutofill===key&&activeFillKey===key)return;
+      activeFillKey=key;
+      const client=supabaseClient();
+      const [youngQ,demoQ,formsQ]=await Promise.all([
+        client.from('young_people').select('*').eq('id',r.youthId).maybeSingle(),
+        client.from('youth_demographics').select('*').eq('youth_id',r.youthId).maybeSingle(),
+        client.from('methodology_form_submissions').select('form_slug,payload,submitted_at').eq('youth_id',r.youthId).order('submitted_at',{ascending:false})
+      ]);
+      if(youngQ.error)throw youngQ.error;
+      if(demoQ.error&&demoQ.error.code!=='PGRST116')console.warn('Pré-preenchimento: dados sociodemográficos indisponíveis',demoQ.error);
+      if(formsQ.error)console.warn('Pré-preenchimento: histórico metodológico indisponível',formsQ.error);
+      const submissions=formsQ.data||[];
+      const initial=submissions.find(x=>x.form_slug==='formulario-inicial')?.payload||{};
+      const accompaniment=submissions.find(x=>x.form_slug==='acompanhamento')?.payload||{};
+      const base={...initial,...(demoQ.data||{}),...(youngQ.data||{})};
+      let filled=0;
+
+      // Mesma chave = mesmo dado cadastral: preencher apenas quando o campo está vazio.
+      for(const [name,value] of Object.entries(base))if(setField(form,name,value))filled++;
+
+      // Correspondências semânticas entre o Anexo 1 e o Anexo 3.
+      if(r.slug==='acompanhamento'){
+        if(setField(form,'studying',base.studies))filled++;
+        if(setField(form,'last_completed',base.last_grade))filled++;
+        if(setField(form,'education_level',compatibleEducationLevel(base.education_level)))filled++;
+      }
+
+      // Informação laboral já registrada em acompanhamento anterior pode agilizar o PTrampo,
+      // mas conteúdos técnicos/narrativos anteriores não são copiados para um novo atendimento.
+      if(r.slug==='ptrampo'){
+        const labor=accompaniment.working_now_which||accompaniment.ever_worked_which||'';
+        if(setField(form,'labor_activity',labor))filled++;
+      }
+
+      form.dataset.technicalYouthAutofill=key;
+      if(filled){
+        const editor=form.querySelector('.methodology-form-editor');
+        if(editor&&!editor.querySelector('[data-technical-autofill-note]')){
+          const note=document.createElement('div');
+          note.dataset.technicalAutofillNote='1';
+          note.className='notice success';
+          note.style.marginBottom='12px';
+          note.innerHTML='<b>Dados do jovem carregados automaticamente.</b><br><span>Os campos compatíveis do cadastro e da trajetória foram preenchidos para agilizar o atendimento. Revise antes de salvar.</span>';
+          editor.prepend(note);
+        }
+      }
+    }
+
+    function ensureAcompanhamentoOption(){
+      if(!isTechnical())return;
+      const select=document.querySelector('#technical-service-router [name="technical_type"]');
+      if(!select||select.querySelector('option[value="acompanhamento"]'))return;
+      const option=document.createElement('option');
+      option.value='acompanhamento';
+      option.textContent='Acompanhamento técnico — gera Anexo 3';
+      const pvida=select.querySelector('option[value="pvida"]');
+      if(pvida)select.insertBefore(option,pvida);else select.appendChild(option);
+    }
+
+    function applyTechnicalFlow(){
+      clearTimeout(fillTimer);
+      fillTimer=setTimeout(()=>{
+        ensureAcompanhamentoOption();
+        fillTechnicalForm().catch(err=>console.warn('Não foi possível pré-preencher o atendimento técnico:',err));
+      },60);
+    }
+
+    const technicalFlowObserver=new MutationObserver(applyTechnicalFlow);
+    technicalFlowObserver.observe(document.body,{childList:true,subtree:true});
+    window.addEventListener('hashchange',()=>{activeFillKey='';applyTechnicalFlow()});
+    resolveTechnicalProfile().then(applyTechnicalFlow).catch(err=>console.warn('Não foi possível resolver o perfil técnico:',err));
+  </script>
   <script type="module" src="./src/document_header_standard.js?v=20261007-2"></script>
   <script type="module" src="./src/attendance_export_fix.js?v=20261007-2"></script>
   <script type="module" src="./src/initial_form_numeric_guard.js?v=20261006-1"></script>
@@ -108,7 +248,7 @@
   <script type="module" src="./src/document_drafts.js?v=20261005-1"></script>
   <script type="module" src="./src/evidence_exports.js?v=20261006-1"></script>
   <script type="module" src="./src/universal_drafts.js?v=20261005-2"></script>
-  <script type="module" src="./src/youth_profile_enhancements.js?v=20261005-1"></script>
+  <script type="module" src="./src/youth_profile_enhancements.js?v=20261007-2"></script>
   <script type="module" src="./src/team_comms.js?v=20261005-1"></script>
   <script type="module" src="./src/instructor_portal.js?v=20261006-1"></script>
   <script type="module" src="./src/workshop_collaboration.js?v=20261006-1"></script>
