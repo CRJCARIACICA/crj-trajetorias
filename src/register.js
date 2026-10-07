@@ -17,9 +17,22 @@ const FUNCTIONS = [
 function safe(text){
   return String(text??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 }
+function errorText(value){
+  if(!value)return '';
+  if(value instanceof Error)return value.message||'';
+  if(typeof value==='string')return value;
+  if(typeof value==='object'){
+    for(const key of ['message','error_description','details','hint','error']){
+      const part=value?.[key];
+      if(typeof part==='string'&&part.trim())return part.trim();
+    }
+    try{return JSON.stringify(value)}catch{}
+  }
+  return String(value);
+}
 function showMessage(text,type=''){
   const el=document.querySelector('#login-message');
-  if(el) el.innerHTML=`<div class="notice ${type}" style="margin-top:12px">${safe(text)}</div>`;
+  if(el) el.innerHTML=`<div class="notice ${type}" style="margin-top:12px">${safe(errorText(text)||'Não foi possível concluir a operação.')}</div>`;
 }
 
 async function registerCollaborator(form){
@@ -42,7 +55,7 @@ async function registerCollaborator(form){
     body:JSON.stringify({name,role,email,password,keyword}),
   });
   const data=await res.json().catch(()=>({}));
-  if(!res.ok) throw new Error(data.error||'Não foi possível criar o cadastro.');
+  if(!res.ok) throw new Error(errorText(data?.error)||errorText(data)||'Não foi possível criar o cadastro.');
   return data;
 }
 
@@ -138,7 +151,7 @@ function enhanceRegistration(){
       showMessage(`Conta criada para ${result.user?.display_name||'o colaborador'} como ${result.user?.role_label||'função selecionada'}. Agora entre usando somente e-mail e senha.`,'success');
       passwordInput?.focus();
     }catch(err){
-      showMessage(err.message,'danger');
+      showMessage(errorText(err)||'Não foi possível criar a conta.','danger');
     }finally{
       signupButton.disabled=false;
       signupButton.textContent=original;
