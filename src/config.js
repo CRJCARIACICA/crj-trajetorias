@@ -1,3 +1,5 @@
+import './attendance_export_fix.js?v=20261008-4';
+
 export const CONFIG = {
   appName: 'CRJ Trajetórias',
   crjName: 'CRJ Cariacica',
