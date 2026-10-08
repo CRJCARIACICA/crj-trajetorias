@@ -1,0 +1,46 @@
+
+// Regra global de acesso ao menu Metas e Etapas.
+// Todos os colaboradores internos ativos podem consultar; oficineiros e perfis pendentes não.
+const _crjBasePermittedBeforeGoalsAccess = permitted;
+function crjGoalsPreviewScope(){
+  try{
+    const raw=sessionStorage.getItem('crj_developer_preview');
+    if(!raw)return null;
+    const parsed=JSON.parse(raw);
+    return parsed?.enabled===true?parsed.scope:null;
+  }catch{return null;}
+}
+permitted = function(permission){
+  if(permission==='metas'){
+    const role=String(state.user?.role||'');
+    const preview=crjGoalsPreviewScope();
+    if(preview==='oficineiros')return false;
+    return Boolean(role && role!=='oficineiro' && role!=='pendente' && state.user?.active!==false);
+  }
+  return _crjBasePermittedBeforeGoalsAccess(permission);
+};
+function enforceCrjGoalsAccess(){
+  const metasRoute=location.hash.split('?')[0]==='#metas';
+  const preview=crjGoalsPreviewScope();
+  const blocked=state.user && (state.user.role==='oficineiro' || state.user.role==='pendente' || state.user.active===false || preview==='oficineiros');
+  if(metasRoute&&blocked){
+    location.hash='#dashboard';
+    return;
+  }
+  document.querySelectorAll('a[href="#metas"],a[href^="#metas?"]').forEach(link=>{
+    const canSee=permitted('metas');
+    link.style.display=canSee?'':'none';
+    if(canSee){
+      const labels=link.querySelectorAll('span');
+      if(labels.length>1)labels[labels.length-1].textContent='Metas e Etapas';
+    }
+  });
+}
+let crjGoalsAccessTimer=null;
+function scheduleCrjGoalsAccess(){
+  clearTimeout(crjGoalsAccessTimer);
+  crjGoalsAccessTimer=setTimeout(enforceCrjGoalsAccess,30);
+}
+window.addEventListener('hashchange',scheduleCrjGoalsAccess);
+new MutationObserver(scheduleCrjGoalsAccess).observe(document.body,{childList:true,subtree:true});
+scheduleCrjGoalsAccess();
