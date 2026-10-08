@@ -30,13 +30,15 @@ jobs:
           rm -rf _site
           mkdir -p _site/src _site/assets
           cp index.html checkin.html demanda.html access.html .nojekyll _site/
-          cp src/config.js src/permissions.js src/register.js src/checkin.js src/jhonatao.js src/jhonatao_multimodal.js src/jhonatao_live.js src/educator_complementary.js src/form_access.js src/initial_form_numeric_guard.js src/attendance_export_fix.js src/export_route_override.js src/document_header_standard.js src/technical_service_flow.js src/technical_team_enhancements.js src/technical_program_actions.js src/access_controller.js src/access_public.js src/articulation_workspace.js src/articulation_demand_identity.js src/articulation_evidence.js src/document_drafts.js src/evidence_exports.js src/universal_drafts.js src/youth_profile_enhancements.js src/developer_view.js src/workshop_devices.js src/instructor_management.js src/instructor_portal.js src/workshop_collaboration.js src/workshop_live_sync.js src/workshop_plan_delete.js src/cfdh_program_metrics.js src/demand_public.js src/demand_identity_public.js src/team_comms.js _site/src/
+          cp src/config.js src/permissions.js src/register.js src/checkin.js src/jhonatao.js src/jhonatao_multimodal.js src/jhonatao_live.js src/educator_complementary.js src/form_access.js src/initial_form_numeric_guard.js src/attendance_export_fix.js src/export_route_override.js src/document_header_standard.js src/technical_service_flow.js src/technical_team_enhancements.js src/technical_program_actions.js src/access_controller.js src/access_public.js src/articulation_workspace.js src/articulation_demand_identity.js src/articulation_evidence.js src/document_drafts.js src/evidence_exports.js src/universal_drafts.js src/youth_profile_enhancements.js src/developer_view.js src/workshop_devices.js src/instructor_management.js src/instructor_portal.js src/workshop_collaboration.js src/workshop_live_sync.js src/workshop_plan_delete.js src/cfdh_program_metrics.js src/goals_workspace.js src/demand_public.js src/demand_identity_public.js src/team_comms.js _site/src/
           cat bundle/src__app_js.*.part > _site/src/app.js
           cat bundle/src__api_js.*.part > _site/src/api.js
           cat bundle/src__forms_js.*.part > _site/src/forms.js
           cat bundle/src__agenda_js.*.part > _site/src/agenda.js
           # Força o app montado a usar a matriz de permissões mais recente, evitando cache de imports antigos.
           sed -i 's#permissions.js?v=20261003-6#permissions.js?v=20261006-3#g' _site/src/app.js
+          # Carrega a área inteligente de Metas e Etapas como módulo isolado, sem alterar o núcleo monolítico.
+          sed -i 's#</body>#  <script type="module" src="./src/goals_workspace.js?v=20261008-1"></script>\n</body>#' _site/index.html
           cat bundle/assets__app_css.*.part assets/jhonatao.css assets/jhonatao_multimodal.css assets/jhonatao_jarvis.css > _site/assets/app.css
           node --check _site/src/app.js
           node --check _site/src/api.js
@@ -74,6 +76,7 @@ jobs:
           node --check _site/src/workshop_live_sync.js
           node --check _site/src/workshop_plan_delete.js
           node --check _site/src/cfdh_program_metrics.js
+          node --check _site/src/goals_workspace.js
           node --check _site/src/demand_public.js
           node --check _site/src/demand_identity_public.js
           node --check _site/src/team_comms.js
@@ -111,6 +114,7 @@ jobs:
           node --input-type=module --check < _site/src/workshop_live_sync.js
           node --input-type=module --check < _site/src/workshop_plan_delete.js
           node --input-type=module --check < _site/src/cfdh_program_metrics.js
+          node --input-type=module --check < _site/src/goals_workspace.js
           node --input-type=module --check < _site/src/demand_public.js
           node --input-type=module --check < _site/src/demand_identity_public.js
           node --input-type=module --check < _site/src/team_comms.js
@@ -138,6 +142,7 @@ jobs:
           test -s _site/src/workshop_live_sync.js
           test -s _site/src/workshop_plan_delete.js
           test -s _site/src/cfdh_program_metrics.js
+          test -s _site/src/goals_workspace.js
           test -s _site/src/demand_public.js
           test -s _site/src/demand_identity_public.js
           test -s _site/src/youth_profile_enhancements.js
