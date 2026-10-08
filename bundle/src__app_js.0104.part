@@ -1,0 +1,148 @@
+
+;(()=>{
+  const LINK_DEFS={
+    cfdh:{label:'CFDH',detail:'A mesma ação também contribui com o Circuito Formativo em Direitos Humanos.',indicators:['M6.1_CFDH_HORAS'],mode:'hours'},
+    oficina:{label:'Oficina',detail:'A ação também acontece como oficina e pode ser ligada a uma oficina já cadastrada.',indicators:['M6.1_OFICINAS_HORAS'],mode:'hours'},
+    passeio:{label:'Passeio / atividade cultural',detail:'Ação externa/cultural que contabiliza participações quando executada com presença nominal.',indicators:['M6.1_PARTICIPACOES_CULTURA'],mode:'participants'},
+    atendimento_beneficio:{label:'Atendimento / benefício',detail:'Classificação metodológica complementar. Não força indicador quantitativo sem evidência compatível.',indicators:[],mode:'classification'},
+    evento_programacao:{label:'Evento / programação',detail:'A mesma ação compõe a programação/eventos do CRJ.',indicators:['M6.1_EVENTOS'],mode:'count'},
+    vivencia_intercambio:{label:'Vivência / intercâmbio',detail:'A ação também é vivência ou intercâmbio e projeta participações culturais.',indicators:['M6.1_PARTICIPACOES_CULTURA'],mode:'participants'},
+    curso_profissionalizante:{label:'Curso / oficina profissionalizante',detail:'A ação também realiza formação profissionalizante; usa carga horária e participantes previstos.',indicators:['M4.6_CURSO_HORAS','M6.4_CURSO_HORAS','M4.6_CURSO_JOVENS_MES','M4.6_CURSO_JOVENS_ANO','M6.4_CURSO_JOVENS_MES','M6.4_CURSO_JOVENS_ANO'],mode:'hours_participants'},
+    mostra_profissoes:{label:'Mostra de Profissões',detail:'Liga a ação às metas de realização e participação da Mostra de Profissões.',indicators:['M4.5_MOSTRAS','M4.5_PARTICIPANTES','M6.4_MOSTRAS','M6.4_MOSTRA_PARTICIPANTES'],mode:'count_participants'},
+    parceria_rede:{label:'Parceria / rede',detail:'Registra a ação como contribuição de parceria/rede.',indicators:['M4.4_ACOES'],mode:'count'}
+  };
+  const IND_LABELS={
+    'M6.1_CFDH_HORAS':'CFDH · horas','M6.1_OFICINAS_HORAS':'Oficinas · horas','M6.1_PARTICIPACOES_CULTURA':'Participações culturais',
+    'M6.1_EVENTOS':'Eventos/programação','M4.6_CURSO_HORAS':'Formação profissionalizante · horas (Meta 4)','M6.4_CURSO_HORAS':'Formação profissionalizante · horas (Meta 6)',
+    'M4.6_CURSO_JOVENS_MES':'Formação · jovens/mês (Meta 4)','M4.6_CURSO_JOVENS_ANO':'Formação · jovens/ano (Meta 4)',
+    'M6.4_CURSO_JOVENS_MES':'Formação · jovens/mês (Meta 6)','M6.4_CURSO_JOVENS_ANO':'Formação · jovens/ano (Meta 6)',
+    'M4.5_MOSTRAS':'Mostras de Profissões (Meta 4)','M4.5_PARTICIPANTES':'Participantes da Mostra (Meta 4)',
+    'M6.4_MOSTRAS':'Mostras de Profissões (Meta 6)','M6.4_MOSTRA_PARTICIPANTES':'Participantes da Mostra (Meta 6)','M4.4_ACOES':'Ações desenvolvidas em parceria'
+  };
+  const cache=new Map();
+  let pendingEditEvent='';
+  const xesc=(v='')=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const live=()=>typeof apiMode==='function'&&apiMode()==='live';
+  const db=()=>supabaseClient();
+  const lastModal=()=>{const xs=[...document.querySelectorAll('#agenda-modal')];return xs[xs.length-1]||null};
+  function injectStyle(){
+    if(document.querySelector('#agenda-tech-links-style'))return;
+    const s=document.createElement('style');s.id='agenda-tech-links-style';s.textContent=`
+      .agenda-tech-plan-box{border:1px solid #cfe2dc;background:#f7fbfa;border-radius:12px;padding:11px;margin:10px 0}
+      .agenda-tech-plan-box h4{margin:0 0 4px}.agenda-tech-link-chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+      .agenda-tech-editor{border:1px solid #cfe2dc;background:#f9fcfb;border-radius:13px;padding:13px;margin:12px 0}
+      .agenda-tech-editor h4{margin:0}.agenda-tech-editor .atl-note{font-size:12px;color:var(--muted,#687671);margin:4px 0 10px}
+      .atl-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.atl-link{border:1px solid #e0e8e5;background:#fff;border-radius:10px;padding:9px}
+      .atl-link>label{display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:start}.atl-link input[type=checkbox]{margin-top:3px}.atl-link small{display:block;color:var(--muted,#687671);margin-top:2px}
+      .atl-indicators{display:flex;gap:4px;flex-wrap:wrap;margin-top:7px}.atl-indicator{font-size:10px;background:#edf5f2;border-radius:999px;padding:3px 6px}
+      .atl-ref{margin:8px 0 0 24px}.atl-preview{border-top:1px dashed #cfdad6;margin-top:10px;padding-top:10px;font-size:11px}
+      @media(max-width:760px){.atl-grid{grid-template-columns:1fr}}
+    `;document.head.appendChild(s);
+  }
+  async function planForEvent(eventId,force=false){
+    if(!eventId||!live())return null;
+    if(!force&&cache.has(eventId))return cache.get(eventId);
+    const client=db();
+    const {data:plan,error}=await client.from('technical_action_plans').select('*').eq('calendar_event_id',eventId).maybeSingle();
+    if(error)throw error;
+    if(!plan){cache.set(eventId,null);return null}
+    const month=String(plan.plan_month||plan.planned_date||'').slice(0,7),start=month?month+'-01':null;
+    let end=null;if(month){const [y,m]=month.split('-').map(Number);end=new Date(Date.UTC(y,m,1)).toISOString().slice(0,10)}
+    const [workshopsQ,cfdhQ,execQ]=await Promise.all([
+      client.from('workshops').select('id,name,category,active').eq('active',true).order('name'),
+      start&&end?client.from('educator_plans').select('id,activity_title,planned_start,plan_type,status').in('plan_type',['cfdh_estrutural','cfdh_transversal']).gte('planned_start',start).lt('planned_start',end).order('planned_start'):Promise.resolve({data:[],error:null}),
+      client.from('technical_action_executions').select('id,execution_status').eq('plan_id',plan.id).maybeSingle()
+    ]);
+    for(const q of [workshopsQ,cfdhQ,execQ])if(q.error)throw q.error;
+    const bundle={plan,workshops:workshopsQ.data||[],cfdh:cfdhQ.data||[],execution:execQ.data||null};cache.set(eventId,bundle);return bundle;
+  }
+  function currentLinks(plan){return Array.isArray(plan?.linked_action_types)?plan.linked_action_types:[]}
+  function linkMap(plan){return new Map(currentLinks(plan).map(x=>[x.type,x]))}
+  function indicatorChips(type){
+    const d=LINK_DEFS[type];if(!d)return '';
+    return d.indicators.length?`<div class="atl-indicators">${d.indicators.map(code=>`<span class="atl-indicator" title="${xesc(code)}">${xesc(IND_LABELS[code]||code)}</span>`).join('')}</div>`:'<div class="atl-indicators"><span class="atl-indicator">Vínculo metodológico · sem indicador automático</span></div>';
+  }
+  function planSummary(bundle){
+    const p=bundle.plan,links=currentLinks(p);
+    return `<div class="agenda-tech-plan-box" data-agenda-tech-summary><h4>Planejamento técnico vinculado</h4><div class="muted">${xesc((p.action_type||'').toUpperCase())} · esta agenda é apenas a visualização temporal do mesmo planejamento.</div>${links.length?`<div class="agenda-tech-link-chips">${links.map(l=>`<span class="pill info">↗ ${xesc(LINK_DEFS[l.type]?.label||l.label||l.type)}</span>`).join('')}</div>`:'<div class="muted" style="margin-top:7px">Nenhuma contribuição transversal ligada ainda.</div>'}<div class="muted" style="margin-top:7px">Ao editar, as caixas transversais atualizam imediatamente a projeção em Metas e Etapas; a concretização continua dependendo da execução/evidência.</div></div>`;
+  }
+  async function decorateDetail(eventId){
+    try{
+      const bundle=await planForEvent(eventId);if(!bundle)return;
+      const modal=lastModal();if(!modal||modal.querySelector('[data-agenda-tech-summary]'))return;
+      const actions=modal.querySelector('.actions');
+      if(actions)actions.insertAdjacentHTML('beforebegin',planSummary(bundle));else modal.querySelector('.modal-body, .stack')?.insertAdjacentHTML('beforeend',planSummary(bundle));
+    }catch(err){console.warn('Agenda: vínculo técnico indisponível',err)}
+  }
+  function referenceSelect(type,bundle,link){
+    if(type==='oficina')return `<div class="atl-ref ${link?'':'hidden'}" data-atl-ref="oficina"><label>Oficina relacionada</label><select class="input" name="atl_ref_oficina"><option value="">Sem oficina específica</option>${bundle.workshops.map(w=>`<option value="${w.id}" ${link?.reference_id===w.id?'selected':''}>${xesc(w.name)}${w.category?' · '+xesc(w.category):''}</option>`).join('')}</select></div>`;
+    if(type==='cfdh')return `<div class="atl-ref ${link?'':'hidden'}" data-atl-ref="cfdh"><label>Planejamento CFDH relacionado</label><select class="input" name="atl_ref_cfdh"><option value="">Sem CFDH específico</option>${bundle.cfdh.map(x=>`<option value="${x.id}" ${link?.reference_id===x.id?'selected':''}>${xesc(x.activity_title||'CFDH')} · ${xesc(String(x.planned_start||'').split('-').reverse().join('/'))}</option>`).join('')}</select></div>`;
+    return '';
+  }
+  function editorHtml(bundle){
+    const p=bundle.plan,selected=linkMap(p),locked=!!bundle.execution;
+    const links=Object.entries(LINK_DEFS).map(([type,d])=>{const link=selected.get(type);return `<div class="atl-link"><label><input type="checkbox" name="atl_type" value="${type}" ${link?'checked':''} ${locked?'disabled':''}><span><b>${xesc(d.label)}</b><small>${xesc(d.detail)}</small>${indicatorChips(type)}</span></label>${referenceSelect(type,bundle,link)}</div>`}).join('');
+    return `<section class="agenda-tech-editor" data-agenda-tech-editor><h4>Contribuições transversais, metas e indicadores</h4><div class="atl-note">Uma ação continua sendo registrada uma única vez. Marque tudo que ela também realiza; cada vínculo alimenta somente os indicadores compatíveis, sem duplicar presença ou execução.</div>${locked?'<div class="notice warn"><b>Execução já registrada.</b><br>Os vínculos estão em consulta para preservar a evidência. Correções posteriores devem ser feitas na execução.</div>':''}<div class="form-grid"><div class="field"><label>Ação principal</label><select name="technical_action_type" ${locked?'disabled':''}><option value="pvida" ${p.action_type==='pvida'?'selected':''}>PVida</option><option value="ptrampo" ${p.action_type==='ptrampo'?'selected':''}>PTrampo</option></select></div><div class="field"><label>Participantes esperados</label><input class="input" type="number" min="0" name="technical_expected_participants" value="${xesc(p.expected_participants??'')}" ${locked?'readonly':''}><small>Usado nas projeções de indicadores de jovens/participações; o realizado usa presença nominal.</small></div></div><div class="field"><label>Objetivo específico</label><textarea name="technical_objective" ${locked?'readonly':''}>${xesc(p.objective||'')}</textarea></div><div class="field"><label>Atividades / metodologia prevista</label><textarea name="technical_planned_activities" ${locked?'readonly':''}>${xesc(p.planned_activities||'')}</textarea></div><div class="field"><label>Resultados esperados</label><textarea name="technical_expected_results" ${locked?'readonly':''}>${xesc(p.expected_results||'')}</textarea></div><div class="atl-grid">${links}</div><div class="atl-preview" data-atl-preview></div></section>`;
+  }
+  function updatePreview(form){
+    const box=form.querySelector('[data-atl-preview]');if(!box)return;
+    const checked=[...form.querySelectorAll('[name="atl_type"]:checked')].map(x=>x.value);
+    const action=form.querySelector('[name="technical_action_type"]')?.value;
+    const primary=action==='pvida'?['M6.2_PVIDA_HORAS','M6.2_PVIDA_JOVENS','M6.2_PVIDA_PARTICIPACOES']:action==='ptrampo'?['M4.1_PTRAMPO_ATIVIDADES','M4.1_PTRAMPO_JOVENS','M6.4_PTRAMPO_ATIVIDADES','M6.4_PTRAMPO_JOVENS']:[];
+    const all=[...new Set([...primary,...checked.flatMap(t=>LINK_DEFS[t]?.indicators||[])])];
+    box.innerHTML=`<b>Caminho previsto da ação → indicadores</b><div class="atl-indicators" style="margin-top:6px">${all.map(code=>`<span class="atl-indicator">${xesc(IND_LABELS[code]||code)}</span>`).join('')||'<span class="muted">Nenhum indicador quantitativo automático selecionado.</span>'}</div><div class="muted" style="margin-top:6px">Planejamento = projeção. Somente a execução confirmada transforma a contribuição em indicador concretizado.</div>`;
+  }
+  async function augmentEdit(eventId){
+    try{
+      const bundle=await planForEvent(eventId,true);if(!bundle)return;
+      const modal=lastModal(),form=modal?.querySelector('#agenda-direct-form');if(!form||form.dataset.technicalPlanEvent)return;
+      form.dataset.technicalPlanEvent=eventId;form.dataset.technicalPlanId=bundle.plan.id;
+      const title=form.querySelector('[name="title"]');if(title&&title.value.startsWith('[PLANO TÉCNICO] '))title.value=title.value.replace(/^\[PLANO TÉCNICO\]\s*/, '');
+      const submit=form.querySelector('button[type="submit"],button.btn.primary:last-of-type');
+      if(submit)submit.insertAdjacentHTML('beforebegin',editorHtml(bundle));else form.insertAdjacentHTML('beforeend',editorHtml(bundle));
+      form.querySelectorAll('[name="atl_type"]').forEach(cb=>cb.addEventListener('change',()=>{const ref=form.querySelector(`[data-atl-ref="${CSS.escape(cb.value)}"]`);if(ref)ref.classList.toggle('hidden',!cb.checked);updatePreview(form)}));
+      form.querySelector('[name="technical_action_type"]')?.addEventListener('change',()=>updatePreview(form));updatePreview(form);
+    }catch(err){console.warn('Agenda: editor transversal indisponível',err)}
+  }
+  function collectLinks(form){
+    return [...form.querySelectorAll('[name="atl_type"]:checked')].map(cb=>{
+      const type=cb.value,d=LINK_DEFS[type],row={type,label:d?.label||type};
+      if(type==='oficina'){
+        const s=form.querySelector('[name="atl_ref_oficina"]');if(s?.value){row.reference_id=s.value;row.reference_type='workshop';row.reference_label=s.selectedOptions[0]?.textContent||''}
+      }
+      if(type==='cfdh'){
+        const s=form.querySelector('[name="atl_ref_cfdh"]');if(s?.value){row.reference_id=s.value;row.reference_type='cfdh_plan';row.reference_label=s.selectedOptions[0]?.textContent||''}
+      }
+      return row;
+    });
+  }
+  async function saveTechnicalEdit(form,event){
+    event.preventDefault();event.stopImmediatePropagation();
+    const eventId=form.dataset.technicalPlanEvent;if(!eventId)return;
+    const fd=new FormData(form),techIds=[...form.querySelectorAll('[name="technician_ids"]:checked')].map(x=>x.value);
+    if(!techIds.length){toast('Selecione pelo menos um técnico responsável.','danger');return}
+    if(fd.get('end_time')<=fd.get('start_time')){toast('O horário final deve ser posterior ao inicial.','danger');return}
+    const bundle=await planForEvent(eventId,true);if(!bundle)return;
+    if(bundle.execution){toast('A ação já possui execução. Edite os vínculos pela execução/evidência.','danger');return}
+    let loc=String(fd.get('location_type')||'crj');
+    if(loc==='outro'&&['rede_externa','atividade_externa','outro'].includes(bundle.plan.location_type))loc=bundle.plan.location_type;
+    const patch={
+      action_type:fd.get('technical_action_type')||bundle.plan.action_type,
+      title:String(fd.get('title')||'').replace(/^\[PLANO TÉCNICO\]\s*/,'').trim(),
+      objective:String(fd.get('technical_objective')||'').trim(),planned_activities:String(fd.get('technical_planned_activities')||'').trim(),
+      expected_results:String(fd.get('technical_expected_results')||'').trim(),expected_participants:fd.get('technical_expected_participants')||'',
+      planned_date:fd.get('date'),start_time:fd.get('start_time'),end_time:fd.get('end_time'),location_type:loc,location_details:fd.get('location_details')||''
+    };
+    const btn=form.querySelector('button[type="submit"],button.btn.primary:last-of-type'),old=btn?.textContent;if(btn){btn.disabled=true;btn.textContent='Salvando planejamento...'}
+    try{
+      const {error}=await db().rpc('update_technical_action_plan_from_agenda',{p_event_id:eventId,p_patch:patch,p_links:collectLinks(form),p_technician_ids:techIds});
+      if(error)throw error;cache.delete(eventId);lastModal()?.remove();toast('Planejamento, vínculos e indicadores atualizados');await render();
+    }catch(err){toast(err.message||String(err),'danger');if(btn){btn.disabled=false;btn.textContent=old||'Salvar alteração / adiamento'}}
+  }
+  document.addEventListener('click',e=>{
+    const open=e.target.closest?.('[data-open-event]');if(open?.dataset?.openEvent){const id=open.dataset.openEvent;setTimeout(()=>decorateDetail(id),80)}
+    const edit=e.target.closest?.('[data-edit-event]');if(edit?.dataset?.editEvent){pendingEditEvent=edit.dataset.editEvent;setTimeout(()=>augmentEdit(pendingEditEvent),80)}
+  },true);
+  document.addEventListener('submit',e=>{const form=e.target;if(form?.id==='agenda-direct-form'&&form.dataset.technicalPlanEvent)saveTechnicalEdit(form,e)},true);
+  injectStyle();
+})();
