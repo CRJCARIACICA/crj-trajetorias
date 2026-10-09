@@ -59,7 +59,7 @@ jobs:
             src/technical_service_flow.js \
             src/technical_team_enhancements.js \
             src/technical_program_actions.js \
-            src/technical_workspace_tabs_v2.js \
+            src/technical_workspace.js \
             src/technical_checkin.js \
             src/access_controller.js \
             src/access_public.js \
@@ -122,7 +122,7 @@ jobs:
             _site/src/agenda.js
             _site/src/permissions.js
             _site/src/technical_program_actions.js
-            _site/src/technical_workspace_tabs_v2.js
+            _site/src/technical_workspace.js
             _site/src/technical_checkin.js
             _site/src/developer_view.js
             _site/src/document_header_standard.js
@@ -135,8 +135,8 @@ jobs:
           done
 
           # Garante que imports dinâmicos essenciais tenham destino publicado.
-          grep -q 'technical_workspace_tabs_v2.js' _site/src/document_header_standard.js
-          grep -q 'technical-checkin.html' _site/src/technical_workspace_tabs_v2.js
+          grep -q 'technical_workspace.js' _site/src/document_header_standard.js
+          grep -q 'technical-checkin.html' _site/src/technical_workspace.js
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
