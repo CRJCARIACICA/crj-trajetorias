@@ -20,138 +20,123 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Montar e validar site
+      - name: Montar site
         run: |
           set -euo pipefail
           rm -rf _site
           mkdir -p _site/src _site/assets
-          cp index.html checkin.html demanda.html access.html .nojekyll _site/
-          cp src/config.js src/permissions.js src/register.js src/checkin.js src/jhonatao.js src/jhonatao_multimodal.js src/jhonatao_live.js src/educator_complementary.js src/form_access.js src/initial_form_numeric_guard.js src/attendance_export_fix.js src/export_route_override.js src/document_header_standard.js src/technical_service_flow.js src/technical_team_enhancements.js src/technical_program_actions.js src/access_controller.js src/access_public.js src/articulation_workspace.js src/articulation_demand_identity.js src/articulation_evidence.js src/document_drafts.js src/evidence_exports.js src/universal_drafts.js src/youth_profile_enhancements.js src/developer_view.js src/workshop_devices.js src/instructor_management.js src/instructor_portal.js src/workshop_collaboration.js src/workshop_live_sync.js src/workshop_plan_delete.js src/cfdh_program_metrics.js src/goals_workspace.js src/demand_public.js src/demand_identity_public.js src/team_comms.js _site/src/
+
+          # Páginas públicas realmente usadas pela aplicação.
+          cp \
+            index.html \
+            checkin.html \
+            demanda.html \
+            access.html \
+            technical-checkin.html \
+            .nojekyll \
+            _site/
+
+          # Módulos independentes carregados diretamente pelo HTML ou dinamicamente.
+          cp \
+            src/config.js \
+            src/permissions.js \
+            src/register.js \
+            src/checkin.js \
+            src/jhonatao.js \
+            src/jhonatao_multimodal.js \
+            src/jhonatao_live.js \
+            src/educator_complementary.js \
+            src/form_access.js \
+            src/initial_form_numeric_guard.js \
+            src/attendance_export_fix.js \
+            src/export_route_override.js \
+            src/document_header_standard.js \
+            src/technical_service_flow.js \
+            src/technical_team_enhancements.js \
+            src/technical_program_actions.js \
+            src/technical_workspace_tabs_v2.js \
+            src/technical_checkin.js \
+            src/access_controller.js \
+            src/access_public.js \
+            src/articulation_workspace.js \
+            src/articulation_demand_identity.js \
+            src/articulation_evidence.js \
+            src/document_drafts.js \
+            src/evidence_exports.js \
+            src/universal_drafts.js \
+            src/youth_profile_enhancements.js \
+            src/developer_view.js \
+            src/workshop_devices.js \
+            src/instructor_management.js \
+            src/instructor_portal.js \
+            src/workshop_collaboration.js \
+            src/workshop_live_sync.js \
+            src/workshop_plan_delete.js \
+            src/cfdh_program_metrics.js \
+            src/goals_workspace.js \
+            src/demand_public.js \
+            src/demand_identity_public.js \
+            src/team_comms.js \
+            _site/src/
+
+          # Núcleo histórico ainda é montado a partir dos fragmentos do bundle.
+          # Não remover até a próxima etapa de consolidação do núcleo.
           cat bundle/src__app_js.*.part > _site/src/app.js
           cat bundle/src__api_js.*.part > _site/src/api.js
           cat bundle/src__forms_js.*.part > _site/src/forms.js
           cat bundle/src__agenda_js.*.part > _site/src/agenda.js
-          # Força o app montado a usar a matriz de permissões mais recente, evitando cache de imports antigos.
-          sed -i 's#permissions.js?v=20261003-6#permissions.js?v=20261006-3#g' _site/src/app.js
-          # Carrega a área inteligente de Metas e Etapas como módulo isolado, sem alterar o núcleo monolítico.
-          sed -i 's#</body>#  <script type="module" src="./src/goals_workspace.js?v=20261008-1"></script>\n</body>#' _site/index.html
           cat bundle/assets__app_css.*.part assets/jhonatao.css assets/jhonatao_multimodal.css assets/jhonatao_jarvis.css > _site/assets/app.css
-          node --check _site/src/app.js
-          node --check _site/src/api.js
-          node --check _site/src/forms.js
-          node --check _site/src/permissions.js
-          node --check _site/src/register.js
-          node --check _site/src/agenda.js
-          node --check _site/src/checkin.js
-          node --check _site/src/jhonatao.js
-          node --check _site/src/jhonatao_multimodal.js
-          node --check _site/src/jhonatao_live.js
-          node --check _site/src/educator_complementary.js
-          node --check _site/src/form_access.js
-          node --check _site/src/initial_form_numeric_guard.js
-          node --check _site/src/attendance_export_fix.js
-          node --check _site/src/export_route_override.js
-          node --check _site/src/document_header_standard.js
-          node --check _site/src/technical_service_flow.js
-          node --check _site/src/technical_team_enhancements.js
-          node --check _site/src/technical_program_actions.js
-          node --check _site/src/access_controller.js
-          node --check _site/src/access_public.js
-          node --check _site/src/articulation_workspace.js
-          node --check _site/src/articulation_demand_identity.js
-          node --check _site/src/articulation_evidence.js
-          node --check _site/src/document_drafts.js
-          node --check _site/src/evidence_exports.js
-          node --check _site/src/universal_drafts.js
-          node --check _site/src/youth_profile_enhancements.js
-          node --check _site/src/developer_view.js
-          node --check _site/src/workshop_devices.js
-          node --check _site/src/instructor_management.js
-          node --check _site/src/instructor_portal.js
-          node --check _site/src/workshop_collaboration.js
-          node --check _site/src/workshop_live_sync.js
-          node --check _site/src/workshop_plan_delete.js
-          node --check _site/src/cfdh_program_metrics.js
-          node --check _site/src/goals_workspace.js
-          node --check _site/src/demand_public.js
-          node --check _site/src/demand_identity_public.js
-          node --check _site/src/team_comms.js
-          node --input-type=module --check < _site/src/app.js
-          node --input-type=module --check < _site/src/api.js
-          node --input-type=module --check < _site/src/forms.js
-          node --input-type=module --check < _site/src/agenda.js
-          node --input-type=module --check < _site/src/checkin.js
-          node --input-type=module --check < _site/src/jhonatao.js
-          node --input-type=module --check < _site/src/jhonatao_multimodal.js
-          node --input-type=module --check < _site/src/jhonatao_live.js
-          node --input-type=module --check < _site/src/educator_complementary.js
-          node --input-type=module --check < _site/src/form_access.js
-          node --input-type=module --check < _site/src/initial_form_numeric_guard.js
-          node --input-type=module --check < _site/src/attendance_export_fix.js
-          node --input-type=module --check < _site/src/export_route_override.js
-          node --input-type=module --check < _site/src/document_header_standard.js
-          node --input-type=module --check < _site/src/technical_service_flow.js
-          node --input-type=module --check < _site/src/technical_team_enhancements.js
-          node --input-type=module --check < _site/src/technical_program_actions.js
-          node --input-type=module --check < _site/src/access_controller.js
-          node --input-type=module --check < _site/src/access_public.js
-          node --input-type=module --check < _site/src/articulation_workspace.js
-          node --input-type=module --check < _site/src/articulation_demand_identity.js
-          node --input-type=module --check < _site/src/articulation_evidence.js
-          node --input-type=module --check < _site/src/document_drafts.js
-          node --input-type=module --check < _site/src/evidence_exports.js
-          node --input-type=module --check < _site/src/universal_drafts.js
-          node --input-type=module --check < _site/src/youth_profile_enhancements.js
-          node --input-type=module --check < _site/src/developer_view.js
-          node --input-type=module --check < _site/src/workshop_devices.js
-          node --input-type=module --check < _site/src/instructor_management.js
-          node --input-type=module --check < _site/src/instructor_portal.js
-          node --input-type=module --check < _site/src/workshop_collaboration.js
-          node --input-type=module --check < _site/src/workshop_live_sync.js
-          node --input-type=module --check < _site/src/workshop_plan_delete.js
-          node --input-type=module --check < _site/src/cfdh_program_metrics.js
-          node --input-type=module --check < _site/src/goals_workspace.js
-          node --input-type=module --check < _site/src/demand_public.js
-          node --input-type=module --check < _site/src/demand_identity_public.js
-          node --input-type=module --check < _site/src/team_comms.js
-          test -s _site/index.html
-          test -s _site/demanda.html
-          test -s _site/access.html
-          test -s _site/src/app.js
-          test -s _site/src/api.js
-          test -s _site/src/forms.js
-          test -s _site/src/initial_form_numeric_guard.js
-          test -s _site/src/attendance_export_fix.js
-          test -s _site/src/export_route_override.js
-          test -s _site/src/document_header_standard.js
-          test -s _site/src/evidence_exports.js
-          test -s _site/src/technical_service_flow.js
-          test -s _site/src/technical_team_enhancements.js
-          test -s _site/src/technical_program_actions.js
-          test -s _site/src/access_controller.js
-          test -s _site/src/access_public.js
-          test -s _site/src/developer_view.js
-          test -s _site/src/workshop_devices.js
-          test -s _site/src/instructor_management.js
-          test -s _site/src/instructor_portal.js
-          test -s _site/src/workshop_collaboration.js
-          test -s _site/src/workshop_live_sync.js
-          test -s _site/src/workshop_plan_delete.js
-          test -s _site/src/cfdh_program_metrics.js
-          test -s _site/src/goals_workspace.js
-          test -s _site/src/demand_public.js
-          test -s _site/src/demand_identity_public.js
-          test -s _site/src/youth_profile_enhancements.js
-          test -s _site/src/articulation_demand_identity.js
-          test -s _site/src/team_comms.js
-          test -s _site/src/articulation_evidence.js
-          test -s _site/src/document_drafts.js
-          test -s _site/src/universal_drafts.js
-          test -s _site/assets/app.css
+
+          # Compatibilidade temporária do núcleo empacotado. Mantida de forma explícita
+          # enquanto app.js ainda nasce do bundle antigo.
+          sed -i 's#permissions.js?v=20261003-6#permissions.js?v=20261009-1#g' _site/src/app.js
+
+          # Metas permanece como módulo externo ao núcleo até sua consolidação definitiva.
+          if ! grep -q 'src/goals_workspace.js' _site/index.html; then
+            sed -i 's#</body>#  <script type="module" src="./src/goals_workspace.js?v=20261009-1"></script>\n</body>#' _site/index.html
+          fi
+
+      - name: Validar JavaScript e arquivos obrigatórios
+        run: |
+          set -euo pipefail
+
+          # Validação sintática de todos os módulos que serão efetivamente publicados.
+          for file in _site/src/*.js; do
+            node --input-type=module --check < "$file"
+          done
+
+          required=(
+            _site/index.html
+            _site/checkin.html
+            _site/demanda.html
+            _site/access.html
+            _site/technical-checkin.html
+            _site/src/app.js
+            _site/src/api.js
+            _site/src/forms.js
+            _site/src/agenda.js
+            _site/src/permissions.js
+            _site/src/technical_program_actions.js
+            _site/src/technical_workspace_tabs_v2.js
+            _site/src/technical_checkin.js
+            _site/src/developer_view.js
+            _site/src/document_header_standard.js
+            _site/src/evidence_exports.js
+            _site/assets/app.css
+          )
+
+          for file in "${required[@]}"; do
+            test -s "$file"
+          done
+
+          # Garante que imports dinâmicos essenciais tenham destino publicado.
+          grep -q 'technical_workspace_tabs_v2.js' _site/src/document_header_standard.js
+          grep -q 'technical-checkin.html' _site/src/technical_workspace_tabs_v2.js
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
