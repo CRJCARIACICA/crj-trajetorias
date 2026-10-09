@@ -65,3 +65,5 @@ window.addEventListener('hashchange',()=>setTimeout(()=>replaceInstitutionalHead
 window.addEventListener('focus',()=>replaceInstitutionalHeaders());
 window.addEventListener('beforeunload',()=>{if(headerObjectUrl)URL.revokeObjectURL(headerObjectUrl)});
 loadStandardHeader().catch(err=>console.warn('Não foi possível carregar o cabeçalho institucional padrão:',err));
+
+import('./technical_workspace_tabs.js?v=20261009-1').catch(err=>console.warn('Não foi possível carregar a organização da Equipe Técnica:',err));
