@@ -47,7 +47,7 @@ export const FORM_FILL_ROLES = {
 
 export const DEVELOPER_PREVIEW_KEY = 'crj_developer_preview';
 export const DEVELOPER_PREVIEW_SCOPES = {
-  geral: { label:'Visão geral', roles:['coordenacao_geral','coordenacao_articulacao','articulador','educador','assistente_social','psicologo','terapeuta_ocupacional','controlador_acesso','administrativo','oficineiro','monitoramento'] },
+  geral: { label:'Acesso total', roles:['coordenacao_geral','coordenacao_articulacao','articulador','educador','assistente_social','psicologo','terapeuta_ocupacional','controlador_acesso','administrativo','oficineiro','monitoramento'] },
   coordenacao: { label:'Coordenação', roles:['coordenacao_geral'] },
   articulacao: { label:'Articulação', roles:['coordenacao_articulacao','articulador'] },
   educadores: { label:'Educadores', roles:['educador'] },
@@ -58,30 +58,50 @@ export const DEVELOPER_PREVIEW_SCOPES = {
   oficineiros: { label:'Oficineiros', roles:['oficineiro'] },
 };
 
-function activeDeveloperScope(){
+function activeDeveloperPreview(){
   try{
     const raw=sessionStorage.getItem(DEVELOPER_PREVIEW_KEY);
     if(!raw)return null;
     const parsed=JSON.parse(raw);
     if(!parsed?.enabled || !DEVELOPER_PREVIEW_SCOPES[parsed.scope])return null;
-    return parsed.scope;
+    return parsed;
   }catch{return null;}
 }
-function previewPermissions(scope){
+function activeDeveloperScope(){return activeDeveloperPreview()?.scope||null;}
+function activeDeveloperRole(){
+  const preview=activeDeveloperPreview();
+  if(!preview?.role)return null;
+  const cfg=DEVELOPER_PREVIEW_SCOPES[preview.scope];
+  return cfg?.roles?.includes(preview.role)?preview.role:null;
+}
+function previewRoles(scope){
   const cfg=DEVELOPER_PREVIEW_SCOPES[scope];
   if(!cfg)return [];
-  return [...new Set(cfg.roles.flatMap(role=>PERMISSIONS[role]||[]))];
+  if(scope==='geral')return cfg.roles;
+  const role=activeDeveloperRole();
+  return role?[role]:cfg.roles;
 }
+function previewPermissions(scope){return [...new Set(previewRoles(scope).flatMap(role=>PERMISSIONS[role]||[]))];}
 export function developerPreviewScope(){return activeDeveloperScope();}
-export function developerPreviewLabel(){const scope=activeDeveloperScope();return scope?DEVELOPER_PREVIEW_SCOPES[scope]?.label||scope:null;}
+export function developerPreviewRole(){return activeDeveloperRole();}
+export function developerPreviewLabel(){
+  const scope=activeDeveloperScope(),role=activeDeveloperRole();
+  if(!scope)return null;
+  if(scope!=='geral'&&role)return ROLES[role]||role;
+  return DEVELOPER_PREVIEW_SCOPES[scope]?.label||scope;
+}
 
 export function can(role, permission){
   const scope=activeDeveloperScope();
   if(scope)return previewPermissions(scope).includes(permission);
   return (PERMISSIONS[role] || []).includes(permission);
 }
-// O modo desenvolvedor é deliberadamente somente leitura: não amplia preenchimento de formulários.
-export function canFillForm(role, formSlug){ return (FORM_FILL_ROLES[formSlug] || []).includes(role); }
+export function canFillForm(role, formSlug){
+  const allowed=FORM_FILL_ROLES[formSlug]||[];
+  const scope=activeDeveloperScope();
+  if(scope)return previewRoles(scope).some(r=>allowed.includes(r));
+  return allowed.includes(role);
+}
 export function roleLabel(role){ return ROLES[role] || role || 'Sem perfil'; }
 
 // Ajuste visual/operacional da área do Controlador. A versão anterior observava qualquer
