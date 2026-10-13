@@ -31,7 +31,6 @@ jobs:
           rm -rf _site
           mkdir -p _site/src _site/assets
 
-          # Páginas públicas realmente usadas pela aplicação.
           cp \
             index.html \
             checkin.html \
@@ -41,7 +40,6 @@ jobs:
             .nojekyll \
             _site/
 
-          # Módulos independentes carregados diretamente pelo HTML ou dinamicamente.
           cp \
             src/config.js \
             src/permissions.js \
@@ -60,6 +58,7 @@ jobs:
             src/technical_team_enhancements.js \
             src/technical_program_actions.js \
             src/technical_workspace.js \
+            src/technical_planning_governance.js \
             src/technical_checkin.js \
             src/access_controller.js \
             src/access_public.js \
@@ -87,24 +86,18 @@ jobs:
             src/joint_actions.js \
             _site/src/
 
-          # Núcleo histórico ainda é montado a partir dos fragmentos do bundle.
-          # Não remover até a próxima etapa de consolidação do núcleo.
           cat bundle/src__app_js.*.part > _site/src/app.js
           cat bundle/src__api_js.*.part > _site/src/api.js
           cat bundle/src__forms_js.*.part > _site/src/forms.js
           cat bundle/src__agenda_js.*.part > _site/src/agenda.js
           cat bundle/assets__app_css.*.part assets/jhonatao.css assets/jhonatao_multimodal.css assets/jhonatao_jarvis.css > _site/assets/app.css
 
-          # Compatibilidade temporária do núcleo empacotado. Mantida de forma explícita
-          # enquanto app.js ainda nasce do bundle antigo.
           sed -i 's#permissions.js?v=20261003-6#permissions.js?v=20261009-1#g' _site/src/app.js
 
-          # Metas permanece como módulo externo ao núcleo até sua consolidação definitiva.
           if ! grep -q 'src/goals_workspace.js' _site/index.html; then
             sed -i 's#</body>#  <script type="module" src="./src/goals_workspace.js?v=20261009-1"></script>\n</body>#' _site/index.html
           fi
 
-          # Ações conjuntas e sincronização manual com a agenda são transversais às áreas.
           if ! grep -q 'src/joint_actions.js' _site/index.html; then
             sed -i 's#</body>#  <script type="module" src="./src/joint_actions.js?v=20261013-1"></script>\n</body>#' _site/index.html
           fi
@@ -113,7 +106,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Validação sintática de todos os módulos que serão efetivamente publicados.
           for file in _site/src/*.js; do
             node --input-type=module --check < "$file"
           done
@@ -131,6 +123,7 @@ jobs:
             _site/src/permissions.js
             _site/src/technical_program_actions.js
             _site/src/technical_workspace.js
+            _site/src/technical_planning_governance.js
             _site/src/technical_checkin.js
             _site/src/developer_view.js
             _site/src/document_header_standard.js
@@ -145,8 +138,8 @@ jobs:
             test -s "$file"
           done
 
-          # Garante que imports dinâmicos essenciais tenham destino publicado.
           grep -q 'technical_workspace.js' _site/src/document_header_standard.js
+          grep -q 'technical_planning_governance.js' _site/src/document_header_standard.js
           grep -q 'youth_trajectory_evidence.js' _site/src/document_header_standard.js
           grep -q 'youth_trajectory_exports.js' _site/src/document_header_standard.js
           grep -q 'technical-checkin.html' _site/src/technical_workspace.js
