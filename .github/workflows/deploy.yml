@@ -93,6 +93,8 @@ jobs:
           cat bundle/assets__app_css.*.part assets/jhonatao.css assets/jhonatao_multimodal.css assets/jhonatao_jarvis.css > _site/assets/app.css
 
           sed -i 's#permissions.js?v=20261003-6#permissions.js?v=20261009-1#g' _site/src/app.js
+          # Invalida cache da camada global de exportação para que a correção Base64 chegue imediatamente aos navegadores.
+          sed -i -E 's#src/export_route_override\.js\?v=[0-9-]+#src/export_route_override.js?v=20261013-4#g' _site/index.html
 
           if ! grep -q 'src/goals_workspace.js' _site/index.html; then
             sed -i 's#</body>#  <script type="module" src="./src/goals_workspace.js?v=20261009-1"></script>\n</body>#' _site/index.html
@@ -128,6 +130,7 @@ jobs:
             _site/src/developer_view.js
             _site/src/document_header_standard.js
             _site/src/evidence_exports.js
+            _site/src/export_route_override.js
             _site/src/joint_actions.js
             _site/src/youth_trajectory_evidence.js
             _site/src/youth_trajectory_exports.js
@@ -144,6 +147,8 @@ jobs:
           grep -q 'youth_trajectory_exports.js' _site/src/document_header_standard.js
           grep -q 'technical-checkin.html' _site/src/technical_workspace.js
           grep -q 'joint_actions.js' _site/index.html
+          grep -q 'validateBinaryResponse' _site/src/export_route_override.js
+          grep -q 'export_route_override.js?v=20261013-4' _site/index.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
