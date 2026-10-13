@@ -70,6 +70,7 @@ jobs:
             src/evidence_exports.js \
             src/universal_drafts.js \
             src/youth_profile_enhancements.js \
+            src/youth_trajectory_evidence.js \
             src/developer_view.js \
             src/workshop_devices.js \
             src/instructor_management.js \
@@ -134,6 +135,7 @@ jobs:
             _site/src/document_header_standard.js
             _site/src/evidence_exports.js
             _site/src/joint_actions.js
+            _site/src/youth_trajectory_evidence.js
             _site/assets/app.css
           )
 
@@ -143,6 +145,7 @@ jobs:
 
           # Garante que imports dinâmicos essenciais tenham destino publicado.
           grep -q 'technical_workspace.js' _site/src/document_header_standard.js
+          grep -q 'youth_trajectory_evidence.js' _site/src/document_header_standard.js
           grep -q 'technical-checkin.html' _site/src/technical_workspace.js
           grep -q 'joint_actions.js' _site/index.html
 
