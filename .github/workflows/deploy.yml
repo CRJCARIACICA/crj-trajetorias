@@ -84,6 +84,7 @@ jobs:
             src/demand_identity_public.js \
             src/team_comms.js \
             src/joint_actions.js \
+            src/general_calendar.js \
             _site/src/
 
           cat bundle/src__app_js.*.part > _site/src/app.js
@@ -102,6 +103,10 @@ jobs:
 
           if ! grep -q 'src/joint_actions.js' _site/index.html; then
             sed -i 's#</body>#  <script type="module" src="./src/joint_actions.js?v=20261013-1"></script>\n</body>#' _site/index.html
+          fi
+
+          if ! grep -q 'src/general_calendar.js' _site/index.html; then
+            sed -i 's#</body>#  <script type="module" src="./src/general_calendar.js?v=20261014-1"></script>\n</body>#' _site/index.html
           fi
 
       - name: Validar JavaScript e arquivos obrigatórios
@@ -132,6 +137,7 @@ jobs:
             _site/src/evidence_exports.js
             _site/src/export_route_override.js
             _site/src/joint_actions.js
+            _site/src/general_calendar.js
             _site/src/youth_trajectory_evidence.js
             _site/src/youth_trajectory_exports.js
             _site/assets/app.css
@@ -147,6 +153,7 @@ jobs:
           grep -q 'youth_trajectory_exports.js' _site/src/document_header_standard.js
           grep -q 'technical-checkin.html' _site/src/technical_workspace.js
           grep -q 'joint_actions.js' _site/index.html
+          grep -q 'general_calendar.js' _site/index.html
           grep -q 'validateBinaryResponse' _site/src/export_route_override.js
           grep -q 'export_route_override.js?v=20261013-4' _site/index.html
 
