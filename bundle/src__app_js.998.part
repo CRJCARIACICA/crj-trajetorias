@@ -1,0 +1,11 @@
+
+// Regra operacional do CRJ — sobreposições de atividades são permitidas.
+// O calendário continua exibindo oficinas, CFDHs, agenda técnica, eventos e demais
+// compromissos simultâneos para organização da equipe, mas a coincidência de horário
+// não deve impedir o salvamento do planejamento CFDH. Isto é especialmente necessário
+// no CFDH transversal, que acontece dentro da própria oficina.
+if (typeof cfdhActionCalendarConflicts === 'function') {
+  cfdhActionCalendarConflicts = function(){
+    return [];
+  };
+}
