@@ -54,6 +54,7 @@ jobs:
             src/attendance_export_fix.js \
             src/export_route_override.js \
             src/document_header_standard.js \
+            src/feature_loader.js \
             src/technical_service_flow.js \
             src/technical_team_enhancements.js \
             src/technical_program_actions.js \
@@ -95,27 +96,11 @@ jobs:
           cat bundle/assets__app_css.*.part assets/jhonatao.css assets/jhonatao_multimodal.css assets/jhonatao_jarvis.css > _site/assets/app.css
 
           sed -i 's#permissions.js?v=20261003-6#permissions.js?v=20261009-1#g' _site/src/app.js
-          # Invalida cache da camada global de exportação para que a correção Base64 chegue imediatamente aos navegadores.
+          # Mantém os módulos centrais atualizados sem recolocar recursos pesados no HTML inicial.
           sed -i -E 's#src/export_route_override\.js\?v=[0-9-]+#src/export_route_override.js?v=20261013-4#g' _site/index.html
-          # Invalida cache do app/API depois de mudanças na regra do CFDH transversal.
           sed -i -E 's#api\.js\?v=[0-9-]+#api.js?v=20261014-2#g' _site/src/app.js _site/src/cfdh_transversal_integration.js _site/index.html
           sed -i -E 's#src/app\.js\?v=[0-9-]+#src/app.js?v=20261014-2#g' _site/index.html
-
-          if ! grep -q 'src/goals_workspace.js' _site/index.html; then
-            sed -i 's#</body>#  <script type="module" src="./src/goals_workspace.js?v=20261009-1"></script>\n</body>#' _site/index.html
-          fi
-
-          if ! grep -q 'src/joint_actions.js' _site/index.html; then
-            sed -i 's#</body>#  <script type="module" src="./src/joint_actions.js?v=20261013-1"></script>\n</body>#' _site/index.html
-          fi
-
-          if ! grep -q 'src/general_calendar.js' _site/index.html; then
-            sed -i 's#</body>#  <script type="module" src="./src/general_calendar.js?v=20261014-1"></script>\n</body>#' _site/index.html
-          fi
-
-          if ! grep -q 'src/cfdh_transversal_integration.js' _site/index.html; then
-            sed -i 's#</body>#  <script type="module" src="./src/cfdh_transversal_integration.js?v=20261014-2"></script>\n</body>#' _site/index.html
-          fi
+          sed -i -E 's#src/feature_loader\.js\?v=[^\"]+#src/feature_loader.js?v=20261014-lazy2#g' _site/index.html
 
       - name: Validar JavaScript e arquivos obrigatórios
         run: |
@@ -136,6 +121,7 @@ jobs:
             _site/src/forms.js
             _site/src/agenda.js
             _site/src/permissions.js
+            _site/src/feature_loader.js
             _site/src/technical_program_actions.js
             _site/src/technical_workspace.js
             _site/src/technical_planning_governance.js
@@ -156,18 +142,29 @@ jobs:
             test -s "$file"
           done
 
-          grep -q 'technical_workspace.js' _site/src/document_header_standard.js
-          grep -q 'technical_planning_governance.js' _site/src/document_header_standard.js
-          grep -q 'youth_trajectory_evidence.js' _site/src/document_header_standard.js
-          grep -q 'youth_trajectory_exports.js' _site/src/document_header_standard.js
+          grep -q 'ROUTE_FEATURES' _site/src/feature_loader.js
+          grep -q 'general_calendar' _site/src/feature_loader.js
+          grep -q 'cfdh_transversal_integration' _site/src/feature_loader.js
+          grep -q 'technical_workspace' _site/src/feature_loader.js
+          grep -q 'goals_workspace' _site/src/feature_loader.js
+          grep -q 'joint_actions' _site/src/feature_loader.js
+          grep -q 'feature_loader.js?v=20261014-lazy2' _site/index.html
           grep -q 'technical-checkin.html' _site/src/technical_workspace.js
-          grep -q 'joint_actions.js' _site/index.html
-          grep -q 'general_calendar.js' _site/index.html
-          grep -q 'cfdh_transversal_integration.js?v=20261014-2' _site/index.html
           grep -q 'api.js?v=20261014-2' _site/src/app.js
           grep -q 'src/app.js?v=20261014-2' _site/index.html
           grep -q 'validateBinaryResponse' _site/src/export_route_override.js
-          grep -q 'export_route_override.js?v=20261013-4' _site/index.html
+
+          # Recursos de área não podem voltar a bloquear a primeira carga do sistema.
+          if grep -Eq 'src/(technical_workspace|technical_program_actions|articulation_workspace|access_controller|goals_workspace|joint_actions|general_calendar|cfdh_transversal_integration)\.js' _site/index.html; then
+            echo 'Módulo pesado voltou ao carregamento inicial do index.html.' >&2
+            exit 1
+          fi
+
+          # O cabeçalho institucional não deve mais disparar módulos de outras áreas.
+          if grep -Eq "import\('./(technical_workspace|technical_planning_governance|youth_trajectory_evidence|youth_trajectory_exports)" _site/src/document_header_standard.js; then
+            echo 'document_header_standard voltou a importar recursos de outras áreas.' >&2
+            exit 1
+          fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
