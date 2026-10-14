@@ -13,7 +13,7 @@
 </head>
 <body>
   <div id="app"></div>
-  <script type="module" src="./src/export_route_override.js?v=20261007-3"></script>
+  <script type="module" src="./src/export_route_override.js?v=20261013-4"></script>
   <script type="module" src="./src/register.js?v=20261003-6"></script>
   <script type="module" src="./src/app.js?v=20261006-4"></script>
   <script type="module">
@@ -232,31 +232,6 @@
     window.addEventListener('hashchange',()=>{activeFillKey='';applyTechnicalFlow()});
     resolveTechnicalProfile().then(applyTechnicalFlow).catch(err=>console.warn('Não foi possível resolver o perfil técnico:',err));
   </script>
-  <script type="module" src="./src/document_header_standard.js?v=20261007-2"></script>
-  <script type="module" src="./src/attendance_export_fix.js?v=20261007-2"></script>
-  <script type="module" src="./src/initial_form_numeric_guard.js?v=20261006-1"></script>
-  <script type="module" src="./src/developer_view.js?v=20261006-1"></script>
-  <script type="module" src="./src/workshop_devices.js?v=20261006-1"></script>
-  <script type="module" src="./src/instructor_management.js?v=20261006-2"></script>
-  <script type="module" src="./src/educator_complementary.js?v=20261005-1"></script>
-  <script type="module" src="./src/form_access.js?v=20261005-3"></script>
-  <script type="module" src="./src/technical_service_flow.js?v=20261007-1"></script>
-  <script type="module" src="./src/technical_team_enhancements.js?v=20261006-1"></script>
-  <script type="module" src="./src/technical_program_actions.js?v=20261009-1"></script>
-  <script type="module" src="./src/access_controller.js?v=20261006-1"></script>
-  <script type="module" src="./src/articulation_workspace.js?v=20261005-2"></script>
-  <script type="module" src="./src/articulation_demand_identity.js?v=20261005-1"></script>
-  <script type="module" src="./src/articulation_evidence.js?v=20261005-1"></script>
-  <script type="module" src="./src/document_drafts.js?v=20261005-1"></script>
-  <script type="module" src="./src/evidence_exports.js?v=20261006-1"></script>
-  <script type="module" src="./src/universal_drafts.js?v=20261005-2"></script>
-  <script type="module" src="./src/youth_profile_enhancements.js?v=20261007-2"></script>
-  <script type="module" src="./src/team_comms.js?v=20261005-1"></script>
-  <script type="module" src="./src/instructor_portal.js?v=20261006-1"></script>
-  <script type="module" src="./src/workshop_collaboration.js?v=20261006-1"></script>
-  <script type="module" src="./src/workshop_live_sync.js?v=20261006-1"></script>
-  <script type="module" src="./src/workshop_plan_delete.js?v=20261006-1"></script>
-  <script type="module" src="./src/cfdh_program_metrics.js?v=20261006-1"></script>
   <script type="module">
     import { apiMode, supabaseClient } from './src/api.js?v=20261004-2';
 
@@ -316,7 +291,6 @@
     window.addEventListener('storage',()=>setTimeout(removeMobilizationMenu,30));
     resolveInstructorView().catch(err=>console.warn('Não foi possível aplicar o menu restrito do oficineiro:',err));
   </script>
-  <script type="module" src="./src/jhonatao_multimodal.js?v=20261004-8"></script>
-  <script type="module" src="./src/jhonatao_live.js?v=20261004-5"></script>
+  <script type="module" src="./src/feature_loader.js?v=20261014-lazy1"></script>
 </body>
 </html>
