@@ -1,0 +1,62 @@
+
+// CFDH transversal: antes da validação de conflitos, identifica e reaproveita
+// a ocorrência real da oficina no workshop_calendar. Isso garante que uma ação
+// transversal no mesmo horário da própria oficina seja tratada como complemento
+// pedagógico da aula, e não como uma segunda atividade concorrente.
+const __saveCfdhPlanBundleBeforeTransversalLessonLink = saveCfdhPlanBundle;
+saveCfdhPlanBundle = async function(planId,{plan={},workshop_ids=[],actions=[]}={}){
+  if(mode==='mock'){
+    return __saveCfdhPlanBundleBeforeTransversalLessonLink(planId,{plan,workshop_ids,actions});
+  }
+
+  let planType=plan?.plan_type||'';
+  if(!planType){
+    try{
+      const current=await getCfdhPlanBundle(planId);
+      planType=current?.plan?.plan_type||'';
+    }catch{}
+  }
+
+  if(planType!=='cfdh_transversal'){
+    return __saveCfdhPlanBundleBeforeTransversalLessonLink(planId,{plan,workshop_ids,actions});
+  }
+
+  const normalizedActions=(Array.isArray(actions)?actions:[]).map(a=>({...a}));
+  const eligible=normalizedActions.filter(a=>a?.workshop_id&&a?.scheduled_date&&a?.start_time);
+
+  if(eligible.length){
+    const workshopIds=[...new Set(eligible.map(a=>a.workshop_id).filter(Boolean))];
+    const dates=[...new Set(eligible.map(a=>a.scheduled_date).filter(Boolean))];
+
+    const {data:calendarRows,error}=await supabase
+      .from('workshop_calendar')
+      .select('id,workshop_id,scheduled_date,start_time,end_time,location_type,location_other,status')
+      .in('workshop_id',workshopIds)
+      .in('scheduled_date',dates)
+      .neq('status','cancelada');
+    if(error)throw error;
+
+    for(const action of eligible){
+      const actionStart=String(action.start_time||'').slice(0,5);
+      const actionEnd=String(action.end_time||cfdhApiAutoEndTime(action.start_time,action.planned_duration_hours)||'').slice(0,5);
+      const as=cfdhApiMinutes(actionStart),ae=cfdhApiMinutes(actionEnd);
+      if(as==null||ae==null||ae<=as)continue;
+
+      const lesson=(calendarRows||[]).find(row=>{
+        if(String(row.workshop_id)!==String(action.workshop_id))return false;
+        if(String(row.scheduled_date)!==String(action.scheduled_date))return false;
+        const rs=cfdhApiMinutes(String(row.start_time||'').slice(0,5));
+        const re=cfdhApiMinutes(String(row.end_time||'').slice(0,5));
+        return rs!=null&&re!=null&&as>=rs&&ae<=re;
+      });
+
+      if(!lesson)continue;
+      action.workshop_calendar_id=lesson.id;
+      action.schedule_mode='workshop_planned';
+      if(!action.location_type&&lesson.location_type)action.location_type=lesson.location_type;
+      if(!action.location_other&&lesson.location_other)action.location_other=lesson.location_other;
+    }
+  }
+
+  return __saveCfdhPlanBundleBeforeTransversalLessonLink(planId,{plan,workshop_ids,actions:normalizedActions});
+};
