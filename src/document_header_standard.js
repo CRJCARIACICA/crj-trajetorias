@@ -65,8 +65,3 @@ window.addEventListener('hashchange',()=>setTimeout(()=>replaceInstitutionalHead
 window.addEventListener('focus',()=>replaceInstitutionalHeaders());
 window.addEventListener('beforeunload',()=>{if(headerObjectUrl)URL.revokeObjectURL(headerObjectUrl)});
 loadStandardHeader().catch(err=>console.warn('Não foi possível carregar o cabeçalho institucional padrão:',err));
-
-import('./technical_workspace.js?v=20261009-1').catch(err=>console.warn('Não foi possível carregar a organização da Equipe Técnica:',err));
-import('./technical_planning_governance.js?v=20261013-1').catch(err=>console.warn('Não foi possível carregar a governança do planejamento técnico:',err));
-import('./youth_trajectory_evidence.js?v=20261013-1').catch(err=>console.warn('Não foi possível carregar a evidência da trajetória do jovem:',err));
-import('./youth_trajectory_exports.js?v=20261013-1').catch(err=>console.warn('Não foi possível carregar os controles de exportação da trajetória:',err));
