@@ -5,7 +5,7 @@ import { getSession } from './api.js?v=20261004-2';
 // quando a área correspondente é realmente aberta. Isso evita dezenas de
 // MutationObservers e consultas Supabase fora do menu em uso.
 
-const VERSION='20261014-lazy2';
+const VERSION='20261014-lazy3';
 const moduleCache=new Map();
 let routeSeq=0;
 let routeTimer=null;
@@ -21,7 +21,7 @@ const ROUTE_FEATURES={
     deferred:['document_header_standard','evidence_exports']
   },
   formulario:{
-    critical:['form_access','initial_form_numeric_guard','universal_drafts','youth_profile_enhancements'],
+    critical:['form_access','universal_drafts','youth_profile_enhancements'],
     deferred:['document_header_standard','evidence_exports','articulation_workspace']
   },
   formularios:{critical:['form_access'],deferred:[]},
