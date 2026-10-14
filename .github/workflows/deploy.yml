@@ -97,6 +97,9 @@ jobs:
           sed -i 's#permissions.js?v=20261003-6#permissions.js?v=20261009-1#g' _site/src/app.js
           # Invalida cache da camada global de exportação para que a correção Base64 chegue imediatamente aos navegadores.
           sed -i -E 's#src/export_route_override\.js\?v=[0-9-]+#src/export_route_override.js?v=20261013-4#g' _site/index.html
+          # Invalida cache do app/API depois de mudanças na regra do CFDH transversal.
+          sed -i -E 's#api\.js\?v=[0-9-]+#api.js?v=20261014-2#g' _site/src/app.js _site/src/cfdh_transversal_integration.js _site/index.html
+          sed -i -E 's#src/app\.js\?v=[0-9-]+#src/app.js?v=20261014-2#g' _site/index.html
 
           if ! grep -q 'src/goals_workspace.js' _site/index.html; then
             sed -i 's#</body>#  <script type="module" src="./src/goals_workspace.js?v=20261009-1"></script>\n</body>#' _site/index.html
@@ -111,7 +114,7 @@ jobs:
           fi
 
           if ! grep -q 'src/cfdh_transversal_integration.js' _site/index.html; then
-            sed -i 's#</body>#  <script type="module" src="./src/cfdh_transversal_integration.js?v=20261014-1"></script>\n</body>#' _site/index.html
+            sed -i 's#</body>#  <script type="module" src="./src/cfdh_transversal_integration.js?v=20261014-2"></script>\n</body>#' _site/index.html
           fi
 
       - name: Validar JavaScript e arquivos obrigatórios
@@ -160,7 +163,9 @@ jobs:
           grep -q 'technical-checkin.html' _site/src/technical_workspace.js
           grep -q 'joint_actions.js' _site/index.html
           grep -q 'general_calendar.js' _site/index.html
-          grep -q 'cfdh_transversal_integration.js' _site/index.html
+          grep -q 'cfdh_transversal_integration.js?v=20261014-2' _site/index.html
+          grep -q 'api.js?v=20261014-2' _site/src/app.js
+          grep -q 'src/app.js?v=20261014-2' _site/index.html
           grep -q 'validateBinaryResponse' _site/src/export_route_override.js
           grep -q 'export_route_override.js?v=20261013-4' _site/index.html
 
