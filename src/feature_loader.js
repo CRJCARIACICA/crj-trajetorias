@@ -5,12 +5,13 @@ import { getSession } from './api.js?v=20261004-2';
 // quando a área correspondente é realmente aberta. Isso evita dezenas de
 // MutationObservers e consultas Supabase fora do menu em uso.
 
-const VERSION='20261014-lazy1';
+const VERSION='20261014-lazy2';
 const moduleCache=new Map();
 let routeSeq=0;
 let routeTimer=null;
 let sessionPromise=null;
-let accessNavTimer=null;
+let profileCache=null;
+let utilityNavTimer=null;
 
 const ACCESS_ROLES=new Set(['coordenacao_geral','controlador_acesso','monitoramento']);
 
@@ -25,15 +26,15 @@ const ROUTE_FEATURES={
   },
   formularios:{critical:['form_access'],deferred:[]},
   oficinas:{
-    critical:['workshop_devices','instructor_management','workshop_collaboration','workshop_live_sync','workshop_plan_delete'],
+    critical:['workshop_devices','instructor_management','workshop_collaboration','workshop_live_sync','workshop_plan_delete','cfdh_transversal_integration'],
     deferred:['articulation_workspace','joint_actions','document_header_standard','evidence_exports','attendance_export_fix']
   },
   oficina:{
-    critical:['workshop_devices','instructor_management','workshop_collaboration','workshop_live_sync','workshop_plan_delete'],
+    critical:['workshop_devices','instructor_management','workshop_collaboration','workshop_live_sync','workshop_plan_delete','cfdh_transversal_integration'],
     deferred:['articulation_workspace','joint_actions','document_header_standard','evidence_exports','attendance_export_fix']
   },
   workshops:{
-    critical:['workshop_devices','instructor_management','workshop_collaboration','workshop_live_sync','workshop_plan_delete'],
+    critical:['workshop_devices','instructor_management','workshop_collaboration','workshop_live_sync','workshop_plan_delete','cfdh_transversal_integration'],
     deferred:['articulation_workspace','joint_actions','document_header_standard','evidence_exports','attendance_export_fix']
   },
   educador:{
@@ -45,7 +46,7 @@ const ROUTE_FEATURES={
     deferred:['articulation_workspace','joint_actions','document_header_standard','evidence_exports']
   },
   cfdh:{
-    critical:['cfdh_program_metrics'],
+    critical:['cfdh_program_metrics','cfdh_transversal_integration'],
     deferred:['articulation_workspace','joint_actions','document_header_standard','evidence_exports']
   },
   'equipe-tecnica':{
@@ -79,7 +80,8 @@ const ROUTE_FEATURES={
   metas:{critical:['goals_workspace'],deferred:[]},
   equipe:{critical:['instructor_management'],deferred:[]},
   'equipe-permissoes':{critical:['instructor_management'],deferred:[]},
-  jhonatao:{critical:['jhonatao_multimodal','jhonatao_live'],deferred:[]}
+  jhonatao:{critical:['jhonatao_multimodal','jhonatao_live'],deferred:[]},
+  'calendario-geral':{critical:['general_calendar'],deferred:[]}
 };
 
 function routeName(hash=location.hash){
@@ -154,19 +156,36 @@ function scheduleRouteLoad(){
 }
 
 async function currentProfile(){
+  if(profileCache)return profileCache;
   if(!sessionPromise)sessionPromise=getSession().catch(()=>null);
-  return (await sessionPromise)?.user||null;
+  const session=await sessionPromise;
+  if(session?.user){profileCache=session.user;return profileCache}
+  // Se o carregador iniciou ainda na tela de login, permita nova tentativa após autenticação.
+  sessionPromise=null;
+  return null;
 }
 
-async function ensureAccessNav(){
-  const nav=document.querySelector('.sidebar .nav');
-  if(!nav)return;
-  const profile=await currentProfile();
-  const allowed=profile?.active!==false&&ACCESS_ROLES.has(String(profile?.role||''));
-  const existing=nav.querySelector('[data-lazy-access-nav]');
+function insertCalendarNav(nav,profile){
+  const existing=nav.querySelector('[data-general-calendar-link]');
+  const allowed=profile?.active!==false&&profile?.role&&profile.role!=='pendente';
   if(!allowed){existing?.remove();return}
-  if(existing)return;
+  if(existing){existing.classList.toggle('active',routeName()==='calendario-geral');return}
   const link=document.createElement('a');
+  link.dataset.generalCalendarLink='1';
+  link.href='#calendario-geral';
+  link.className=routeName()==='calendario-geral'?'active':'';
+  link.innerHTML='<span>▦</span><span>Calendário Geral</span>';
+  const agenda=[...nav.querySelectorAll('a')].find(x=>String(x.textContent||'').trim().toLowerCase().startsWith('agenda'));
+  if(agenda)agenda.insertAdjacentElement('beforebegin',link);else nav.appendChild(link);
+}
+
+function insertAccessNav(nav,profile){
+  const existing=nav.querySelector('#access-controller-nav,[data-lazy-access-nav]');
+  const allowed=profile?.active!==false&&ACCESS_ROLES.has(String(profile?.role||''));
+  if(!allowed){existing?.remove();return}
+  if(existing){existing.classList.toggle('active',routeName()==='controlador-acesso');return}
+  const link=document.createElement('a');
+  link.id='access-controller-nav';
   link.dataset.lazyAccessNav='1';
   link.href='#controlador-acesso';
   link.className=routeName()==='controlador-acesso'?'active':'';
@@ -175,9 +194,18 @@ async function ensureAccessNav(){
   nav.insertBefore(link,sep||null);
 }
 
-function scheduleAccessNav(){
-  clearTimeout(accessNavTimer);
-  accessNavTimer=setTimeout(()=>ensureAccessNav().catch(()=>{}),30);
+async function ensureUtilityNav(){
+  const nav=document.querySelector('.sidebar .nav');
+  if(!nav)return;
+  const profile=await currentProfile();
+  if(!profile)return;
+  insertCalendarNav(nav,profile);
+  insertAccessNav(nav,profile);
+}
+
+function scheduleUtilityNav(){
+  clearTimeout(utilityNavTimer);
+  utilityNavTimer=setTimeout(()=>ensureUtilityNav().catch(()=>{}),30);
 }
 
 function targetRouteFromLink(target){
@@ -202,23 +230,25 @@ document.addEventListener('click',event=>{
 
 window.addEventListener('hashchange',()=>{
   scheduleRouteLoad();
-  scheduleAccessNav();
+  scheduleUtilityNav();
 });
 window.addEventListener('focus',()=>{
-  scheduleAccessNav();
+  scheduleUtilityNav();
   // Não refaz consultas pesadas: apenas garante que o módulo da rota já esteja disponível.
   scheduleRouteLoad();
 });
 
 const appRoot=document.querySelector('#app');
 if(appRoot){
-  new MutationObserver(scheduleAccessNav).observe(appRoot,{childList:true});
+  // O app recria a sidebar em cada render. Observamos apenas filhos diretos do #app,
+  // sem vigiar toda a árvore, para recolocar os dois atalhos leves quando necessário.
+  new MutationObserver(scheduleUtilityNav).observe(appRoot,{childList:true});
 }
 
 // Ferramentas de desenvolvedor são globais, mas não bloqueiam a primeira pintura.
 idle(()=>loadModule('developer_view').catch(()=>{}),1400);
 
-scheduleAccessNav();
+scheduleUtilityNav();
 scheduleRouteLoad();
 
 window.__crjFeatureLoader={
