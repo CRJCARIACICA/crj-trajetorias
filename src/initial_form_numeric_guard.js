@@ -1,6 +1,7 @@
-import { apiMode, supabaseClient } from './api.js?v=20261004-2';
+import { apiMode, supabaseClient } from './api.js?v=20261014-2';
 
 const INSTALL_FLAG=Symbol.for('crj.initialFormNumericGuard');
+const FETCH_FLAG=Symbol.for('crj.initialFormNumericFetchGuard');
 const HOUSEHOLD_FIELD='household_size';
 
 function normalizeHouseholdSize(value){
@@ -22,6 +23,40 @@ function normalizeInitialFormObject(value){
 
 function normalizeRows(value){
   return Array.isArray(value)?value.map(normalizeInitialFormObject):normalizeInitialFormObject(value);
+}
+
+function normalizeRestBody(url,body){
+  if(typeof body!=='string'||!body.trim())return body;
+  const target=String(url||'');
+  const isYouth=/\/rest\/v1\/young_people(?:\?|$)/.test(target);
+  const isInitialRpc=/\/rest\/v1\/rpc\/save_initial_form_document(?:\?|$)/.test(target);
+  if(!isYouth&&!isInitialRpc)return body;
+  try{
+    const parsed=JSON.parse(body);
+    const normalized=isYouth
+      ? normalizeRows(parsed)
+      : {...parsed,p_payload:normalizeInitialFormObject(parsed?.p_payload)};
+    return JSON.stringify(normalized);
+  }catch(error){
+    // Erros reais de validação do campo devem bloquear o envio; JSON não relacionado segue intacto.
+    if(error instanceof SyntaxError)return body;
+    throw error;
+  }
+}
+
+function installFetchGuard(){
+  if(globalThis[FETCH_FLAG]||typeof globalThis.fetch!=='function')return;
+  const originalFetch=globalThis.fetch.bind(globalThis);
+  globalThis.fetch=function(input,init){
+    const url=typeof input==='string'?input:input?.url||'';
+    const method=String(init?.method||input?.method||'GET').toUpperCase();
+    if(['POST','PATCH','PUT'].includes(method)&&init&&typeof init.body==='string'){
+      const body=normalizeRestBody(url,init.body);
+      if(body!==init.body)init={...init,body};
+    }
+    return originalFetch(input,init);
+  };
+  Object.defineProperty(globalThis,FETCH_FLAG,{value:true,configurable:false});
 }
 
 function installGuard(client){
@@ -56,13 +91,15 @@ function installGuard(client){
 function validateInitialFormInput(){
   const input=document.querySelector('form [name="household_size"]');
   if(!input)return;
+  input.min='0';
+  input.step='1';
   const raw=String(input.value??'').trim();
   if(raw===''){
     input.setCustomValidity('');
     return;
   }
   const number=Number(raw);
-  input.setCustomValidity(Number.isInteger(number)&&number>=0?'':'Informe a quantidade de pessoas com um número inteiro.');
+  input.setCustomValidity(Number.isInteger(number)&&number>=0?'':'Informe a quantidade de pessoas com um número inteiro igual ou maior que zero.');
 }
 
 document.addEventListener('input',event=>{
@@ -81,9 +118,12 @@ document.addEventListener('submit',event=>{
 },true);
 
 async function boot(){
+  installFetchGuard();
   for(let i=0;i<200&&apiMode()!=='live';i++)await new Promise(resolve=>setTimeout(resolve,25));
   if(apiMode()!=='live')return;
   installGuard(supabaseClient());
 }
 
+// A proteção de rede entra imediatamente, antes da inicialização do app/Supabase.
+installFetchGuard();
 boot().catch(error=>console.error('Falha ao ativar normalização do Formulário Inicial:',error));
