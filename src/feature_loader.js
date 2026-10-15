@@ -5,7 +5,7 @@ import { getSession } from './api.js?v=20261004-2';
 // quando a área correspondente é realmente aberta. Isso evita dezenas de
 // MutationObservers e consultas Supabase fora do menu em uso.
 
-const VERSION='20261015-lazy6';
+const VERSION='20261015-lazy7';
 const moduleCache=new Map();
 let routeSeq=0;
 let routeTimer=null;
@@ -161,7 +161,6 @@ async function currentProfile(){
   if(!sessionPromise)sessionPromise=getSession().catch(()=>null);
   const session=await sessionPromise;
   if(session?.user){profileCache=session.user;return profileCache}
-  // Se o carregador iniciou ainda na tela de login, permita nova tentativa após autenticação.
   sessionPromise=null;
   return null;
 }
@@ -215,7 +214,6 @@ function targetRouteFromLink(target){
   return routeName(link.getAttribute('href'));
 }
 
-// Pré-carrega somente o bloco crítico quando o usuário demonstra intenção de abrir um menu.
 document.addEventListener('pointerover',event=>{
   const route=targetRouteFromLink(event.target);
   if(route&&route!==routeName())loadForRoute(route,{prefetch:true}).catch(()=>{});
@@ -235,18 +233,14 @@ window.addEventListener('hashchange',()=>{
 });
 window.addEventListener('focus',()=>{
   scheduleUtilityNav();
-  // Não refaz consultas pesadas: apenas garante que o módulo da rota já esteja disponível.
   scheduleRouteLoad();
 });
 
 const appRoot=document.querySelector('#app');
 if(appRoot){
-  // O app recria a sidebar em cada render. Observamos apenas filhos diretos do #app,
-  // sem vigiar toda a árvore, para recolocar os dois atalhos leves quando necessário.
   new MutationObserver(scheduleUtilityNav).observe(appRoot,{childList:true});
 }
 
-// Ferramentas de desenvolvedor são globais, mas não bloqueiam a primeira pintura.
 idle(()=>loadModule('developer_view').catch(()=>{}),1400);
 
 scheduleUtilityNav();
