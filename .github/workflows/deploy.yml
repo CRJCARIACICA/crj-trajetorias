@@ -98,7 +98,7 @@ jobs:
           sed -i 's#permissions.js?v=20261003-6#permissions.js?v=20261009-1#g' _site/src/app.js
           # Mantém os módulos centrais atualizados sem recolocar recursos pesados no HTML inicial.
           sed -i -E 's#src/export_route_override\.js\?v=[0-9-]+#src/export_route_override.js?v=20261013-4#g' _site/index.html
-          sed -i -E 's#src/app\.js\?v=[0-9-]+#src/app.js?v=20261014-2#g' _site/index.html
+          sed -i -E 's#src/app\.js\?v=[0-9-]+#src/app.js?v=20261015-1#g' _site/index.html
           sed -i -E 's#src/feature_loader\.js\?v=[^\"]+#src/feature_loader.js?v=20261014-lazy3#g' _site/index.html
 
           # A normalização de campos inteiros do Formulário Inicial é uma proteção global leve.
@@ -166,7 +166,7 @@ jobs:
           grep -q 'api.js?v=20261014-2' _site/src/app.js
           grep -q 'api.js?v=20261014-2' _site/src/feature_loader.js
           grep -q 'api.js?v=20261014-2' _site/src/initial_form_numeric_guard.js
-          grep -q 'src/app.js?v=20261014-2' _site/index.html
+          grep -q 'src/app.js?v=20261015-1' _site/index.html
           grep -q 'validateBinaryResponse' _site/src/export_route_override.js
 
           # Nenhum JS publicado pode apontar para uma versão antiga de api.js.
@@ -198,3 +198,4 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
