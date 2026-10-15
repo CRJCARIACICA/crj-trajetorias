@@ -340,6 +340,16 @@ function workshopPlanPreviewHtml(bundle,workshop,teamMap){
     '<div class="methodology-system-note">Os campos pedagógicos principais permanecem em colunas próprias. Data, horário, local e CFDH transversal são campos adicionais independentes e não alteram a estrutura principal.</div>'+
   '</div>';
 }
+function nextWorkshopPlanMonth(value){
+  const key=String(value||'').slice(0,7);
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(key))throw new Error('Mês de planejamento inválido.');
+  const [year,month]=key.split('-').map(Number);
+  return new Date(Date.UTC(year,month,1)).toISOString().slice(0,7);
+}
+function nextWorkshopPlanButton(workshopId,month){
+  const next=nextWorkshopPlanMonth(month);
+  return '<button type="button" class="btn secondary" data-workshop-plan-next="'+esc(workshopId)+'" data-plan-month="'+next+'">Gerar planejamento do mês seguinte · '+next.split('-').reverse().join('/')+'</button>';
+}
 function workshopPlanEditorHtml(bundle,workshop,teamMap){
   const plan=bundle.plan,lessons=(bundle.lessons||[]).filter(x=>x.included!==false);
   const lessonCards=lessons.map(l=>{
@@ -353,7 +363,7 @@ function workshopPlanEditorHtml(bundle,workshop,teamMap){
       '<div class="field"><label>Observações da aula planejada</label><textarea name="observations">'+esc(l.observations||'')+'</textarea></div>'+
     '</div>';
   }).join('');
-  return '<div class="page-head"><div><h2>Planejamento · '+esc(workshop.name)+'</h2><p>'+esc(String(plan.plan_month||'').slice(0,7).split('-').reverse().join('/'))+' · '+lessons.length+' aula(s) prevista(s) a partir do calendário.</p></div><div class="actions"><button class="btn primary" data-edu-workshop-plan-pdf="'+plan.id+'">PDF</button><button class="btn secondary" data-edu-workshop-plan-docx="'+plan.id+'">DOCX</button><button class="btn" data-edu-workshop-plan-print="'+plan.id+'">Imprimir</button><button class="btn secondary" data-sync-workshop-plan="'+plan.id+'" data-workshop="'+workshop.id+'">Sincronizar com calendário</button><button class="btn" data-nav="oficinas?view=planejamento&month='+esc(String(plan.plan_month||'').slice(0,7))+'">Voltar</button></div></div>'+
+  return '<div class="page-head"><div><h2>Planejamento · '+esc(workshop.name)+'</h2><p>'+esc(String(plan.plan_month||'').slice(0,7).split('-').reverse().join('/'))+' · '+lessons.length+' aula(s) prevista(s) a partir do calendário.</p></div><div class="actions">'+nextWorkshopPlanButton(workshop.id,plan.plan_month)+'<button class="btn primary" data-edu-workshop-plan-pdf="'+plan.id+'">PDF</button><button class="btn secondary" data-edu-workshop-plan-docx="'+plan.id+'">DOCX</button><button class="btn" data-edu-workshop-plan-print="'+plan.id+'">Imprimir</button><button class="btn secondary" data-sync-workshop-plan="'+plan.id+'" data-workshop="'+workshop.id+'">Sincronizar com calendário</button><button class="btn" data-nav="oficinas?view=planejamento&month='+esc(String(plan.plan_month||'').slice(0,7))+'">Voltar</button></div></div>'+
     '<form id="workshop-plan-form" data-plan-id="'+plan.id+'" data-workshop-id="'+workshop.id+'">'+
       '<div class="methodology-form-workspace preview-open" data-workshop-plan-workspace>'+
         '<div class="methodology-form-editor stack">'+
@@ -402,7 +412,7 @@ async function pageWorkshops(){
       '<div class="grid three workshop-planning-grid">'+visible.map(w=>{
         const p=byWorkshop.get(w.id);
         const canEditThis=canPlan&&(state.user?.role==='coordenacao_geral'||p?.educator_user_id===state.user?.id||p?.created_by===state.user?.id||(!p&&w.educator_user_id===state.user?.id));
-        return '<div class="card workshop-plan-summary"><div class="actions"><span class="pill info">'+esc(workshopTypeLabel(w.workshop_type))+'</span>'+(p?'<span class="pill '+(p.status==='finalizado'?'success':'warn')+'">'+esc(p.status)+'</span>':'<span class="pill">Não criado</span>')+'</div><h3>'+esc(w.name)+'</h3><p class="muted">'+esc(workshopScheduleLabel(w))+' · '+esc(workshopLocationLabel(w))+'</p><p><b>Oficineiro(a):</b> '+esc(teamMap.get(w.oficineiro_user_id)||'Não definido')+'<br><b>Educador(a):</b> '+esc(teamMap.get(w.educator_user_id)||'Não definido')+'</p><div class="actions">'+(p?'<button class="btn '+(canEditThis?'primary':'secondary')+'" data-workshop-plan-open="'+p.id+'">'+(canEditThis?'Abrir / editar':'Visualizar planejamento')+'</button>'+(canEditThis?'<button class="btn secondary" data-workshop-plan-generate="'+w.id+'">Sincronizar calendário</button>':''):(canEditThis?'<button class="btn primary" data-workshop-plan-generate="'+w.id+'">Gerar planejamento do mês</button>':'<span class="pill warn">Aguardando planejamento do Educador responsável</span>'))+'</div></div>';
+        return '<div class="card workshop-plan-summary"><div class="actions"><span class="pill info">'+esc(workshopTypeLabel(w.workshop_type))+'</span>'+(p?'<span class="pill '+(p.status==='finalizado'?'success':'warn')+'">'+esc(p.status)+'</span>':'<span class="pill">Não criado</span>')+'</div><h3>'+esc(w.name)+'</h3><p class="muted">'+esc(workshopScheduleLabel(w))+' · '+esc(workshopLocationLabel(w))+'</p><p><b>Oficineiro(a):</b> '+esc(teamMap.get(w.oficineiro_user_id)||'Não definido')+'<br><b>Educador(a):</b> '+esc(teamMap.get(w.educator_user_id)||'Não definido')+'</p><div class="actions">'+(p?'<button class="btn '+(canEditThis?'primary':'secondary')+'" data-workshop-plan-open="'+p.id+'">'+(canEditThis?'Abrir / editar':'Visualizar planejamento')+'</button>'+(canEditThis?nextWorkshopPlanButton(w.id,p.plan_month)+'<button class="btn secondary" data-workshop-plan-generate="'+w.id+'">Sincronizar calendário</button>':''):(canEditThis?'<button class="btn primary" data-workshop-plan-generate="'+w.id+'">Gerar planejamento do mês</button>':'<span class="pill warn">Aguardando planejamento do Educador responsável</span>'))+'</div></div>';
       }).join('')||'<div class="card empty">Nenhuma oficina ativa disponível para planejamento.</div>'+'</div>';
   }
 
