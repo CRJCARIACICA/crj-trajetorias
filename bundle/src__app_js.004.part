@@ -150,6 +150,17 @@
     }catch(err){toast(err.message,'danger')}
   }));
 
+  document.querySelectorAll('[data-workshop-plan-next]').forEach(btn=>btn.addEventListener('click',async()=>{
+    const month=btn.dataset.planMonth,workshopId=btn.dataset.workshopPlanNext,original=btn.textContent;
+    btn.disabled=true;btn.textContent='Gerando...';
+    try{
+      const existing=await listWorkshopMonthlyPlans(month,workshopId);
+      if(existing.length){toast('Este mês já possui planejamento. Abrindo o registro existente.');nav('oficinas?view=planejamento&month='+month+'&plan='+existing[0].id);return}
+      const out=await syncWorkshopMonthlyPlan(workshopId,month);
+      toast(out.lessons.length+' aula(s) prevista(s) para '+month.split('-').reverse().join('/'));
+      nav('oficinas?view=planejamento&month='+month+'&plan='+out.plan.id);
+    }catch(err){toast(err.message,'danger');btn.disabled=false;btn.textContent=original}
+  }));
   document.querySelectorAll('[data-workshop-plan-generate]').forEach(btn=>btn.addEventListener('click',async()=>{
     const month=route().params.get('month')||currentMonth(),original=btn.textContent;btn.disabled=true;btn.textContent='Gerando...';
     try{const out=await syncWorkshopMonthlyPlan(btn.dataset.workshopPlanGenerate,month);toast(out.lessons.length+' aula(s) prevista(s) vinculada(s)');nav('oficinas?view=planejamento&month='+month+'&plan='+out.plan.id)}catch(err){toast(err.message,'danger');btn.disabled=false;btn.textContent=original}
