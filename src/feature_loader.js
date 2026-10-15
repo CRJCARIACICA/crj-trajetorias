@@ -5,7 +5,7 @@ import { getSession } from './api.js?v=20261004-2';
 // quando a área correspondente é realmente aberta. Isso evita dezenas de
 // MutationObservers e consultas Supabase fora do menu em uso.
 
-const VERSION='20261015-lazy4';
+const VERSION='20261015-lazy5';
 const moduleCache=new Map();
 let routeSeq=0;
 let routeTimer=null;
@@ -23,47 +23,47 @@ const ROUTE_FEATURES={
   },
   formulario:{
     critical:['form_access','universal_drafts','youth_profile_enhancements'],
-    deferred:['document_header_standard','evidence_exports','articulation_workspace']
+    deferred:['document_header_standard','evidence_exports','articulation_workspace','articulation_request_context']
   },
   formularios:{critical:['form_access'],deferred:[]},
   oficinas:{
     critical:['workshop_devices','instructor_management','workshop_collaboration','workshop_live_sync','workshop_plan_delete','cfdh_transversal_integration'],
-    deferred:['articulation_workspace','joint_actions','document_header_standard','evidence_exports','attendance_export_fix']
+    deferred:['articulation_workspace','articulation_request_context','joint_actions','document_header_standard','evidence_exports','attendance_export_fix']
   },
   oficina:{
     critical:['workshop_devices','instructor_management','workshop_collaboration','workshop_live_sync','workshop_plan_delete','cfdh_transversal_integration'],
-    deferred:['articulation_workspace','joint_actions','document_header_standard','evidence_exports','attendance_export_fix']
+    deferred:['articulation_workspace','articulation_request_context','joint_actions','document_header_standard','evidence_exports','attendance_export_fix']
   },
   workshops:{
     critical:['workshop_devices','instructor_management','workshop_collaboration','workshop_live_sync','workshop_plan_delete','cfdh_transversal_integration'],
-    deferred:['articulation_workspace','joint_actions','document_header_standard','evidence_exports','attendance_export_fix']
+    deferred:['articulation_workspace','articulation_request_context','joint_actions','document_header_standard','evidence_exports','attendance_export_fix']
   },
   educador:{
     critical:['educator_complementary','workshop_plan_delete'],
-    deferred:['articulation_workspace','joint_actions','document_header_standard','evidence_exports']
+    deferred:['articulation_workspace','articulation_request_context','joint_actions','document_header_standard','evidence_exports']
   },
   'planejamento-educador':{
     critical:['educator_complementary','workshop_plan_delete'],
-    deferred:['articulation_workspace','joint_actions','document_header_standard','evidence_exports']
+    deferred:['articulation_workspace','articulation_request_context','joint_actions','document_header_standard','evidence_exports']
   },
   cfdh:{
     critical:['cfdh_program_metrics','cfdh_transversal_integration'],
-    deferred:['articulation_workspace','joint_actions','document_header_standard','evidence_exports']
+    deferred:['articulation_workspace','articulation_request_context','joint_actions','document_header_standard','evidence_exports']
   },
   'equipe-tecnica':{
     critical:['technical_service_flow','technical_team_enhancements','technical_program_actions','technical_workspace','technical_planning_governance'],
-    deferred:['articulation_workspace','joint_actions','document_header_standard','evidence_exports']
+    deferred:['articulation_workspace','articulation_request_context','joint_actions','document_header_standard','evidence_exports']
   },
   'controlador-acesso':{
     critical:['access_controller'],
     deferred:['document_header_standard','evidence_exports']
   },
   articulacao:{
-    critical:['articulation_workspace','articulation_evidence'],
+    critical:['articulation_workspace','articulation_evidence','articulation_request_context'],
     deferred:['articulation_demand_identity','joint_actions','document_header_standard','evidence_exports']
   },
   'planos-mobilizacao':{
-    critical:['articulation_workspace'],
+    critical:['articulation_workspace','articulation_request_context'],
     deferred:['joint_actions','document_header_standard','evidence_exports']
   },
   'documentos-evidencias':{
