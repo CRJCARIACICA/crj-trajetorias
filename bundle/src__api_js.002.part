@@ -205,7 +205,7 @@ export async function updateWorkshopCalendarEntry(id,patch){
   if(mode==='mock'){const s=mock(),r=(s.workshopCalendar||[]).find(x=>x.id===id);if(!r)throw new Error('Data não encontrada');Object.assign(r,payload);save(s);return r;}
   const {data,error}=await supabase.from('workshop_calendar').update(payload).eq('id',id).select('*').single();if(error)throw error;return data;
 }
-export async function generateWorkshopFixedCalendar(workshop,horizonDays=90){
+export async function generateWorkshopFixedCalendar(workshop,horizonDays=90,month=null){
   if(!workshop||workshop.schedule_mode!=='semanal_fixa')return [];
   const weekdays=(workshop.fixed_weekdays||[]).map(Number);
   if(!weekdays.length||!workshop.planned_start_date)return [];
@@ -214,6 +214,16 @@ export async function generateWorkshopFixedCalendar(workshop,horizonDays=90){
   if(workshop.workshop_type==='permanente'&&!workshop.planned_end_date&&today>start)start=new Date(today);
   let end=workshop.planned_end_date?new Date(workshop.planned_end_date+'T12:00:00Z'):new Date(start.getTime()+Number(horizonDays||90)*86400000);
   if(workshop.workshop_type==='pontual')end=new Date(start);
+  if(month){
+    if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))throw new Error('Mês de planejamento inválido.');
+    const [year,number]=month.split('-').map(Number);
+    const monthStart=new Date(Date.UTC(year,number-1,1,12)),monthEnd=new Date(Date.UTC(year,number,0,12));
+    start=new Date(workshop.planned_start_date+'T12:00:00Z');
+    if(start<monthStart)start=monthStart;
+    end=workshop.planned_end_date?new Date(workshop.planned_end_date+'T12:00:00Z'):monthEnd;
+    if(end>monthEnd)end=monthEnd;
+    if(workshop.workshop_type==='pontual')end=new Date(workshop.planned_start_date+'T12:00:00Z');
+  }
   const rows=[];
   for(let d=new Date(start);d<=end;d.setUTCDate(d.getUTCDate()+1)){
     if(weekdays.includes(d.getUTCDay())){
@@ -224,11 +234,14 @@ export async function generateWorkshopFixedCalendar(workshop,horizonDays=90){
     }
   }
   if(mode==='mock'){
-    const s=mock();s.workshopCalendar=(s.workshopCalendar||[]).filter(x=>!(x.workshop_id===workshop.id&&x.source==='regra_fixa'&&x.status==='planejada'));
-    save(s);const out=[];for(const row of rows)out.push(await createWorkshopCalendarEntry(row));return out;
+    const s=mock();s.workshopCalendar||=[];const out=[];
+    for(const row of rows){
+      let entry=s.workshopCalendar.find(x=>x.workshop_id===row.workshop_id&&x.scheduled_date===row.scheduled_date&&String(x.start_time||'').slice(0,5)===String(row.start_time||'').slice(0,5));
+      if(!entry){entry={id:uid('cal'),...row};s.workshopCalendar.push(entry)}
+      out.push(entry);
+    }
+    save(s);return out;
   }
-  const {error:clearError}=await supabase.from('workshop_calendar').delete().eq('workshop_id',workshop.id).eq('source','regra_fixa').eq('status','planejada');
-  if(clearError)throw clearError;
   if(!rows.length)return [];
   const {data,error}=await supabase.from('workshop_calendar').upsert(rows,{onConflict:'workshop_id,scheduled_date,start_time',ignoreDuplicates:true}).select('*');if(error)throw error;return data||[];
 }
@@ -370,12 +383,13 @@ export async function getWorkshopMonthlyPlan(planId){
 }
 export async function syncWorkshopMonthlyPlan(workshopId,month=monthKey()){
   const key=String(month).slice(0,7),planMonth=key+'-01';
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(key))throw new Error('Mês de planejamento inválido.');
   const parts=key.split('-').map(Number),yy=parts[0],mm=parts[1];
   const start=planMonth,end=new Date(Date.UTC(yy,mm,1)).toISOString().slice(0,10);
   if(mode==='mock'){
-    const s=mock(),w=s.workshops.find(x=>x.id===workshopId);if(!w)throw new Error('Oficina não encontrada.');
-    if(w.schedule_mode==='semanal_fixa')await generateWorkshopFixedCalendar(w);
-    s.workshopMonthlyPlans||=[];s.workshopPlanLessons||=[];
+    let s=mock();const w=s.workshops.find(x=>x.id===workshopId);if(!w)throw new Error('Oficina não encontrada.');
+    if(w.schedule_mode==='semanal_fixa')await generateWorkshopFixedCalendar(w,90,key);
+    s=mock();s.workshopMonthlyPlans||=[];s.workshopPlanLessons||=[];
     let plan=s.workshopMonthlyPlans.find(x=>x.workshop_id===workshopId&&x.plan_month===planMonth);
     if(!plan){plan={id:uid('wplan'),workshop_id:workshopId,plan_month:planMonth,instructor_user_id:w.oficineiro_user_id||null,educator_user_id:w.educator_user_id||null,status:'rascunho',created_at:now(),updated_at:now()};s.workshopMonthlyPlans.push(plan)}
     const entries=(s.workshopCalendar||[]).filter(x=>x.workshop_id===workshopId&&x.scheduled_date>=start&&x.scheduled_date<end&&x.status!=='cancelada').sort((a,b)=>String(a.scheduled_date+a.start_time).localeCompare(String(b.scheduled_date+b.start_time)));
@@ -385,7 +399,7 @@ export async function syncWorkshopMonthlyPlan(workshopId,month=monthKey()){
   }
   const wq=await supabase.from('workshops').select('*').eq('id',workshopId).single();if(wq.error)throw wq.error;
   const w=wq.data;
-  if(w.schedule_mode==='semanal_fixa')await generateWorkshopFixedCalendar(w);
+  if(w.schedule_mode==='semanal_fixa')await generateWorkshopFixedCalendar(w,90,key);
   let pq=await supabase.from('workshop_monthly_plans').select('*').eq('workshop_id',workshopId).eq('plan_month',planMonth).maybeSingle();
   if(pq.error)throw pq.error;
   let plan=pq.data;
