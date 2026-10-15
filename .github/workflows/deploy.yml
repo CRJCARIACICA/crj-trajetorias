@@ -104,37 +104,20 @@ jobs:
           from pathlib import Path
           path=Path('_site/src/api.js')
           text=path.read_text(encoding='utf-8')
-          old="""      const existingConflict=(a.scheduled_date&&a.start_time&&aEnd)?crjCalendar.find(x=>{
-                if(x.date!==a.scheduled_date)return false;
-                if(x.source==='cfdh'&&x.plan_id===planId)return false;
-                if(x.source==='workshop'&&a.workshop_calendar_id&&x.id===a.workshop_calendar_id)return false;
-                return cfdhApiOverlaps(a.start_time,aEnd,x.start,x.end);
-              }):null;
-              if(existingConflict)throw new Error('Ação '+(i+1)+': conflito com '+(existingConflict.title||'atividade do CRJ')+' em '+a.scheduled_date+' ('+(existingConflict.start||'--:--')+'–'+(existingConflict.end||'--:--')+'). Escolha outro horário no calendário do CRJ.');
-              for(let j=0;j<i;j++){
-                const b=actions[j],bEnd=cfdhApiAutoEndTime(b.start_time,b.planned_duration_hours);
-                if(a.scheduled_date&&a.start_time&&aEnd&&b.scheduled_date&&b.start_time&&bEnd&&a.scheduled_date===b.scheduled_date&&cfdhApiOverlaps(a.start_time,aEnd,b.start_time,bEnd))throw new Error('Ação '+(i+1)+': conflito com a Ação '+(j+1)+' do mesmo planejamento. Escolha outro horário.');
-              }
-          """
-          new="""      // CFDH_TRANSVERSAL_ALLOW_OVERLAP: o transversal pode acontecer dentro ou junto de oficina,
+          start=text.find('      const existingConflict=(a.scheduled_date&&a.start_time&&aEnd)?crjCalendar.find(x=>{')
+          same_plan=text.find("throw new Error('Ação '+(i+1)+': conflito com a Ação '+(j+1)+' do mesmo planejamento. Escolha outro horário.');",start)
+          end=text.find('\n      }',same_plan)
+          if start < 0 or same_plan < 0 or end < 0:
+              raise SystemExit('Bloco de validação de conflito CFDH não encontrado; deploy interrompido para evitar regressão.')
+          end += len('\n      }')
+          original=text[start:end]
+          replacement="""      // CFDH_TRANSVERSAL_ALLOW_OVERLAP: o transversal pode acontecer dentro ou junto de oficina,
               // ação, reunião, atendimento, evento ou qualquer outra agenda do CRJ.
               if(planType!=='cfdh_transversal'){
-                const existingConflict=(a.scheduled_date&&a.start_time&&aEnd)?crjCalendar.find(x=>{
-                  if(x.date!==a.scheduled_date)return false;
-                  if(x.source==='cfdh'&&x.plan_id===planId)return false;
-                  if(x.source==='workshop'&&a.workshop_calendar_id&&x.id===a.workshop_calendar_id)return false;
-                  return cfdhApiOverlaps(a.start_time,aEnd,x.start,x.end);
-                }):null;
-                if(existingConflict)throw new Error('Ação '+(i+1)+': conflito com '+(existingConflict.title||'atividade do CRJ')+' em '+a.scheduled_date+' ('+(existingConflict.start||'--:--')+'–'+(existingConflict.end||'--:--')+'). Escolha outro horário no calendário do CRJ.');
-                for(let j=0;j<i;j++){
-                  const b=actions[j],bEnd=cfdhApiAutoEndTime(b.start_time,b.planned_duration_hours);
-                  if(a.scheduled_date&&a.start_time&&aEnd&&b.scheduled_date&&b.start_time&&bEnd&&a.scheduled_date===b.scheduled_date&&cfdhApiOverlaps(a.start_time,aEnd,b.start_time,bEnd))throw new Error('Ação '+(i+1)+': conflito com a Ação '+(j+1)+' do mesmo planejamento. Escolha outro horário.');
-                }
+          """ + original.replace('\n','\n  ') + """
               }
           """
-          if old not in text:
-              raise SystemExit('Bloco de validação de conflito CFDH não encontrado; deploy interrompido para evitar regressão.')
-          path.write_text(text.replace(old,new,1),encoding='utf-8')
+          path.write_text(text[:start]+replacement+text[end:],encoding='utf-8')
           PY
 
           sed -i 's#permissions.js?v=20261003-6#permissions.js?v=20261009-1#g' _site/src/app.js
