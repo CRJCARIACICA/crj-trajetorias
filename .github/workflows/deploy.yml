@@ -66,6 +66,7 @@ jobs:
             src/articulation_workspace.js \
             src/articulation_demand_identity.js \
             src/articulation_evidence.js \
+            src/articulation_request_context.js \
             src/document_drafts.js \
             src/evidence_exports.js \
             src/universal_drafts.js \
@@ -100,7 +101,7 @@ jobs:
           # Mantém os módulos centrais atualizados sem recolocar recursos pesados no HTML inicial.
           sed -i -E 's#src/export_route_override\.js\?v=[0-9-]+#src/export_route_override.js?v=20261013-4#g' _site/index.html
           sed -i -E 's#src/app\.js\?v=[0-9-]+#src/app.js?v=20261015-1#g' _site/index.html
-          sed -i -E 's#src/feature_loader\.js\?v=[^\"]+#src/feature_loader.js?v=20261015-lazy4#g' _site/index.html
+          sed -i -E 's#src/feature_loader\.js\?v=[^\"]+#src/feature_loader.js?v=20261015-lazy5#g' _site/index.html
 
           # A normalização de campos inteiros do Formulário Inicial é uma proteção global leve.
           # Ela precisa iniciar antes do app para impedir household_size="" em qualquer rota.
@@ -148,6 +149,7 @@ jobs:
             _site/src/youth_trajectory_evidence.js
             _site/src/youth_trajectory_exports.js
             _site/src/youth_list_fields.js
+            _site/src/articulation_request_context.js
             _site/assets/app.css
           )
 
@@ -162,16 +164,20 @@ jobs:
           grep -q 'goals_workspace' _site/src/feature_loader.js
           grep -q 'joint_actions' _site/src/feature_loader.js
           grep -q 'youth_list_fields' _site/src/feature_loader.js
-          grep -q 'feature_loader.js?v=20261015-lazy4' _site/index.html
+          grep -q 'articulation_request_context' _site/src/feature_loader.js
+          grep -q 'feature_loader.js?v=20261015-lazy5' _site/index.html
           grep -q 'initial_form_numeric_guard.js?v=20261014-3' _site/index.html
           grep -q 'normalizeRestBody' _site/src/initial_form_numeric_guard.js
           grep -q 'technical-checkin.html' _site/src/technical_workspace.js
           grep -q 'api.js?v=20261015-1' _site/src/app.js
           grep -q 'api.js?v=20261015-1' _site/src/feature_loader.js
           grep -q 'api.js?v=20261015-1' _site/src/youth_list_fields.js
+          grep -q 'api.js?v=20261015-1' _site/src/articulation_request_context.js
           grep -q 'api.js?v=20261015-1' _site/src/initial_form_numeric_guard.js
           grep -q 'src/app.js?v=20261015-1' _site/index.html
           grep -q 'validateBinaryResponse' _site/src/export_route_override.js
+          grep -q 'methodological_action' _site/src/articulation_request_context.js
+          grep -q 'Imprimir evidência' _site/src/articulation_request_context.js
 
           # Nenhum JS publicado pode apontar para uma versão antiga de api.js.
           if grep -R -nE "api\.js\?v=(?!20261015-1)" _site/src --include='*.js' -P; then
@@ -180,7 +186,7 @@ jobs:
           fi
 
           # Recursos de área não podem voltar a bloquear a primeira carga do sistema.
-          if grep -Eq 'src/(technical_workspace|technical_program_actions|articulation_workspace|access_controller|goals_workspace|joint_actions|general_calendar|cfdh_transversal_integration|youth_list_fields)\.js' _site/index.html; then
+          if grep -Eq 'src/(technical_workspace|technical_program_actions|articulation_workspace|articulation_request_context|access_controller|goals_workspace|joint_actions|general_calendar|cfdh_transversal_integration|youth_list_fields)\.js' _site/index.html; then
             echo 'Módulo pesado voltou ao carregamento inicial do index.html.' >&2
             exit 1
           fi
