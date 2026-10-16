@@ -274,7 +274,8 @@ async function editDate(e,parentModal){
   };
 }
 async function removeDate(e,parentModal){
-  if(!confirm('Remover/cancelar esta data no registro de origem? O histórico da atividade será preservado sempre que o módulo possuir status de cancelamento.'))return;
+  const message=e.source==='workshop_calendar'?`Confirmar cancelamento da aula ${e.id}? Horário registrado: ${e.row.start_time||'não informado'}–${e.row.end_time||'não informado'}. A duração registrada será excluída do valor da nota, preservando a aula para conferência. Nenhuma duração será estimada.`:'Remover/cancelar esta data no registro de origem?';
+  if(!confirm(message))return;
   const patch={};
   if(e.source==='workshop_calendar')patch.status='cancelada';
   else if(e.source==='calendar_events')patch.status='cancelled';

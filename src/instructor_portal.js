@@ -96,19 +96,28 @@ function currentInvoice(d){
   if(!Array.isArray(d.calendar))throw new Error('Calendário da competência não carregado.');
   const wmap=workshopMap(d),currentPlans=d.plans.filter(p=>String(p.plan_month).slice(0,10)===d.current),byWorkshop=new Map();
   const calendar=[...new Map(d.calendar.map(row=>[row.id,row])).values()].filter(row=>wmap.has(row.workshop_id)&&row.scheduled_date>=d.current&&row.scheduled_date<d.next);
-  let serviceMinutes=0,cancelled=0;
+  let serviceMinutes=0,cancelled=0,cancelledMinutes=0; const exclusions=[],invalid=[];
   for(const row of calendar){
-    if(cancelledLesson(row)){cancelled++;continue}
     const minutes=Math.round(durationHours(row.start_time,row.end_time)*60);
-    if(minutes<=0)continue;
+    if(cancelledLesson(row)){cancelled++;cancelledMinutes+=minutes;exclusions.push({...row,minutes});if(minutes<=0)invalid.push(row);continue}
+    if(minutes<=0){invalid.push(row);continue;}
     const group=byWorkshop.get(row.workshop_id)||{name:wmap.get(row.workshop_id).name,hours:0,lessons:0};
     group.hours+=minutes/60;group.lessons++;byWorkshop.set(row.workshop_id,group);serviceMinutes+=minutes;
   }
-  // Preserve the existing single monthly planning hour, separately from classes.
-  const groups=[...byWorkshop.values()],serviceHours=serviceMinutes/60,planningHours=currentPlans.length?1:0,billableHours=serviceHours+planningHours;
+  // Planning refers to the following month, subject to its submission deadline.
+  const groups=[...byWorkshop.values()],serviceHours=serviceMinutes/60,planningHours=planningEligibility(d).hours,billableHours=serviceHours+planningHours;
   const total=Math.round(billableHours*HOURLY_RATE*100)/100;
   const description=`Prestação de serviços como oficineiro(a) do Centro de Referência das Juventudes – CRJ Cariacica, competência ${shortMonth(d.current)}, referente a ${num(serviceHours)}h de aulas válidas no Calendário Geral${planningHours?' + 1h de planejamento':''}, totalizando ${num(billableHours)}h, ao valor de ${brl(HOURLY_RATE)}/h. Valor total previsto: ${brl(total)}.`;
-  return {currentPlans,groups,serviceHours,planningHours,billableHours,total,description,cancelled};
+  return {currentPlans,groups,serviceHours,planningHours,billableHours,total,description,cancelled,exclusions,invalid,cancelledHours:cancelledMinutes/60,excludedValue:Math.round(cancelledMinutes/60*HOURLY_RATE*100)/100,planning:planningEligibility(d)};
+}
+function planningDeadlineFor(d){return deadlineFor(d.current,d.current==='2026-10-01'?20:15)}
+function planningEligibility(d){
+  const progress=nextPlanningProgress(d),deadline=planningDeadlineFor(d),expired=localParts().ymd>deadline;
+  if(!progress.complete)return {hours:0,reason:expired?`Hora de planejamento excluída: os três campos de todos os blocos de ${monthLabel(d.next)} não foram comprovadamente concluídos até ${fmtDate(deadline)}.`:`Hora de planejamento pendente: complete todos os blocos de ${monthLabel(d.next)} até ${fmtDate(deadline)}. Ainda não incluída no valor.`};
+  const dates=progress.rows.map(r=>r.updated_at||r.created_at);
+  const proven=dates.every(t=>t&&Number.isFinite(Date.parse(t))&&new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(t))<=deadline);
+  if(!proven)return {hours:0,reason:`Hora de planejamento pendente de conferência: o registro disponível não comprova o preenchimento integral até ${fmtDate(deadline)}. Alterações posteriores não comprovam atraso do preenchimento original; validar o histórico com a coordenação.`};
+  return {hours:1,reason:`1h de planejamento incluída: todos os blocos de ${monthLabel(d.next)} preenchidos com registro até ${fmtDate(deadline)}.`};
 }
 function invoiceHtml(d){
   const inv=currentInvoice(d),updated=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date(d.loadedAt||Date.now()));
@@ -117,11 +126,15 @@ function invoiceHtml(d){
     <div class="ip-invoice-box"><div class="ip-invoice-lines">
       ${inv.groups.map(x=>`<span>${esc(x.name)} · ${x.lessons} aula(s)</span><b>${num(x.hours)}h</b>`).join('')||'<span>Horas de aulas válidas no calendário</span><b>0h</b>'}
       <span>Aulas canceladas / não realizadas (excluídas do valor)</span><b>${inv.cancelled}</b>
+      <span>Horas excluídas das aulas</span><b>−${num(inv.cancelledHours)}h · −${brl(inv.excludedValue)}</b>
       <span>Planejamento mensal</span><b>${num(inv.planningHours)}h</b>
       <span>Valor por hora</span><b>${brl(HOURLY_RATE)}</b>
       <span class="total">Total de horas faturáveis</span><b class="total">${num(inv.billableHours)}h</b>
       <span class="total">Total previsto</span><b class="total">${brl(inv.total)}</b>
     </div></div>
+    <p class="ip-muted">${esc(inv.planning.reason)} ${inv.planningHours?0:1}h de planejamento fora do total (${brl(inv.planningHours?0:HOURLY_RATE)}).</p>
+    ${inv.invalid.length?'<p class="notice warn">Existem registros sem duração válida. Não foi estimada nenhuma hora para eles. Corrija os horários na origem antes de fechar a nota.</p>':''}
+    <details><summary>Conferir aulas excluídas e cálculo</summary>${inv.exclusions.map(r=>`<p>${esc(fmtDate(r.scheduled_date))} · ${esc(r.id)} · ${esc(time5(r.start_time))}–${esc(time5(r.end_time))} · ${esc(r.status)} · ${num(r.minutes/60)}h · ${brl(r.minutes/60*HOURLY_RATE)}</p>`).join('')||'<p>Nenhuma aula cancelada registrada.</p>'}<p>Aulas: ${num(inv.serviceHours+inv.cancelledHours)}h − ${num(inv.cancelledHours)}h = ${num(inv.serviceHours)}h válidas. Planejamento: +${num(inv.planningHours)}h. Total: ${num(inv.billableHours)}h × ${brl(HOURLY_RATE)} = ${brl(inv.total)}.</p></details>
     <small class="ip-muted" data-ip-invoice-sync>Calendário consultado às ${updated}. Atualização automática.</small>
     <div class="ip-nf-text">${esc(inv.description)}</div>
     <div class="ip-actions"><button class="btn" type="button" data-ip-copy="invoice">Copiar descrição da nota</button><button class="btn" type="button" data-ip-copy="institution">Copiar dados da Avante</button></div>
@@ -138,7 +151,7 @@ function taskHtml({title,description,status,buttonField,buttonText,done}){
 function invoiceInstitutionText(){return `${AVANTE.legalName}\nCNPJ: ${AVANTE.cnpj}\n${AVANTE.address}`}
 function dashboardHtml(d){
   const inv=currentInvoice(d),prog=nextPlanningProgress(d),admin=d.admin||{};
-  const issueDeadline=deadlineFor(d.current,15),sendDeadline=deadlineFor(d.current,20),paymentDeadline=deadlineFor(d.current,10,1),planningDeadline=deadlineFor(d.current,15);
+  const issueDeadline=deadlineFor(d.current,15),sendDeadline=deadlineFor(d.current,20),paymentDeadline=deadlineFor(d.current,10,1),planningDeadline=planningDeadlineFor(d);
   const issueStatus=statusInfo(admin.invoice_issued_at,issueDeadline,{futureLabel:'Emitir até'}),sendStatus=statusInfo(admin.invoice_sent_at,sendDeadline,{futureLabel:'Enviar à Marcela até'}),payStatus=statusInfo(admin.payment_received_at,paymentDeadline,{futureLabel:'Recebimento previsto'}),planningStatus=prog.complete?{kind:'success',label:'Concluído',detail:`${prog.filled}/${prog.total} campos obrigatórios preenchidos`}:statusInfo(null,planningDeadline,{futureLabel:`Planejamento de ${monthLabel(d.next)} até`});
   return `<div class="ip-hero"><div><h2>Olá, ${esc((me.display_name||'Oficineiro').split(' ')[0])}</h2><p>Seu espaço reúne somente o que você precisa para executar a oficina, planejar o próximo mês e acompanhar os prazos administrativos.</p></div><div class="ip-actions"><a class="btn" href="#caixa-equipes">Abrir caixa de entrada</a><a class="btn primary" href="#oficineiro?view=planejamento">Preencher planejamento</a></div></div>
   <div class="ip-grid">
@@ -165,7 +178,7 @@ function planningHtml(d){
   const p=params(),requested=p.get('month'),selected=[d.current,d.next].includes(requested)?requested:d.next,wmap=workshopMap(d),plans=d.plans.filter(x=>String(x.plan_month).slice(0,10)===selected),progress=selected===d.next?nextPlanningProgress(d):null;
   return `<div class="ip-hero"><div><h2>Planejamento das minhas oficinas</h2><p>Você pode alterar somente <b>Objetivo</b>, <b>Atividades propostas</b> e <b>Recursos necessários</b>. Datas, horários, locais, temas e demais definições permanecem protegidos.</p></div><div class="ip-actions"><a class="btn" href="#oficineiro">Voltar ao painel</a></div></div>
   <div class="ip-plan-tabs"><a class="${selected===d.current?'active':''}" href="#oficineiro?view=planejamento&month=${d.current}">Competência atual · ${esc(shortMonth(d.current))}</a><a class="${selected===d.next?'active':''}" href="#oficineiro?view=planejamento&month=${d.next}">Próximo mês · ${esc(shortMonth(d.next))}</a></div>
-  ${progress?`<div class="ip-card full" style="margin-bottom:14px"><b>Prazo do próximo mês: até dia 15 da competência atual</b><div class="ip-muted">${progress.total?`${progress.filled} de ${progress.total} campos preenchidos`:'A estrutura do planejamento ainda não foi disponibilizada pela equipe.'}</div><div class="ip-progress"><span style="width:${progress.percent}%"></span></div></div>`:''}
+  ${progress?`<div class="ip-card full" style="margin-bottom:14px"><b>Prazo do próximo mês: ${fmtDate(planningDeadlineFor(d))}</b><div class="ip-muted">${progress.total?`${progress.filled} de ${progress.total} campos preenchidos`:'A estrutura do planejamento ainda não foi disponibilizada pela equipe.'}</div><div class="ip-progress"><span style="width:${progress.percent}%"></span></div></div>`:''}
   ${plans.map(plan=>{const w=wmap.get(plan.workshop_id),rows=lessonsForPlan(d,plan.id);return `<section class="ip-plan"><div class="ip-plan-head"><div><h3>${esc(w?.name||'Oficina')}</h3><div class="ip-muted">Competência ${esc(shortMonth(plan.plan_month))} · ${rows.length} bloco(s) de aula</div></div><span class="ip-badge ${plan.status==='concluido'?'success':'info'}">${esc(String(plan.status||'planejamento').replaceAll('_',' '))}</span></div><div class="ip-lessons">${rows.map(l=>lessonHtml(l,w)).join('')||'<div class="ip-empty">Ainda não há blocos de aula nesta competência.</div>'}</div></section>`}).join('')||'<div class="ip-card full"><div class="ip-empty"><b>Planejamento ainda não criado para esta competência.</b><br>A equipe responsável precisa disponibilizar os blocos antes do seu preenchimento.</div></div>'}`;
 }
 function pageShell(body,view){return `<div data-instructor-portal-page="${esc(view)}">${body}</div>`}
@@ -180,7 +193,7 @@ async function setAdminField(field,done){
 }
 function bindInvoiceCopy(host,d){
   const inv=currentInvoice(d);
-  host.querySelector('[data-ip-copy="invoice"]')?.addEventListener('click',()=>copyText(inv.description,'Descrição da nota'));
+  host.querySelector('[data-ip-copy="invoice"]')?.addEventListener('click',async()=>{try{const fresh=await loadPortalData(),value=currentInvoice(fresh);if(value.invalid.length){toast('Corrija os horários sem duração válida antes de confirmar a nota.','danger');return;}if(!confirm(`Confirmar cálculo atualizado?\nAulas válidas: ${num(value.serviceHours)}h\nAulas excluídas: ${num(value.cancelledHours)}h (${brl(value.excludedValue)})\n${value.planning.reason}\nTotal: ${brl(value.total)}`))return;copyText(value.description+' '+value.planning.reason+` Exclusão de aulas: ${num(value.cancelledHours)}h, ${brl(value.excludedValue)}.`,'Descrição da nota');}catch(e){toast(e.message,'danger')}});
   host.querySelector('[data-ip-copy="institution"]')?.addEventListener('click',()=>copyText(invoiceInstitutionText(),'Dados da Avante'));
 }
 function invoicePanelActive(){return isInstructor()&&routeName()==='oficineiro'&&params().get('view')!=='planejamento'}
@@ -212,7 +225,7 @@ async function syncInvoiceSubscription(){
   if(invoiceChannel)await client().removeChannel(invoiceChannel);
   invoiceChannelUser=me.id;
   invoiceChannel=client().channel('instructor-invoice-'+me.id);
-  for(const table of ['workshop_calendar','workshops','workshop_monthly_plans']){
+  for(const table of ['workshop_calendar','workshops','workshop_monthly_plans','workshop_plan_lessons']){
     invoiceChannel.on('postgres_changes',{event:'*',schema:'public',table},queueInvoiceRefresh);
   }
   invoiceChannel.subscribe(status=>{if(status==='SUBSCRIBED')queueInvoiceRefresh()});
