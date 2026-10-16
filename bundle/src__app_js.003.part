@@ -22,7 +22,13 @@ async function pageTeam(){
   return `<div class="page-head"><div><h2>Equipe e permissões</h2><p>Gestão de acessos e rastreabilidade do que cada equipe alimentou no mês ${month.split('-').reverse().join('/')}.</p></div></div>${editable?'<div class="notice">Coordenação Geral e Monitoramento podem atribuir perfil, equipe e ativar/desativar acessos. Novas contas aparecem como <b>Acesso pendente</b>.</div>':''}<div class="table-wrap" style="margin-top:14px"><table class="table"><thead><tr><th>Colaborador</th><th>Equipe</th><th>Perfil</th><th>Contribuição do mês</th><th>Status</th></tr></thead><tbody>${team.map(t=>`<tr><td class="name">${esc(t.display_name)}</td><td>${editable?`<input class="input" data-team-name="${t.id}" value="${esc(t.team||'')}">`:esc(t.team||'—')}</td><td>${editable?`<select data-team-role="${t.id}">${roleOpts(t)}</select>`:esc(roleLabel(t.role))}</td><td><small>${esc(activity(t))}</small></td><td>${editable?`<label class="check"><input type="checkbox" data-team-active="${t.id}" ${t.active?'checked':''}><span>${t.active?'Ativo':'Inativo'}</span></label>`:`<span class="pill ${t.active?'success':'danger'}">${t.active?'Ativo':'Inativo'}</span>`}</td></tr>`).join('')}</tbody></table></div>`
 }
 
-function modal(title,body){document.body.insertAdjacentHTML('beforeend',`<div class="modal-backdrop" id="modal"><div class="modal"><div class="modal-head"><h3>${esc(title)}</h3><button class="btn ghost" data-close>✕</button></div>${body}</div></div>`);document.querySelector('[data-close]')?.addEventListener('click',()=>document.querySelector('#modal')?.remove())}
+function modal(title,body){
+  document.querySelectorAll('#modal').forEach(node=>node.remove());
+  document.body.insertAdjacentHTML('beforeend',`<div class="modal-backdrop" id="modal"><div class="modal"><div class="modal-head"><h3>${esc(title)}</h3><button class="btn ghost" data-close>✕</button></div>${body}</div></div>`);
+  const root=document.querySelector('#modal');
+  root.querySelector('[data-close]')?.addEventListener('click',()=>root.remove());
+}
+
 function youthSelect(rows,name='youth_id'){return `<select name="${name}" required><option value="">Selecione o jovem</option>${rows.map(y=>`<option value="${y.id}">${esc(y.preferred_name||y.full_name)} — ${esc(y.neighborhood||'')}</option>`).join('')}</select>`}
 
 async function bindRoute(){

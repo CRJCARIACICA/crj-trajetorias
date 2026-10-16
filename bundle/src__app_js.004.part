@@ -139,15 +139,13 @@
   });
 
   document.querySelectorAll('[data-edit-instructor-profile]').forEach(btn=>btn.addEventListener('click',async()=>{
+    const id=btn.dataset.editInstructorProfile;
+    btn.disabled=true;
     try{
-      const profiles=await listWorkshopInstructorProfiles(),p=profiles.find(x=>x.id===btn.dataset.editInstructorProfile);if(!p)return;
-      let html='<form id="instructor-profile-form" class="stack"><div class="field"><label>Nome</label><input class="input" name="display_name" value="'+esc(p.display_name||'')+'" required></div>';
-      html+='<div class="form-grid"><div class="field"><label>E-mail de referência</label><input class="input" type="email" name="email" value="'+esc(p.email||'')+'"><small>Alterar aqui não troca o e-mail usado para login.</small></div><div class="field"><label>CPF</label><input class="input" name="cpf" value="'+esc(p.cpf||'')+'"></div></div>';
-      html+='<div class="form-grid"><div class="field"><label>Telefone</label><input class="input" name="phone" value="'+esc(p.phone||'')+'"></div><div class="field"><label>Área / especialidade</label><input class="input" name="specialty" value="'+esc(p.specialty||'')+'"></div></div>';
-      html+='<div class="field"><label>Carga horária semanal de referência</label><input class="input" type="number" min="0" step="0.5" name="contracted_weekly_hours" value="'+esc(p.contracted_weekly_hours??'')+'"></div><div class="field"><label>Informações relevantes</label><textarea name="notes">'+esc(p.notes||'')+'</textarea></div><button class="btn primary">Salvar cadastro</button></form>';
-      modal('Editar cadastro do oficineiro',html);
-      document.querySelector('#instructor-profile-form')?.addEventListener('submit',async e=>{e.preventDefault();const x=parseForm(e.target);try{await updateTeamMember(p.id,{display_name:x.display_name});await updateWorkshopInstructorProfile(p.id,x);document.querySelector('#modal')?.remove();toast('Cadastro do oficineiro atualizado');await render()}catch(err){toast(err.message,'danger')}});
-    }catch(err){toast(err.message,'danger')}
+      await window.__crjFeatureLoader?.preload('oficinas');
+      if(!window.CRJInstructorManagement)throw new Error('Não foi possível carregar a edição de oficineiros. Atualize a página.');
+      await window.CRJInstructorManagement.open(id,{onSaved:()=>render()});
+    }catch(err){toast(err.message,'danger')}finally{btn.disabled=false}
   }));
 
   document.querySelectorAll('[data-workshop-plan-next]').forEach(btn=>btn.addEventListener('click',async()=>{

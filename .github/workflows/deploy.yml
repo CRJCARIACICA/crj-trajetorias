@@ -125,8 +125,8 @@ jobs:
           sed -i 's#permissions.js?v=20261003-6#permissions.js?v=20261009-1#g' _site/src/app.js
           # Mantém os módulos centrais atualizados sem recolocar recursos pesados no HTML inicial.
           sed -i -E 's#src/export_route_override\.js\?v=[0-9-]+#src/export_route_override.js?v=20261016-1#g' _site/index.html
-          sed -i -E 's#src/app\.js\?v=[0-9-]+#src/app.js?v=20261016-1#g' _site/index.html
-          sed -i -E 's#src/feature_loader\.js\?v=[^\"]+#src/feature_loader.js?v=20261016-lazy3#g' _site/index.html
+          sed -i -E 's#src/app\.js\?v=[0-9-]+#src/app.js?v=20261016-2#g' _site/index.html
+          sed -i -E 's#src/feature_loader\.js\?v=[^\"]+#src/feature_loader.js?v=20261016-lazy4#g' _site/index.html
 
           # A normalização de campos inteiros do Formulário Inicial é uma proteção global leve.
           # Ela precisa iniciar antes do app para impedir household_size="" em qualquer rota.
@@ -192,7 +192,7 @@ jobs:
           grep -q 'youth_list_fields' _site/src/feature_loader.js
           grep -q 'articulation_request_context' _site/src/feature_loader.js
           grep -q 'workshop_plan_exports' _site/src/feature_loader.js
-          grep -q 'feature_loader.js?v=20261016-lazy3' _site/index.html
+          grep -q 'feature_loader.js?v=20261016-lazy4' _site/index.html
           grep -q 'initial_form_numeric_guard.js?v=20261014-3' _site/index.html
           grep -q 'normalizeRestBody' _site/src/initial_form_numeric_guard.js
           grep -q 'technical-checkin.html' _site/src/technical_workspace.js
@@ -202,7 +202,7 @@ jobs:
           grep -q 'api.js?v=20261015-2' _site/src/articulation_request_context.js
           grep -q 'api.js?v=20261015-2' _site/src/workshop_plan_exports.js
           grep -q 'api.js?v=20261015-2' _site/src/initial_form_numeric_guard.js
-          grep -q 'src/app.js?v=20261016-1' _site/index.html
+          grep -q 'src/app.js?v=20261016-2' _site/index.html
           grep -q 'validateBinaryResponse' _site/src/export_route_override.js
           grep -q 'methodological_action' _site/src/articulation_request_context.js
           grep -q 'Imprimir evidência' _site/src/articulation_request_context.js
@@ -214,7 +214,7 @@ jobs:
           grep -q 'CFDH_TRANSVERSAL_ALLOW_OVERLAP' _site/src/api.js
 
           # Nenhum JS publicado pode apontar para uma versão antiga de api.js.
-          if grep -R -nE "api\.js\?v=(?!20261015-2)" _site/src --include='*.js' -P; then
+          if grep -R -nP "api\.js\?v=(?!20261015-2)" _site/src --include='*.js'; then
             echo 'Foi encontrada mais de uma versão de api.js nos módulos publicados.' >&2
             exit 1
           fi

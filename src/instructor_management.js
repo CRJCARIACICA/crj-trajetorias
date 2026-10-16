@@ -2,7 +2,7 @@ import { apiMode, supabaseClient } from './api.js?v=20261004-2';
 
 const MANAGER_ROLES=new Set(['coordenacao_geral','coordenacao_articulacao','educador','administrativo']);
 const DIRECT_PROFILE_MANAGER_ROLES=new Set(['coordenacao_geral','monitoramento']);
-let me=null,observer=null,scheduled=false;
+let me=null,observer=null,scheduled=false,editorRequest=0;
 const esc=(v='')=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const onWorkshops=()=>location.hash.split('?')[0]==='#oficinas';
 const onTeam=()=>['#equipe','#equipe-permissoes'].includes(location.hash.split('?')[0]);
@@ -60,31 +60,61 @@ async function openManager(){
   try{
     const rows=await loadInstructors();
     const bg=modal('Gerenciar oficineiros',`<div class="im-warning"><b>Exclusão segura:</b> excluir um oficineiro arquiva o cadastro e impede novos vínculos, mas preserva oficinas, listas, relatórios e histórico já existentes.</div><div class="im-grid">${rows.map(personCard).join('')||'<div class="im-empty">Nenhum oficineiro cadastrado.</div>'}</div>`);
-    bg.querySelectorAll('[data-im-edit]').forEach(b=>b.addEventListener('click',()=>openEdit(rows.find(x=>x.id===b.dataset.imEdit))));
+    bg.querySelectorAll('[data-im-edit]').forEach(b=>b.addEventListener('click',()=>openEdit(rows.find(x=>x.id===b.dataset.imEdit),{rows,drafts:new Map()})));
     bg.querySelectorAll('[data-im-archive]').forEach(b=>b.addEventListener('click',()=>archiveInstructor(rows.find(x=>x.id===b.dataset.imArchive))));
     bg.querySelectorAll('[data-im-restore]').forEach(b=>b.addEventListener('click',()=>restoreInstructor(rows.find(x=>x.id===b.dataset.imRestore))));
   }catch(err){toast(err.message||String(err),'danger')}
 }
-async function openEditById(id){
-  try{openEdit(await loadInstructor(id))}catch(err){toast(err.message||String(err),'danger')}
+async function openEditById(id,options={}){
+  const request=++editorRequest;
+  const [rows,actor]=await Promise.all([loadInstructors(),profile()]);
+  if(request!==editorRequest)return;
+  me=actor;
+  if(!canManage())throw new Error('Sem permissão para gerenciar oficineiros.');
+  const row=rows.find(x=>x.id===id);
+  if(!row)throw new Error('Cadastro de oficineiro não encontrado.');
+  openEdit(row,{rows,drafts:new Map(),onSaved:options.onSaved});
 }
-function openEdit(p){
-  if(!p)return;
+function editPayload(form){
+  const fd=new FormData(form);
+  return Object.fromEntries(['display_name','email','cpf','phone','specialty','contracted_weekly_hours','notes'].map(key=>[key,fd.get(key)]));
+}
+function openEdit(record,context={rows:[record],drafts:new Map()}){
+  if(!record)return;
+  const p={...record,...context.drafts.get(record.id),id:record.id};
+  const index=context.rows.findIndex(row=>row.id===p.id);
+  // Remove the legacy modal too: fields and save handlers must belong to this ID.
+  document.querySelectorAll('#modal').forEach(node=>node.remove());
+  const navigation=`<div class="im-head" style="margin-bottom:14px"><button class="btn secondary" type="button" data-im-prev ${index<=0?'disabled':''}>← Anterior</button><div aria-live="polite"><b>${esc(p.display_name||'Oficineiro')}</b><div class="im-muted">Cadastro ${index+1} de ${context.rows.length}</div></div><button class="btn secondary" type="button" data-im-next ${index>=context.rows.length-1?'disabled':''}>Próximo →</button></div><p class="im-muted" data-im-draft-note>Ao navegar, alterações não salvas ficam guardadas nesta janela. Use Salvar alterações em cada cadastro para gravá-las.</p>`;
   const deletionButton=p.active?`<button class="btn danger" type="button" data-im-delete-from-edit>Excluir cadastro</button>`:`<button class="btn primary" type="button" data-im-restore-from-edit>Reativar cadastro</button>`;
-  const bg=modal('Editar cadastro do oficineiro',`<form id="im-edit-form" class="stack"><div class="im-form-grid"><div class="field"><label>Nome completo</label><input class="input" name="display_name" value="${esc(p.display_name||'')}" required></div><div class="field"><label>E-mail de referência</label><input class="input" type="email" name="email" value="${esc(p.email||'')}"><small>Este campo é de referência; não altera o e-mail usado para login.</small></div></div><div class="im-form-grid"><div class="field"><label>CPF</label><input class="input" name="cpf" value="${esc(p.cpf||'')}"></div><div class="field"><label>Telefone</label><input class="input" name="phone" value="${esc(p.phone||'')}"></div></div><div class="im-form-grid"><div class="field"><label>Área / especialidade</label><input class="input" name="specialty" value="${esc(p.specialty||'')}"></div><div class="field"><label>Carga horária semanal de referência</label><input class="input" type="number" min="0" step="0.5" name="contracted_weekly_hours" value="${esc(p.contracted_weekly_hours??'')}"></div></div><div class="field"><label>Informações relevantes</label><textarea name="notes">${esc(p.notes||'')}</textarea></div><div class="im-actions"><button class="btn primary" type="submit">Salvar alterações</button><button class="btn" type="button" data-im-cancel>Cancelar</button>${deletionButton}</div></form>`);
+  const bg=modal('Editar cadastro · '+p.display_name,`${navigation}<form id="im-edit-form" class="stack" data-im-instructor-id="${esc(p.id)}"><div class="im-form-grid"><div class="field"><label>Nome completo</label><input class="input" name="display_name" value="${esc(p.display_name||'')}" required></div><div class="field"><label>E-mail de referência</label><input class="input" type="email" name="email" value="${esc(p.email||'')}"><small>Este campo é de referência; não altera o e-mail usado para login.</small></div></div><div class="im-form-grid"><div class="field"><label>CPF</label><input class="input" name="cpf" value="${esc(p.cpf||'')}"></div><div class="field"><label>Telefone</label><input class="input" name="phone" value="${esc(p.phone||'')}"></div></div><div class="im-form-grid"><div class="field"><label>Área / especialidade</label><input class="input" name="specialty" value="${esc(p.specialty||'')}"></div><div class="field"><label>Carga horária semanal de referência</label><input class="input" type="number" min="0" step="0.5" name="contracted_weekly_hours" value="${esc(p.contracted_weekly_hours??'')}"></div></div><div class="field"><label>Informações relevantes</label><textarea name="notes">${esc(p.notes||'')}</textarea></div><div class="im-actions"><button class="btn primary" type="submit">Salvar alterações</button><button class="btn" type="button" data-im-cancel>Cancelar</button>${deletionButton}</div></form>`);
+  const form=bg.querySelector('#im-edit-form');
+  const remember=()=>context.drafts.set(p.id,editPayload(form));
+  form.addEventListener('input',()=>{remember();bg.querySelector('[data-im-draft-note]').textContent='Alterações não salvas neste cadastro. Elas serão preservadas ao usar Anterior e Próximo.'});
+  for(const [selector,step] of [['[data-im-prev]',-1],['[data-im-next]',1]]){
+    bg.querySelector(selector)?.addEventListener('click',()=>{remember();const next=context.rows[index+step];if(next)openEdit(next,context)});
+  }
   bg.querySelector('[data-im-cancel]')?.addEventListener('click',()=>bg.remove());
   bg.querySelector('[data-im-delete-from-edit]')?.addEventListener('click',()=>archiveInstructor(p));
   bg.querySelector('[data-im-restore-from-edit]')?.addEventListener('click',()=>restoreInstructor(p));
-  bg.querySelector('#im-edit-form')?.addEventListener('submit',async e=>{
+  form.addEventListener('submit',async e=>{
     e.preventDefault();
-    const fd=new FormData(e.currentTarget),payload={display_name:fd.get('display_name'),email:fd.get('email'),cpf:fd.get('cpf'),phone:fd.get('phone'),specialty:fd.get('specialty'),contracted_weekly_hours:fd.get('contracted_weekly_hours'),notes:fd.get('notes')};
-    const btn=e.currentTarget.querySelector('button[type="submit"]');btn.disabled=true;btn.textContent='Salvando...';
+    const payload=editPayload(form),id=form.dataset.imInstructorId;
+    if(id!==record.id){toast('O cadastro selecionado mudou. Reabra a edição.','danger');return}
+    const buttons=[...bg.querySelectorAll('button,input,textarea,select')],disabled=buttons.map(button=>button.disabled);
+    buttons.forEach(button=>button.disabled=true);
     try{
-      const {error}=await c().rpc('workshop_update_instructor_profile',{p_user_id:p.id,p_payload:payload});
+      const {error}=await c().rpc('workshop_update_instructor_profile',{p_user_id:id,p_payload:payload});
       if(error)throw error;
-      bg.remove();toast('Cadastro do oficineiro atualizado');schedule();
-      if(onWorkshops())await openManager();
-    }catch(err){toast(err.message||String(err),'danger');btn.disabled=false;btn.textContent='Salvar alterações'}
+      Object.assign(record,payload);context.drafts.delete(id);
+      bg.querySelector('.im-modal-head b').textContent='Editar cadastro · '+payload.display_name;
+      bg.querySelector('[aria-live] b').textContent=payload.display_name;
+      bg.querySelector('[data-im-draft-note]').textContent='Cadastro salvo. Você pode navegar para o próximo oficineiro.';
+      toast('Cadastro de '+payload.display_name+' atualizado');
+      if(context.onSaved)await context.onSaved();
+      schedule();
+    }catch(err){toast(err.message||String(err),'danger')}
+    finally{buttons.forEach((button,i)=>button.disabled=disabled[i])}
   });
 }
 async function archiveInstructor(p){
@@ -131,7 +161,7 @@ function injectTeamActions(){
     const actions=document.createElement('div');actions.className='im-team-actions';
     actions.innerHTML=`<button class="btn" type="button" data-im-team-edit="${id}">Editar oficineiro</button>${activeEl?.checked!==false?`<button class="btn danger" type="button" data-im-team-delete="${id}">Excluir cadastro</button>`:`<button class="btn primary" type="button" data-im-team-restore="${id}">Reativar</button>`}`;
     statusCell.appendChild(actions);
-    actions.querySelector('[data-im-team-edit]')?.addEventListener('click',()=>openEditById(id));
+    actions.querySelector('[data-im-team-edit]')?.addEventListener('click',()=>openEditById(id).catch(err=>toast(err.message,'danger')));
     actions.querySelector('[data-im-team-delete]')?.addEventListener('click',async()=>{try{await archiveInstructor(await loadInstructor(id))}catch(err){toast(err.message||String(err),'danger')}});
     actions.querySelector('[data-im-team-restore]')?.addEventListener('click',async()=>{try{await restoreInstructor(await loadInstructor(id))}catch(err){toast(err.message||String(err),'danger')}});
   });
@@ -143,4 +173,5 @@ function schedule(){
 function boot(){
   injectStyle();observer=new MutationObserver(schedule);observer.observe(document.body,{childList:true,subtree:true});window.addEventListener('hashchange',schedule);window.addEventListener('focus',schedule);schedule();
 }
+window.CRJInstructorManagement={open:openEditById};
 boot();
