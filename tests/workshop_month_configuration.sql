@@ -1,0 +1,23 @@
+begin;
+do $$ declare actor uuid; w uuid; c uuid; p uuid; before_next jsonb; result jsonb; begin
+select id into actor from public.profiles where role='coordenacao_articulacao' and active=true limit 1;
+perform set_config('request.jwt.claim.sub',actor::text,true);
+result:=app_private.save_workshop_month(null,'2028-01-01','{"name":"TESTE TRANSACIONAL MENSAL","category":"Cultura","workshop_type":"permanente","schedule_mode":"semanal_fixa","fixed_weekdays":[1],"planned_start_date":"2028-01-01","start_time":"10:00","end_time":"12:00","location_type":"LABPoca","active":true}'::jsonb,0,'Teste atômico');
+w:=(result->>'workshop_id')::uuid;
+perform app_private.ensure_workshop_month(w,'2028-02-01');
+select configuration into before_next from public.workshop_month_settings where workshop_id=w and reference_month='2028-02-01';
+select id into c from public.workshop_calendar where workshop_id=w order by scheduled_date limit 1;
+select id into p from public.workshop_monthly_plans where workshop_id=w and plan_month='2028-01-01';
+update public.workshop_plan_lessons set objective='CONTEUDO A PRESERVAR' where plan_id=p;perform public.send_joint_action_to_agenda((select id from public.joint_actions where source_type='workshop_plan_lessons' and source_id=(select id from public.workshop_plan_lessons where calendar_entry_id=c limit 1) limit 1));
+perform app_private.save_workshop_month(w,'2028-01-01','{"start_time":"11:00","end_time":"13:00"}'::jsonb,2,'Teste de horário');
+if (select start_time from public.workshop_calendar where id=c)<>'11:00'::time then raise exception 'Horário não sincronizado';end if;
+if not exists(select 1 from public.workshop_plan_lessons where calendar_entry_id=c and objective='CONTEUDO A PRESERVAR' and start_time='11:00') then raise exception 'Conteúdo ou vínculo perdido';end if;
+if (select configuration from public.workshop_month_settings where workshop_id=w and reference_month='2028-02-01')<>before_next then raise exception 'Outro mês modificado';end if;
+if not exists(select 1 from public.calendar_events e join public.joint_actions a on a.calendar_event_id=e.id join public.workshop_plan_lessons l on l.id=a.source_id where l.calendar_entry_id=c and e.starts_at::timestamptz=(('2028-01-03'::date+'11:00'::time) at time zone 'America/Sao_Paulo')) then raise exception 'Agenda compartilhada não sincronizou';end if;update public.workshop_calendar set status='realizada' where id=c;
+perform app_private.save_workshop_month(w,'2028-01-01','{"active":false}'::jsonb,3,'Teste exclusão');
+if (select status from public.workshop_calendar where id=c)<>'realizada' then raise exception 'Execução alterada';end if;
+if exists(select 1 from public.workshop_calendar where workshop_id=w and id<>c and status<>'cancelada') then raise exception 'Exclusão não propagou';end if;
+if not exists(select 1 from public.workshop_month_changes where workshop_id=w and source_table='workshop_plan_lessons' and before_data is not null) then raise exception 'Auditoria ausente';end if;
+perform app_private.save_workshop_month(w,'2028-01-01','{"active":true}'::jsonb,4,'Teste reinclusão');if exists(select 1 from public.workshop_calendar where workshop_id=w and status='cancelada') then raise exception 'Reinclusão não restaurou aulas retiradas do mês';end if;begin perform app_private.save_workshop_month(w,'2028-01-01','{"active":true}'::jsonb,1,'Teste conflito');raise exception 'REVISION GUARD FAILED';exception when others then if sqlerrm='REVISION GUARD FAILED' then raise;end if;end;
+end $$;rollback;
+select 'Criação atômica, isolamento mensal, IDs, horário, conteúdo, exclusão, execução, auditoria e revisão: OK; dados de teste revertidos' validation;

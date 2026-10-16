@@ -1,4 +1,4 @@
-import { apiMode, supabaseClient } from './api.js?v=20261004-2';
+import { apiMode, supabaseClient, listWorkshops } from './api.js?v=20261016-workshop-month1';
 
 const ROUTE='calendario-geral';
 const TZ='America/Sao_Paulo';
@@ -196,6 +196,8 @@ async function loadMonth(month,force=false){
     safeRows('calendar_events'),safeRowsWith('calendar_event_technicians','event_id,technician_user_id'),safeRowsWith('workshop_calendar','*,workshops(id,name,workshop_type,schedule_mode,location_type,location_other,oficineiro_user_id,educator_user_id)'),
     safeRows('technical_action_plans'),safeRows('educator_plans'),safeRows('cfdh_actions'),safeRows('articulation_actions'),safeRows('access_resource_bookings'),safeRows('joint_actions')
   ]);
+  const monthlyWorkshops=new Map((await listWorkshops(month)).map(w=>[w.id,w]));
+  for(const entry of workshopCalendar){const config=monthlyWorkshops.get(entry.workshop_id);if(config)entry.workshops=config;}
   const techMap=new Map();for(const x of techLinks){const a=techMap.get(x.event_id)||[];a.push(x.technician_user_id);techMap.set(x.event_id,a)}
   const sourceRows=[
     ['calendar_events',calendarEvents],['workshop_calendar',workshopCalendar],['technical_action_plans',technicalPlans],['educator_plans',educatorPlans],

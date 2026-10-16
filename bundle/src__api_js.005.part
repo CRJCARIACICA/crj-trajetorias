@@ -129,7 +129,7 @@ export async function getWorkshopMonthlyReportBundle(planId){
     return buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendance,guests,report,records,team});
   }
   const [wq,sq,rq,records,team]=await Promise.all([
-    supabase.from('workshops').select('*').eq('id',workshopId).single(),
+    listWorkshops(month).then(rows=>({data:rows.find(w=>w.id===workshopId)||null})),
     supabase.from('workshop_sessions').select('*').eq('workshop_id',workshopId).gte('session_date',range.start).lt('session_date',range.end).order('session_date').order('start_time'),
     supabase.from('workshop_monthly_reports').select('*').eq('plan_id',planId).maybeSingle(),
     listEducatorRecords(month,plan.educator_user_id||null),

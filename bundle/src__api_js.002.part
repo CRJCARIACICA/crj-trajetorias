@@ -148,10 +148,18 @@ function buildTechnicalDashboard(records,settings){
   return {records,metrics,evidence,settings,professionals:[...byProfessional.values()].map(x=>({...x,unique_youth:x.unique_youth.size})).sort((a,b)=>b.services-a.services)};
 }
 
-export async function listWorkshops(){
-  if(mode==='mock') return mock().workshops;
-  const {data,error}=await supabase.from('workshops').select('*').order('name'); if(error) throw error; return data||[];
+export function workshopReferenceMonth(value=null){
+  const raw=value||new URLSearchParams((globalThis.location?.hash||'').split('?')[1]||'').get('month')||new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit'}).format(new Date());
+  const month=String(raw).slice(0,7);if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))throw new Error('Mês inválido.');return month+'-01';
 }
+export async function listWorkshops(month=null){
+  if(mode==='mock') return mock().workshops;
+  const {data,error}=await supabase.rpc('list_workshops_for_month',{p_month:workshopReferenceMonth(month)});if(error)throw error;return data||[];
+}
+export async function saveWorkshopMonth(id,row,month,revision,reason){
+ const {data,error}=await supabase.rpc('save_workshop_month',{p_id:id,p_month:workshopReferenceMonth(month),p_configuration:{...workshopPayload(row),methodology_devices:row.methodology_devices||[],...(row.execution_dates?{execution_dates:row.execution_dates}:{})},p_revision:Number(revision||0),p_reason:reason});if(error)throw error;return data;
+}
+
 function workshopPayload(row){
   const out={};
   for(const k of ['name','category','workshop_type','schedule_mode','planned_start_date','planned_end_date','location_type','location_other','planning_notes','start_time','end_time','oficineiro_user_id','educator_user_id']){
@@ -172,9 +180,8 @@ export async function createWorkshop(row){
 export async function updateWorkshop(id,row){
   const payload={...workshopPayload(row),updated_at:now()};
   if(mode==='mock'){const s=mock(),w=s.workshops.find(x=>x.id===id);if(!w)throw new Error('Oficina não encontrada');Object.assign(w,payload);if(w.schedule_mode!=='semanal_fixa')s.workshopCalendar=(s.workshopCalendar||[]).filter(x=>!(x.workshop_id===id&&x.source==='regra_fixa'&&x.status==='planejada'));save(s);return w;}
-  const {data,error}=await supabase.from('workshops').update(payload).eq('id',id).select('*').single();if(error)throw error;
-  if(data.schedule_mode!=='semanal_fixa'){const {error:ce}=await supabase.from('workshop_calendar').delete().eq('workshop_id',id).eq('source','regra_fixa').eq('status','planejada');if(ce)throw ce;}
-  return data;
+  const month=workshopReferenceMonth(row.reference_month),rows=await listWorkshops(month),existing=rows.find(w=>w.id===id);if(!existing)throw new Error('Oficina não encontrada');
+  await saveWorkshopMonth(id,row,month,row.monthly_revision??existing.monthly_revision,row.change_reason||'Atualização da configuração da oficina nesta competência');return (await listWorkshops(month)).find(w=>w.id===id);
 }
 export async function listWorkshopCalendar(fromDate=null,toDate=null,workshopId=null){
   if(mode==='mock'){
@@ -206,6 +213,7 @@ export async function updateWorkshopCalendarEntry(id,patch){
   const {data,error}=await supabase.from('workshop_calendar').update(payload).eq('id',id).select('*').single();if(error)throw error;return data;
 }
 export async function generateWorkshopFixedCalendar(workshop,horizonDays=90,month=null){
+  if(mode!=='mock'){const ref=workshopReferenceMonth(month||workshop?.reference_month);const {error}=await supabase.rpc('refresh_workshop_month',{p_id:workshop.id,p_month:ref});if(error)throw error;const [y,m]=ref.split('-').map(Number);return listWorkshopCalendar(ref,new Date(Date.UTC(y,m,1)).toISOString().slice(0,10),workshop.id);}
   if(!workshop||workshop.schedule_mode!=='semanal_fixa')return [];
   const weekdays=(workshop.fixed_weekdays||[]).map(Number);
   if(!weekdays.length||!workshop.planned_start_date)return [];
@@ -397,36 +405,8 @@ export async function syncWorkshopMonthlyPlan(workshopId,month=monthKey()){
     entries.forEach((e,i)=>{let x=s.workshopPlanLessons.find(z=>z.plan_id===plan.id&&z.calendar_entry_id===e.id);if(!x){x={id:uid('wlesson'),plan_id:plan.id,calendar_entry_id:e.id,theme:'Aula '+(i+1)};s.workshopPlanLessons.push(x)}else if(/^Aula\s+\d+$/i.test(String(x.theme||'')))x.theme='Aula '+(i+1);Object.assign(x,{lesson_number:i+1,scheduled_date:e.scheduled_date,start_time:e.start_time,end_time:e.end_time,location_type:e.location_type||w.location_type||null,location_other:e.location_other||w.location_other||null,included:true,updated_at:now()})});
     save(s);return {plan,lessons:s.workshopPlanLessons.filter(x=>x.plan_id===plan.id&&x.included).sort((a,b)=>a.lesson_number-b.lesson_number)};
   }
-  const wq=await supabase.from('workshops').select('*').eq('id',workshopId).single();if(wq.error)throw wq.error;
-  const w=wq.data;
-  if(w.schedule_mode==='semanal_fixa')await generateWorkshopFixedCalendar(w,90,key);
-  let pq=await supabase.from('workshop_monthly_plans').select('*').eq('workshop_id',workshopId).eq('plan_month',planMonth).maybeSingle();
-  if(pq.error)throw pq.error;
-  let plan=pq.data;
-  if(!plan){
-    const ins=await supabase.from('workshop_monthly_plans').insert({workshop_id:workshopId,plan_month:planMonth,instructor_user_id:w.oficineiro_user_id||null,educator_user_id:w.educator_user_id||null,status:'rascunho'}).select('*').single();
-    if(ins.error)throw ins.error;plan=ins.data;
-  }else{
-    const upd=await supabase.from('workshop_monthly_plans').update({instructor_user_id:w.oficineiro_user_id||plan.instructor_user_id||null,educator_user_id:w.educator_user_id||plan.educator_user_id||null,updated_at:now()}).eq('id',plan.id).select('*').single();
-    if(upd.error)throw upd.error;plan=upd.data;
-  }
-  const calQ=await supabase.from('workshop_calendar').select('*').eq('workshop_id',workshopId).gte('scheduled_date',start).lt('scheduled_date',end).neq('status','cancelada').order('scheduled_date').order('start_time');
-  const lessQ=await supabase.from('workshop_plan_lessons').select('*').eq('plan_id',plan.id);
-  if(calQ.error)throw calQ.error;if(lessQ.error)throw lessQ.error;
-  const existing=new Map((lessQ.data||[]).filter(x=>x.calendar_entry_id).map(x=>[x.calendar_entry_id,x]));
-  const disable=await supabase.from('workshop_plan_lessons').update({included:false,updated_at:now()}).eq('plan_id',plan.id);
-  if(disable.error)throw disable.error;
-  const rows=(calQ.data||[]).map((e,i)=>{
-    const old=existing.get(e.id)||{};
-    return {plan_id:plan.id,calendar_entry_id:e.id,lesson_number:i+1,scheduled_date:e.scheduled_date,start_time:e.start_time||w.start_time||null,end_time:e.end_time||w.end_time||null,location_type:e.location_type||w.location_type||null,location_other:e.location_other||w.location_other||null,theme:(old.theme&&!/^Aula\s+\d+$/i.test(String(old.theme)))?old.theme:('Aula '+(i+1)),objective:old.objective||null,proposed_activities:old.proposed_activities||null,resources:old.resources||null,cfdh_transversal:old.cfdh_transversal||null,observations:old.observations||null,included:true,updated_at:now()};
-  });
-  if(rows.length){
-    const up=await supabase.from('workshop_plan_lessons').upsert(rows,{onConflict:'plan_id,calendar_entry_id'}).select('*');
-    if(up.error)throw up.error;
-  }
-  const finalQ=await supabase.from('workshop_plan_lessons').select('*').eq('plan_id',plan.id).eq('included',true).order('lesson_number');
-  if(finalQ.error)throw finalQ.error;
-  return {plan,lessons:finalQ.data||[]};
+  const {error}=await supabase.rpc('refresh_workshop_month',{p_id:workshopId,p_month:planMonth});if(error)throw error;
+  const plan=await supabase.from('workshop_monthly_plans').select('id').eq('workshop_id',workshopId).eq('plan_month',planMonth).maybeSingle();if(plan.error)throw plan.error;if(!plan.data)throw new Error('Oficina fora desta competência. Inclua-a antes de gerar o planejamento.');return getWorkshopMonthlyPlan(plan.data.id);
 }
 export async function saveWorkshopMonthlyPlan(planId,header={},lessons=[]){
   const planPatch={updated_at:now()};

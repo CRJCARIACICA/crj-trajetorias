@@ -259,7 +259,7 @@ function workshopPeriodLabel(w){
 function workshopTabs(view){
   return '<div class="tabs workshop-tabs">'+[
     ['oficinas','Oficinas'],['calendario','Calendário'],['planejamento','Planejamento'],['oficineiros','Oficineiros']
-  ].map(x=>'<button class="tab '+(view===x[0]?'active':'')+'" data-nav="oficinas?view='+x[0]+'">'+x[1]+'</button>').join('')+'</div>';
+  ].map(x=>'<button class="tab '+(view===x[0]?'active':'')+'" data-nav="oficinas?view='+x[0]+'&month='+esc(route().params.get('month')||currentMonth())+'">'+x[1]+'</button>').join('')+'</div>';
 }
 function workshopCalendarGrid(entries,month){
   const [y,m]=month.split('-').map(Number);
@@ -440,9 +440,10 @@ async function pageWorkshops(){
   const names=new Map(team.map(x=>[x.id,x.display_name]));
   return '<div class="page-head"><div><h2>Oficinas e presenças</h2><p>Cadastro, planejamento, execução, calendário, responsáveis e listas de presença.</p></div><div class="actions"><button class="btn primary" data-action="new-workshop">+ Nova oficina '+eduGoalInfo('planejamento_oficina')+'</button></div></div>'+
     workshopTabs(view)+
+    '<div class="toolbar"><label class="field month-filter"><span>Competência das oficinas</span><input class="input" type="month" data-workshop-month value="'+esc(route().params.get('month')||currentMonth())+'"></label><span class="muted">Configurações independentes por mês · renovação automática · oficinas retiradas podem ser reincluídas em Configurar mês.</span></div>'+
     '<div class="grid three">'+ws.map(w=>'<div class="card workshop-card"><div class="actions"><span class="pill '+(w.active?'success':'danger')+'">'+(w.active?'Ativa':'Inativa')+'</span><span class="pill info">'+esc(workshopTypeLabel(w.workshop_type))+'</span></div><h3 style="margin-top:12px">'+esc(w.name)+'</h3><p class="muted">'+esc(w.category||'Sem categoria')+'</p>'+
       '<div class="workshop-card-meta"><span><b>Agenda</b>'+esc(workshopScheduleLabel(w))+'</span><span><b>Período</b>'+esc(workshopPeriodLabel(w))+'</span><span><b>Horário</b>'+esc(String(w.start_time||'').slice(0,5))+(w.end_time?'–'+esc(String(w.end_time).slice(0,5)):'Não definido')+'</span><span><b>Local</b>'+esc(workshopLocationLabel(w))+'</span><span><b>Oficineiro(a)</b>'+esc(names.get(w.oficineiro_user_id)||'Não vinculado')+'</span><span><b>Educador(a)</b>'+esc(names.get(w.educator_user_id)||'Não vinculado')+'</span></div>'+
-      '<div class="actions" style="margin-top:14px"><button class="btn primary" data-nav="oficina/'+w.id+'">Acompanhar turma '+eduGoalInfo('acompanhamento_oficina')+'</button><button class="btn" data-edit-workshop="'+w.id+'">Editar cadastro</button><button class="btn" data-action="session" data-workshop="'+w.id+'">Registrar aula '+eduGoalInfo('aula')+'</button>'+(w.schedule_mode==='semanal_fixa'?'<button class="btn secondary" data-generate-workshop-calendar="'+w.id+'">Gerar calendário</button>':'')+'</div></div>').join('')||'<div class="card empty">Nenhuma oficina.</div>'+'</div>';
+      '<div class="actions" style="margin-top:14px"><button class="btn primary" data-nav="oficina/'+w.id+'?month='+esc(route().params.get('month')||currentMonth())+'">Acompanhar turma '+eduGoalInfo('acompanhamento_oficina')+'</button><button class="btn" data-edit-workshop="'+w.id+'">Configurar mês</button><button class="btn" data-action="session" data-workshop="'+w.id+'">Registrar aula '+eduGoalInfo('aula')+'</button>'+(w.schedule_mode==='semanal_fixa'?'<button class="btn secondary" data-generate-workshop-calendar="'+w.id+'">Gerar calendário</button>':'')+'</div></div>').join('')||'<div class="card empty">Nenhuma oficina.</div>'+'</div>';
 }
 
 

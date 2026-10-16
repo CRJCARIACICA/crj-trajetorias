@@ -1,4 +1,4 @@
-import { apiMode, supabaseClient } from './api.js?v=20261004-2';
+import { apiMode, supabaseClient, listWorkshops } from './api.js?v=20261016-workshop-month1';
 
 const HOURLY_RATE=71.67;
 const AVANTE={
@@ -72,7 +72,7 @@ async function resolveProfile(){
 async function loadPortalData(){
   const c=client(),current=currentReferenceMonth(),next=addMonth(current,1);
   const [wq,pq,aq]=await Promise.all([
-    c.from('workshops').select('id,name,category,days,start_time,end_time,active,location_type,location_other,oficineiro_user_id').eq('oficineiro_user_id',me.id).order('name'),
+    listWorkshops(current).then(rows=>({data:rows.filter(w=>w.oficineiro_user_id===me.id)})),
     c.from('workshop_monthly_plans').select('*').eq('instructor_user_id',me.id).in('plan_month',[current,next]).order('plan_month').order('created_at'),
     c.from('workshop_instructor_monthly_admin').select('*').eq('instructor_user_id',me.id).eq('reference_month',current).maybeSingle()
   ]);
@@ -244,7 +244,7 @@ async function syncInvoiceSubscription(){
   if(invoiceChannel)await client().removeChannel(invoiceChannel);
   invoiceChannelUser=me.id;
   invoiceChannel=client().channel('instructor-invoice-'+me.id);
-  for(const table of ['workshop_calendar','workshops','workshop_monthly_plans','workshop_plan_lessons']){
+  for(const table of ['workshop_calendar','workshops','workshop_month_settings','workshop_monthly_plans','workshop_plan_lessons']){
     invoiceChannel.on('postgres_changes',{event:'*',schema:'public',table},queueInvoiceRefresh);
   }
   invoiceChannel.subscribe(status=>{if(status==='SUBSCRIBED')queueInvoiceRefresh()});
