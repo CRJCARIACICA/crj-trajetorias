@@ -96,19 +96,20 @@ function currentInvoice(d){
   if(!Array.isArray(d.calendar))throw new Error('Calendário da competência não carregado.');
   const wmap=workshopMap(d),currentPlans=d.plans.filter(p=>String(p.plan_month).slice(0,10)===d.current),byWorkshop=new Map();
   const calendar=[...new Map(d.calendar.map(row=>[row.id,row])).values()].filter(row=>wmap.has(row.workshop_id)&&row.scheduled_date>=d.current&&row.scheduled_date<d.next);
-  let serviceMinutes=0,cancelled=0,cancelledMinutes=0; const exclusions=[],invalid=[];
+  let grossMinutes=0,cancelled=0,cancelledMinutes=0; const exclusions=[],invalid=[],included=[];
   for(const row of calendar){
     const minutes=Math.round(durationHours(row.start_time,row.end_time)*60);
+    grossMinutes+=minutes;
     if(cancelledLesson(row)){cancelled++;cancelledMinutes+=minutes;exclusions.push({...row,minutes});if(minutes<=0)invalid.push(row);continue}
     if(minutes<=0){invalid.push(row);continue;}
     const group=byWorkshop.get(row.workshop_id)||{name:wmap.get(row.workshop_id).name,hours:0,lessons:0};
-    group.hours+=minutes/60;group.lessons++;byWorkshop.set(row.workshop_id,group);serviceMinutes+=minutes;
+    group.hours+=minutes/60;group.lessons++;byWorkshop.set(row.workshop_id,group);included.push({...row,minutes});
   }
   // Planning refers to the following month, subject to its submission deadline.
-  const groups=[...byWorkshop.values()],serviceHours=serviceMinutes/60,planningHours=planningEligibility(d).hours,billableHours=serviceHours+planningHours;
+  const groups=[...byWorkshop.values()],serviceHours=(grossMinutes-cancelledMinutes)/60,planningHours=planningEligibility(d).hours,billableHours=serviceHours+planningHours;
   const total=Math.round(billableHours*HOURLY_RATE*100)/100;
   const description=`Prestação de serviços como oficineiro(a) do Centro de Referência das Juventudes – CRJ Cariacica, competência ${shortMonth(d.current)}, referente a ${num(serviceHours)}h de aulas válidas no Calendário Geral${planningHours?' + 1h de planejamento':''}, totalizando ${num(billableHours)}h, ao valor de ${brl(HOURLY_RATE)}/h. Valor total previsto: ${brl(total)}.`;
-  return {currentPlans,groups,serviceHours,planningHours,billableHours,total,description,cancelled,exclusions,invalid,cancelledHours:cancelledMinutes/60,excludedValue:Math.round(cancelledMinutes/60*HOURLY_RATE*100)/100,planning:planningEligibility(d)};
+  return {grossHours:grossMinutes/60,included,currentPlans,groups,serviceHours,planningHours,billableHours,total,description,cancelled,exclusions,invalid,cancelledHours:cancelledMinutes/60,excludedValue:Math.round(cancelledMinutes/60*HOURLY_RATE*100)/100,planning:planningEligibility(d)};
 }
 function planningDeadlineFor(d){return deadlineFor(d.current,d.current==='2026-10-01'?20:15)}
 function planningEligibility(d){
@@ -124,9 +125,11 @@ function invoiceHtml(d){
   return `<section class="ip-card" data-ip-invoice><h3>Dados para nota fiscal</h3><div class="ip-muted">Cálculo automático pelo Calendário Geral da competência atual. Inclusões, cancelamentos e alterações de horário recalculam o valor previsto.</div>
     <div class="ip-kpi" aria-live="polite">${brl(inv.total)} <small>valor previsto</small></div>
     <div class="ip-invoice-box"><div class="ip-invoice-lines">
-      ${inv.groups.map(x=>`<span>${esc(x.name)} · ${x.lessons} aula(s)</span><b>${num(x.hours)}h</b>`).join('')||'<span>Horas de aulas válidas no calendário</span><b>0h</b>'}
+      <span>Horas brutas registradas (antes das exclusões)</span><b>${num(inv.grossHours)}h</b>
+      ${inv.groups.map(x=>`<span>${esc(x.name)} · ${x.lessons} aula(s)</span><b>${num(x.hours)}h válidas</b>`).join('')||'<span>Horas de aulas válidas no calendário</span><b>0h</b>'}
       <span>Aulas canceladas / não realizadas (excluídas do valor)</span><b>${inv.cancelled}</b>
       <span>Horas excluídas das aulas</span><b>−${num(inv.cancelledHours)}h · −${brl(inv.excludedValue)}</b>
+      <span>Saldo de aulas após subtração</span><b>${num(inv.grossHours)}h − ${num(inv.cancelledHours)}h = ${num(inv.serviceHours)}h</b>
       <span>Planejamento mensal</span><b>${num(inv.planningHours)}h</b>
       <span>Valor por hora</span><b>${brl(HOURLY_RATE)}</b>
       <span class="total">Total de horas faturáveis</span><b class="total">${num(inv.billableHours)}h</b>
@@ -134,7 +137,7 @@ function invoiceHtml(d){
     </div></div>
     <p class="ip-muted">${esc(inv.planning.reason)} ${inv.planningHours?0:1}h de planejamento fora do total (${brl(inv.planningHours?0:HOURLY_RATE)}).</p>
     ${inv.invalid.length?'<p class="notice warn">Existem registros sem duração válida. Não foi estimada nenhuma hora para eles. Corrija os horários na origem antes de fechar a nota.</p>':''}
-    <details><summary>Conferir aulas excluídas e cálculo</summary>${inv.exclusions.map(r=>`<p>${esc(fmtDate(r.scheduled_date))} · ${esc(r.id)} · ${esc(time5(r.start_time))}–${esc(time5(r.end_time))} · ${esc(r.status)} · ${num(r.minutes/60)}h · ${brl(r.minutes/60*HOURLY_RATE)}</p>`).join('')||'<p>Nenhuma aula cancelada registrada.</p>'}<p>Aulas: ${num(inv.serviceHours+inv.cancelledHours)}h − ${num(inv.cancelledHours)}h = ${num(inv.serviceHours)}h válidas. Planejamento: +${num(inv.planningHours)}h. Total: ${num(inv.billableHours)}h × ${brl(HOURLY_RATE)} = ${brl(inv.total)}.</p></details>
+    <details><summary>Conferir todas as aulas e a subtração</summary><h4>Aulas incluídas no resultado</h4>${inv.included.map(r=>`<p>${esc(workshopMap(d).get(r.workshop_id)?.name)} · ${esc(fmtDate(r.scheduled_date))} · ${esc(r.id)} · ${esc(time5(r.start_time))}–${esc(time5(r.end_time))} · ${esc(r.status)} · +${num(r.minutes/60)}h</p>`).join('')||'<p>Nenhuma aula incluída.</p>'}<h4>Aulas excluídas</h4>${inv.exclusions.map(r=>`<p>${esc(fmtDate(r.scheduled_date))} · ${esc(r.id)} · ${esc(time5(r.start_time))}–${esc(time5(r.end_time))} · ${esc(r.status)} · ${num(r.minutes/60)}h · ${brl(r.minutes/60*HOURLY_RATE)}</p>`).join('')||'<p>Nenhuma aula cancelada registrada.</p>'}<p>Aulas: ${num(inv.serviceHours+inv.cancelledHours)}h − ${num(inv.cancelledHours)}h = ${num(inv.serviceHours)}h válidas. Planejamento: +${num(inv.planningHours)}h. Total: ${num(inv.billableHours)}h × ${brl(HOURLY_RATE)} = ${brl(inv.total)}.</p></details>
     <small class="ip-muted" data-ip-invoice-sync>Calendário consultado às ${updated}. Atualização automática.</small>
     <div class="ip-nf-text">${esc(inv.description)}</div>
     <div class="ip-actions"><button class="btn" type="button" data-ip-copy="invoice">Copiar descrição da nota</button><button class="btn" type="button" data-ip-copy="institution">Copiar dados da Avante</button></div>
@@ -193,7 +196,7 @@ async function setAdminField(field,done){
 }
 function bindInvoiceCopy(host,d){
   const inv=currentInvoice(d);
-  host.querySelector('[data-ip-copy="invoice"]')?.addEventListener('click',async()=>{try{const fresh=await loadPortalData(),value=currentInvoice(fresh);if(value.invalid.length){toast('Corrija os horários sem duração válida antes de confirmar a nota.','danger');return;}if(!confirm(`Confirmar cálculo atualizado?\nAulas válidas: ${num(value.serviceHours)}h\nAulas excluídas: ${num(value.cancelledHours)}h (${brl(value.excludedValue)})\n${value.planning.reason}\nTotal: ${brl(value.total)}`))return;copyText(value.description+' '+value.planning.reason+` Exclusão de aulas: ${num(value.cancelledHours)}h, ${brl(value.excludedValue)}.`,'Descrição da nota');}catch(e){toast(e.message,'danger')}});
+  host.querySelector('[data-ip-copy="invoice"]')?.addEventListener('click',async()=>{try{const fresh=await loadPortalData(),value=currentInvoice(fresh);if(value.invalid.length){toast('Corrija os horários sem duração válida antes de confirmar a nota.','danger');return;}if(!confirm(`Confirmar cálculo atualizado?\nHoras brutas: ${num(value.grossHours)}h\nSubtração: ${num(value.grossHours)}h − ${num(value.cancelledHours)}h = ${num(value.serviceHours)}h\nAulas válidas: ${num(value.serviceHours)}h\nAulas excluídas: ${num(value.cancelledHours)}h (${brl(value.excludedValue)})\n${value.planning.reason}\nTotal: ${brl(value.total)}`))return;copyText(value.description+' '+value.planning.reason+` Exclusão de aulas: ${num(value.cancelledHours)}h, ${brl(value.excludedValue)}.`,'Descrição da nota');}catch(e){toast(e.message,'danger')}});
   host.querySelector('[data-ip-copy="institution"]')?.addEventListener('click',()=>copyText(invoiceInstitutionText(),'Dados da Avante'));
 }
 function invoicePanelActive(){return isInstructor()&&routeName()==='oficineiro'&&params().get('view')!=='planejamento'}

@@ -57,8 +57,8 @@ function enhanceInstructorHelp(){
   document.addEventListener('click',e=>{if(!e.target.closest('.wc-help-wrap'))document.querySelectorAll('.wc-help.active').forEach(x=>x.classList.remove('active'))},{once:true});
   const invoiceCard=[...document.querySelectorAll('.ip-card')].find(card=>norm(card.querySelector('h3')?.textContent).includes('dados para nota fiscal'));
   if(invoiceCard&&!invoiceCard.querySelector('.wc-invoice-rule')){
-    const title=invoiceCard.querySelector('h3');if(title)title.insertAdjacentHTML('beforeend',helpMarkup('Como o valor é calculado','O valor previsto acompanha automaticamente o planejamento mensal: R$ 71,67 por hora prevista, acrescido de 1 hora de planejamento na competência.','20h de aulas previstas + 1h de planejamento = 21h × R$ 71,67 = R$ 1.505,07.'));
-    invoiceCard.insertAdjacentHTML('beforeend',`<div class="notice info wc-invoice-rule"><b>Remuneração prevista vinculada ao planejamento.</b><br>O valor é recalculado quando o planejamento mensal é criado ou alterado. Caso uma oficina prevista não aconteça, a carga correspondente poderá ser descontada no mês seguinte e/ou compensada em ações externas de mobilização articuladas pela Articulação, conforme validação da gestão.</div>`);
+    const title=invoiceCard.querySelector('h3');if(title)title.insertAdjacentHTML('beforeend',helpMarkup('Como o valor é calculado','O resultado usa as horas brutas do calendário menos as horas canceladas, acrescido somente do planejamento elegível. Confira os registros incluídos e excluídos no cálculo.','29h brutas − 15h canceladas + 0h de planejamento = 14h × R$ 71,67 = R$ 1.003,38.'));
+    invoiceCard.insertAdjacentHTML('beforeend',`<div class="notice info wc-invoice-rule"><b>Remuneração calculada pelas horas válidas.</b><br>Cancelamentos registrados são excluídos na própria competência. Consulte a relação de aulas incluídas e excluídas antes de confirmar. A hora de planejamento depende do preenchimento e do prazo aplicável.</div>`);
   }
 }
 
