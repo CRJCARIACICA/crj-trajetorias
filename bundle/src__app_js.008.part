@@ -622,7 +622,7 @@ async function bindCfdhShared(){
   document.querySelectorAll('[data-cfdh-plan-pdf]').forEach(btn=>btn.addEventListener('click',async()=>{const o=btn.textContent;btn.disabled=true;btn.textContent='Gerando...';try{await downloadCfdhPlan(btn.dataset.cfdhPlanPdf,'pdf');toast('PDF do planejamento CFDH gerado')}catch(err){toast(err.message,'danger')}finally{btn.disabled=false;btn.textContent=o}}));
   document.querySelectorAll('[data-cfdh-plan-docx]').forEach(btn=>btn.addEventListener('click',async()=>{const o=btn.textContent;btn.disabled=true;btn.textContent='Gerando...';try{await downloadCfdhPlan(btn.dataset.cfdhPlanDocx,'docx');toast('DOCX do planejamento CFDH gerado')}catch(err){toast(err.message,'danger')}finally{btn.disabled=false;btn.textContent=o}}));
   document.querySelectorAll('[data-cfdh-plan-print]').forEach(btn=>btn.addEventListener('click',async()=>{
-    try{const b=await getCfdhPlanBundle(btn.dataset.cfdhPlanPrint),themes=await listCfdhThemes(),classification=await listMethodologyClassificationCatalog();b.themes=themes;b.classification=classification;openPrintableDocument('Planejamento CFDH · '+(b.plan.activity_title||''),cfdhPlanPreviewHtml(b))}catch(err){toast(err.message,'danger')}
+    try{await window.__crjExportPlanning({cfdh_plan_id:btn.dataset.cfdhPlanPrint},'pdf',true)}catch(err){toast(err.message,'danger')}
   }));
 
   document.querySelectorAll('[data-cfdh-execute]').forEach(btn=>btn.addEventListener('click',()=>{

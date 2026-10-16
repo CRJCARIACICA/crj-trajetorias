@@ -329,6 +329,11 @@ async function handleAction(button){
   button.disabled=true;
   button.textContent=action==='print'?'Preparando impressão...':'Gerando...';
   try{
+    const cfdh=button.closest('#cfdh-plan-editor');
+    if(cfdh?.dataset.planId){
+      await window.__crjExportPlanning({cfdh_plan_id:cfdh.dataset.planId},action==='print'?'pdf':action,action==='print');
+      return;
+    }
     const submissionId=await resolveEvidenceSubmission(button);
     if(action==='print')await printEvidence(submissionId);
     else await downloadEvidence(submissionId,action);

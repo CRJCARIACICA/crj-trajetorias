@@ -1,3 +1,6 @@
+import { capturePlanPreview } from './plan_preview_capture.js?v=20261016-1';
+import { supabaseClient } from './api.js?v=20261015-2';
+import { CONFIG } from './config.js';
 // Contrato global de exportação documental do CRJ Trajetórias.
 // Todo PDF/DOCX/impressão deve sair exclusivamente do gerador canônico.
 const nativeFetch = window.fetch.bind(window);
@@ -56,6 +59,16 @@ window.fetch = async function crjOfficialDocumentFetch(input, init){
   if(!redirected)return nativeFetch(input,init);
 
   const target=input instanceof Request?new Request(redirected,input):redirected;
+  try{
+    const raw=init?.body??(input instanceof Request?await input.clone().text():null);
+    if(typeof raw==='string'){
+      const body=JSON.parse(raw);
+      if(body.plan_id||body.cfdh_plan_id){
+        body.preview_snapshot=await capturePlanPreview(body);
+        init={...init,body:JSON.stringify(body)};
+      }
+    }
+  }catch(error){return exportError(error.message||'Não foi possível exportar a prévia do planejamento.')}
   const response=await nativeFetch(target,init);
   if(!response.ok)return response;
 
@@ -71,3 +84,23 @@ window.fetch = async function crjOfficialDocumentFetch(input, init){
 
 window.__crjSafeDocumentExport=true;
 window.__crjOfficialDocumentContract=OFFICIAL_LAYOUT_CONTRACT;
+
+window.__crjExportPlanning=async function(body,format='pdf',print=false){
+  const {data:{session}}=await supabaseClient().auth.getSession();
+  if(!session)throw new Error('Sessão expirada. Entre novamente.');
+  const response=await fetch(`${CONFIG.supabaseUrl}/functions/v1/crj-export-document-safe`,{
+    method:'POST',headers:{Authorization:`Bearer ${session.access_token}`,apikey:CONFIG.supabasePublishableKey,'Content-Type':'application/json'},
+    body:JSON.stringify({...body,format:print?'pdf':format})
+  });
+  if(!response.ok)throw new Error((await response.json()).error||'Falha ao exportar a prévia.');
+  const url=URL.createObjectURL(await response.blob());
+  if(print){
+    const frame=document.createElement('iframe');
+    Object.assign(frame.style,{position:'fixed',width:'1px',height:'1px',opacity:'0',pointerEvents:'none'});
+    frame.onload=()=>setTimeout(()=>{try{frame.contentWindow.focus();frame.contentWindow.print()}finally{setTimeout(()=>{frame.remove();URL.revokeObjectURL(url)},60000)}},400);
+    document.body.appendChild(frame);frame.src=url;
+  }else{
+    const a=document.createElement('a');a.href=url;a.download=response.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1]||`planejamento.${format}`;
+    document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+  }
+};

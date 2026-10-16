@@ -53,6 +53,7 @@ jobs:
             src/initial_form_numeric_guard.js \
             src/attendance_export_fix.js \
             src/export_route_override.js \
+            src/plan_preview_capture.js \
             src/document_header_standard.js \
             src/feature_loader.js \
             src/technical_service_flow.js \
@@ -93,6 +94,7 @@ jobs:
             _site/src/
 
           cat bundle/src__app_js.*.part > _site/src/app.js
+          cp assets/html2canvas.min.js _site/assets/
           cat bundle/src__api_js.*.part > _site/src/api.js
           cat bundle/src__forms_js.*.part > _site/src/forms.js
           cat bundle/src__agenda_js.*.part > _site/src/agenda.js
@@ -122,9 +124,9 @@ jobs:
 
           sed -i 's#permissions.js?v=20261003-6#permissions.js?v=20261009-1#g' _site/src/app.js
           # Mantém os módulos centrais atualizados sem recolocar recursos pesados no HTML inicial.
-          sed -i -E 's#src/export_route_override\.js\?v=[0-9-]+#src/export_route_override.js?v=20261013-4#g' _site/index.html
-          sed -i -E 's#src/app\.js\?v=[0-9-]+#src/app.js?v=20261015-2#g' _site/index.html
-          sed -i -E 's#src/feature_loader\.js\?v=[^\"]+#src/feature_loader.js?v=20261015-lazy8#g' _site/index.html
+          sed -i -E 's#src/export_route_override\.js\?v=[0-9-]+#src/export_route_override.js?v=20261016-1#g' _site/index.html
+          sed -i -E 's#src/app\.js\?v=[0-9-]+#src/app.js?v=20261016-1#g' _site/index.html
+          sed -i -E 's#src/feature_loader\.js\?v=[^\"]+#src/feature_loader.js?v=20261016-lazy1#g' _site/index.html
 
           # A normalização de campos inteiros do Formulário Inicial é uma proteção global leve.
           # Ela precisa iniciar antes do app para impedir household_size="" em qualquer rota.
@@ -190,7 +192,7 @@ jobs:
           grep -q 'youth_list_fields' _site/src/feature_loader.js
           grep -q 'articulation_request_context' _site/src/feature_loader.js
           grep -q 'workshop_plan_exports' _site/src/feature_loader.js
-          grep -q 'feature_loader.js?v=20261015-lazy8' _site/index.html
+          grep -q 'feature_loader.js?v=20261016-lazy1' _site/index.html
           grep -q 'initial_form_numeric_guard.js?v=20261014-3' _site/index.html
           grep -q 'normalizeRestBody' _site/src/initial_form_numeric_guard.js
           grep -q 'technical-checkin.html' _site/src/technical_workspace.js
@@ -200,7 +202,7 @@ jobs:
           grep -q 'api.js?v=20261015-2' _site/src/articulation_request_context.js
           grep -q 'api.js?v=20261015-2' _site/src/workshop_plan_exports.js
           grep -q 'api.js?v=20261015-2' _site/src/initial_form_numeric_guard.js
-          grep -q 'src/app.js?v=20261015-2' _site/index.html
+          grep -q 'src/app.js?v=20261016-1' _site/index.html
           grep -q 'validateBinaryResponse' _site/src/export_route_override.js
           grep -q 'methodological_action' _site/src/articulation_request_context.js
           grep -q 'Imprimir evidência' _site/src/articulation_request_context.js

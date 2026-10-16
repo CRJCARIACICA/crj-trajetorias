@@ -160,12 +160,22 @@ function openPrintableDocument(title,html){
   win.document.close();
 }
 async function printEducatorWorkshopPlan(planId){
-  const [bundle,workshops,team]=await Promise.all([getWorkshopMonthlyPlan(planId),listWorkshops(),listTeam()]);
-  const w=workshops.find(x=>x.id===bundle.plan.workshop_id);
-  if(!w)throw new Error('Oficina não encontrada.');
-  const teamMap=new Map(team.map(x=>[x.id,x.display_name]));
-  openPrintableDocument('Planejamento · '+w.name,workshopPlanPreviewHtml(bundle,w,teamMap));
+  return window.__crjExportPlanning({plan_id:planId},'pdf',true);
 }
+// Saved shortcuts and live editors share exactly the same preview builders.
+window.__crjPlanningPreview=async function(kind,id){
+  if(kind==='workshop'){
+    const [bundle,workshops,team]=await Promise.all([getWorkshopMonthlyPlan(id),listWorkshops(),listTeam()]);
+    const workshop=workshops.find(w=>w.id===bundle.plan.workshop_id);
+    if(!workshop)throw new Error('Oficina não encontrada.');
+    return workshopPlanPreviewHtml(bundle,workshop,new Map(team.map(p=>[p.id,p.display_name])));
+  }
+  if(kind==='cfdh'){
+    const [bundle,themes,classification]=await Promise.all([getCfdhPlanBundle(id),listCfdhThemes(),listMethodologyClassificationCatalog()]);
+    return cfdhPlanPreviewHtml({...bundle,themes,classification});
+  }
+  throw new Error('Tipo de planejamento não reconhecido.');
+};
 async function printEducatorPlannedAttendance(planId,lessonId){
   const [bundle,workshops,team]=await Promise.all([getWorkshopMonthlyPlan(planId),listWorkshops(),listTeam()]);
   const w=workshops.find(x=>x.id===bundle.plan.workshop_id),lesson=(bundle.lessons||[]).find(x=>x.id===lessonId);
