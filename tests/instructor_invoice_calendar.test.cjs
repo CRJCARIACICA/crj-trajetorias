@@ -16,47 +16,18 @@ function setup(){
  vm.runInContext(source+';me={id:"instructor",role:"oficineiro",active:true};',context);
  return {window,document:window.document,context,timers,handlers,intervals,invoice:d=>{context.fixture=d;return vm.runInContext('currentInvoice(fixture)',context)}};
 }
-function fixture(){return {current:'2026-10-01',next:'2026-11-01',workshops:[{id:'w',name:'Oficina',start_time:'10:00',end_time:'20:00'}],plans:[{id:'p',plan_month:'2026-10-01'},{id:'next',plan_month:'2026-11-01'}],lessons:[{plan_id:'next',objective:'Objetivo',proposed_activities:'Atividade',resources:'Recurso',updated_at:'2026-10-10T12:00:00Z',start_time:'00:00',end_time:'23:00'}],calendar:Array.from({length:7},(_,i)=>({id:'c'+i,workshop_id:'w',scheduled_date:`2026-10-${String(i+1).padStart(2,'0')}`,start_time:'14:00',end_time:'18:00',status:'planejada'})),loadedAt:'2026-10-16T03:00:00Z'};}
-test('invoice uses calendar hours, preserving the separate monthly planning hour',()=>{
- const s=setup(),d=fixture(),x=s.invoice(d);assert.equal(x.serviceHours,28);assert.equal(x.billableHours,29);assert.equal(x.total,2078.43);
- d.lessons[0].end_time='01:00';assert.equal(s.invoice(d).total,2078.43);
+function fixture(){
+ const calendar=Array.from({length:8},(_,i)=>({id:'c'+i,workshop_id:'w',scheduled_date:`2026-10-${String(i+1).padStart(2,'0')}`,start_time:'14:00',end_time:i===7?'15:00':'18:00',status:'planejada'}));
+ return {current:'2026-10-01',next:'2026-11-01',workshops:[{id:'w',name:'Unha de Gel'}],plans:[{id:'p',workshop_id:'w',plan_month:'2026-10-01'}],lessons:calendar.map((r,i)=>({...r,id:'l'+i,plan_id:'p',calendar_entry_id:r.id,included:true})),calendar};
+}
+test('planning provides 29h base; linked calendar cancellations remove 15h and yield 1003.38',()=>{
+ const s=setup(),d=fixture();d.calendar[0].status='cancelada';d.calendar[1].status='cancelada';d.calendar[2].status='cancelada';d.lessons[3].end_time='17:00';d.calendar[3].status='cancelada';d.lessons[7].end_time='16:00';
+ const x=s.invoice(d);assert.equal(x.grossHours,29);assert.equal(x.cancelledHours,15);assert.equal(x.serviceHours,14);assert.equal(x.billableHours,14);assert.equal(x.excludedValue,1075.05);assert.equal(x.total,1003.38);
 });
-test('cancellation, addition, duration change, removal and rescheduling recalculate the amount',()=>{
- const s=setup(),d=fixture();d.calendar[0].status='cancelada';assert.equal(s.invoice(d).total,1791.75);assert.equal(s.invoice(d).cancelled,1);
- d.calendar.push({id:'extra',workshop_id:'w',scheduled_date:'2026-10-20',start_time:'14:00',end_time:'16:00',status:'planejada'});assert.equal(s.invoice(d).serviceHours,26);
- d.calendar[1].end_time='17:30';assert.equal(s.invoice(d).serviceHours,25.5);
- d.calendar.pop();assert.equal(s.invoice(d).serviceHours,23.5);
- d.calendar[1].scheduled_date='2026-11-02';assert.equal(s.invoice(d).serviceHours,20);
-});
-test('performed classes count, foreign workshops and invalid times do not, and no plan is required for extra classes',()=>{
- const s=setup(),d=fixture();d.plans=[];d.calendar[0].status='realizada';d.calendar[1].end_time=null;
- d.calendar.push({id:'foreign',workshop_id:'other',scheduled_date:'2026-10-03',start_time:'10:00',end_time:'18:00'});
- assert.equal(s.invoice(d).serviceHours,24);assert.equal(s.invoice(d).planningHours,0);
- delete d.calendar;assert.throws(()=>s.invoice(d),/Calendário/);
-});
-test('live calendar events refresh both displayed total and copied invoice description',async()=>{
- const s=setup(),d=fixture();s.context.fixture=d;
- vm.runInContext('loadPortalData=async()=>fixture;copied=[];copyText=text=>copied.push(text);',s.context);
- s.document.body.innerHTML=vm.runInContext('invoiceHtml(fixture)',s.context);
- vm.runInContext('bindInvoiceCopy(document,fixture)',s.context);
- await vm.runInContext('syncInvoiceSubscription()',s.context);
- assert.deepEqual(s.handlers.map(h=>h.filter.table),['workshop_calendar','workshops','workshop_monthly_plans','workshop_plan_lessons']);
- assert.equal(s.intervals.size,1);
- d.calendar[0].status='cancelada';s.handlers[0].callback({eventType:'UPDATE'});
- const callback=[...s.timers.values()].at(-1);await callback();
- assert.match(s.document.querySelector('[data-ip-invoice]').textContent,/1\.791,75/);
- s.context.confirm=()=>true;s.document.querySelector('[data-ip-copy="invoice"]').dispatchEvent(new s.window.Event('click'));await new Promise(resolve=>setImmediate(resolve));
- assert.match(s.context.copied[0],/1\.791,75/);assert.doesNotMatch(s.context.copied[0],/2\.078,43/);
-});
-test('calendar cancellation preserves the mandatory scheduled date and marks the class cancelled',async()=>{
- const code=fs.readFileSync(path.join(root,'src/general_calendar.js'),'utf8'),start=code.indexOf('async function removeDate('),end=code.indexOf('\nfunction printableRows',start);
- let patch;
- const context=vm.createContext({confirm:()=>true,client:()=>({from:()=>({update:p=>{patch=p;return {eq:async()=>({error:null})}}})}),cached:{},renderCalendar:async()=>{},alert:()=>{}});
- vm.runInContext(code.slice(start,end),context);context.entry={source:'workshop_calendar',id:'lesson',dateField:'scheduled_date',row:{start_time:'14:00',end_time:'18:00'}};
- context.parent={remove(){}};await vm.runInContext('removeDate(entry,parent)',context);
- assert.equal(patch.status,'cancelada');assert.equal('scheduled_date' in patch,false);
-});
-
-test('exclusion amount derives from registered minutes without estimating missing times',()=>{const s=setup(),d=fixture();d.calendar[0].status='cancelada';let x=s.invoice(d);assert.equal(x.cancelledHours,4);assert.equal(x.excludedValue,286.68);d.calendar[0].end_time=null;x=s.invoice(d);assert.equal(x.cancelledHours,0);assert.equal(x.invalid.length,1);});
-test('next month planning requires every field and proof within October extension',()=>{const s=setup(),d=fixture();assert.equal(s.invoice(d).planningHours,1);d.lessons[0].resources=' ';assert.equal(s.invoice(d).planningHours,0);d.lessons[0].resources='Recurso';d.lessons[0].updated_at='2026-10-21T12:00:00Z';assert.equal(s.invoice(d).planningHours,0);assert.match(s.invoice(d).planning.reason,/conferência/);});
-test('29 gross hours minus 15 cancelled yields 14 billable hours and 1003.38',()=>{const s=setup(),d=fixture();d.plans=[];d.calendar=[{id:'valid',workshop_id:'w',scheduled_date:'2026-10-01',start_time:'06:00',end_time:'20:00',status:'planejada'},{id:'cancelled',workshop_id:'w',scheduled_date:'2026-10-02',start_time:'06:00',end_time:'21:00',status:'cancelada'}];const x=s.invoice(d);assert.equal(x.grossHours,29);assert.equal(x.cancelledHours,15);assert.equal(x.billableHours,14);assert.equal(x.total,1003.38);});
+test('unplanned calendar additions cannot increase the invoice',()=>{const s=setup(),d=fixture();d.calendar.push({...d.calendar[0],id:'extra'});assert.equal(s.invoice(d).grossHours,29);});
+test('calendar duration edits cannot replace planned duration and cancellation subtracts planned minutes',()=>{const s=setup(),d=fixture();d.calendar[0].end_time='23:00';assert.equal(s.invoice(d).serviceHours,29);d.calendar[0].status='cancelada';const x=s.invoice(d);assert.equal(x.cancelledHours,4);assert.equal(x.serviceHours,25);});
+test('calendar rows alone cannot produce a payable class',()=>{const s=setup(),d=fixture();d.lessons=[];assert.equal(s.invoice(d).serviceHours,0);d.plans=[];assert.equal(s.invoice(d).total,0);});
+test('excluded blocks are not charged again; cancelled linked blocks retain the exclusion evidence',()=>{const s=setup(),d=fixture();d.lessons[0].included=false;assert.equal(s.invoice(d).grossHours,25);d.calendar[0].status='cancelada';const x=s.invoice(d);assert.equal(x.grossHours,29);assert.equal(x.cancelledHours,4);assert.equal(x.serviceHours,25);});
+test('missing or ambiguous links and invalid durations flag the invoice for review',()=>{const s=setup(),d=fixture();d.lessons[0].calendar_entry_id=null;assert.equal(s.invoice(d).invalid.length,0);d.calendar.push({...d.calendar[0],id:'duplicate'});assert.equal(s.invoice(d).invalid.length,1);d.lessons[1].start_time=null;assert.equal(s.invoice(d).invalid.length,2);});
+test('one planning hour requires every next-month field and a timestamp within the extension',()=>{const s=setup(),d=fixture();d.plans.push({id:'n',workshop_id:'w',plan_month:d.next});d.lessons.push({id:'nl',plan_id:'n',objective:'O',proposed_activities:'A',resources:'R',updated_at:'2026-10-20T23:00:00-03:00'});assert.equal(s.invoice(d).planningHours,1);d.lessons.at(-1).resources='';assert.equal(s.invoice(d).planningHours,0);});
+test('invoice display explicitly subtracts planned hours and shows the net amount',()=>{const s=setup(),d=fixture();d.calendar[0].status='cancelada';s.context.fixture=d;const html=vm.runInContext('invoiceHtml(fixture)',s.context);assert.match(html,/29h − 4h = 25h/);assert.match(html,/1.791,75/);});

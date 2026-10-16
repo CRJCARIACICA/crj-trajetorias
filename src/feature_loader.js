@@ -5,7 +5,7 @@ import { getSession } from './api.js?v=20261004-2';
 // quando a área correspondente é realmente aberta. Isso evita dezenas de
 // MutationObservers e consultas Supabase fora do menu em uso.
 
-const VERSION='20261016-lazy5';
+const VERSION='20261016-invoice-plan1';
 const moduleCache=new Map();
 let routeSeq=0;
 let routeTimer=null;

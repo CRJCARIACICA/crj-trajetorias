@@ -96,19 +96,35 @@ function currentInvoice(d){
   if(!Array.isArray(d.calendar))throw new Error('Calendário da competência não carregado.');
   const wmap=workshopMap(d),currentPlans=d.plans.filter(p=>String(p.plan_month).slice(0,10)===d.current),byWorkshop=new Map();
   const calendar=[...new Map(d.calendar.map(row=>[row.id,row])).values()].filter(row=>wmap.has(row.workshop_id)&&row.scheduled_date>=d.current&&row.scheduled_date<d.next);
-  let grossMinutes=0,cancelled=0,cancelledMinutes=0; const exclusions=[],invalid=[],included=[];
-  for(const row of calendar){
-    const minutes=Math.round(durationHours(row.start_time,row.end_time)*60);
+  const calendarById=new Map(calendar.map(row=>[row.id,row]));
+  const planMap=new Map(currentPlans.map(p=>[p.id,p]));
+  let grossMinutes=0,cancelled=0,cancelledMinutes=0;
+  const exclusions=[],invalid=[],included=[],seen=new Set();
+  for(const lesson of d.lessons){
+    const plan=planMap.get(lesson.plan_id);if(!plan)continue;
+    // The planning block is the only source of billable duration.
+    let entry=lesson.calendar_entry_id?calendarById.get(lesson.calendar_entry_id):null;
+    if(!lesson.calendar_entry_id){
+      const matches=calendar.filter(r=>r.workshop_id===plan.workshop_id&&r.scheduled_date===lesson.scheduled_date&&time5(r.start_time)===time5(lesson.start_time)&&time5(r.end_time)===time5(lesson.end_time));
+      if(matches.length===1)entry=matches[0];
+      else {invalid.push(lesson);continue;}
+    }
+    if(lesson.included===false&&!cancelledLesson(entry||{}))continue;
+    const key=lesson.calendar_entry_id||lesson.id;
+    if(seen.has(key)){invalid.push(lesson);continue;}seen.add(key);
+    const minutes=Math.round(durationHours(lesson.start_time,lesson.end_time)*60);
+    const row={...lesson,workshop_id:plan.workshop_id,status:entry?.status||'sem vínculo no calendário',minutes};
+    if(minutes<=0||!entry)invalid.push(row);
     grossMinutes+=minutes;
-    if(cancelledLesson(row)){cancelled++;cancelledMinutes+=minutes;exclusions.push({...row,minutes});if(minutes<=0)invalid.push(row);continue}
-    if(minutes<=0){invalid.push(row);continue;}
-    const group=byWorkshop.get(row.workshop_id)||{name:wmap.get(row.workshop_id).name,hours:0,lessons:0};
-    group.hours+=minutes/60;group.lessons++;byWorkshop.set(row.workshop_id,group);included.push({...row,minutes});
+    if(entry&&cancelledLesson(entry)){cancelled++;cancelledMinutes+=minutes;exclusions.push(row);continue;}
+    if(minutes<=0)continue;
+    const group=byWorkshop.get(plan.workshop_id)||{name:wmap.get(plan.workshop_id)?.name||'Oficina',hours:0,lessons:0};
+    group.hours+=minutes/60;group.lessons++;byWorkshop.set(plan.workshop_id,group);included.push(row);
   }
   // Planning refers to the following month, subject to its submission deadline.
   const groups=[...byWorkshop.values()],serviceHours=(grossMinutes-cancelledMinutes)/60,planningHours=planningEligibility(d).hours,billableHours=serviceHours+planningHours;
   const total=Math.round(billableHours*HOURLY_RATE*100)/100;
-  const description=`Prestação de serviços como oficineiro(a) do Centro de Referência das Juventudes – CRJ Cariacica, competência ${shortMonth(d.current)}, referente a ${num(serviceHours)}h de aulas válidas no Calendário Geral${planningHours?' + 1h de planejamento':''}, totalizando ${num(billableHours)}h, ao valor de ${brl(HOURLY_RATE)}/h. Valor total previsto: ${brl(total)}.`;
+  const description=`Prestação de serviços como oficineiro(a) do Centro de Referência das Juventudes – CRJ Cariacica, competência ${shortMonth(d.current)}, referente a ${num(serviceHours)}h de aulas planejadas válidas após conferir cancelamentos no Calendário Geral${planningHours?' + 1h de planejamento':''}, totalizando ${num(billableHours)}h, ao valor de ${brl(HOURLY_RATE)}/h. Valor total previsto: ${brl(total)}.`;
   return {grossHours:grossMinutes/60,included,currentPlans,groups,serviceHours,planningHours,billableHours,total,description,cancelled,exclusions,invalid,cancelledHours:cancelledMinutes/60,excludedValue:Math.round(cancelledMinutes/60*HOURLY_RATE*100)/100,planning:planningEligibility(d)};
 }
 function planningDeadlineFor(d){return deadlineFor(d.current,d.current==='2026-10-01'?20:15)}
@@ -122,10 +138,10 @@ function planningEligibility(d){
 }
 function invoiceHtml(d){
   const inv=currentInvoice(d),updated=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date(d.loadedAt||Date.now()));
-  return `<section class="ip-card" data-ip-invoice><h3>Dados para nota fiscal</h3><div class="ip-muted">Cálculo automático pelo Calendário Geral da competência atual. Inclusões, cancelamentos e alterações de horário recalculam o valor previsto.</div>
+  return `<section class="ip-card" data-ip-invoice><h3>Dados para nota fiscal</h3><div class="ip-muted">Base: aulas do planejamento mensal. Subtração: duração planejada das aulas vinculadas que estão canceladas ou não realizadas no Calendário Geral. Aulas avulsas do calendário não aumentam o valor.</div>
     <div class="ip-kpi" aria-live="polite">${brl(inv.total)} <small>valor previsto</small></div>
     <div class="ip-invoice-box"><div class="ip-invoice-lines">
-      <span>Horas brutas registradas (antes das exclusões)</span><b>${num(inv.grossHours)}h</b>
+      <span>Horas do planejamento (antes das exclusões)</span><b>${num(inv.grossHours)}h</b>
       ${inv.groups.map(x=>`<span>${esc(x.name)} · ${x.lessons} aula(s)</span><b>${num(x.hours)}h válidas</b>`).join('')||'<span>Horas de aulas válidas no calendário</span><b>0h</b>'}
       <span>Aulas canceladas / não realizadas (excluídas do valor)</span><b>${inv.cancelled}</b>
       <span>Horas excluídas das aulas</span><b>−${num(inv.cancelledHours)}h · −${brl(inv.excludedValue)}</b>
@@ -136,7 +152,7 @@ function invoiceHtml(d){
       <span class="total">Total previsto</span><b class="total">${brl(inv.total)}</b>
     </div></div>
     <p class="ip-muted">${esc(inv.planning.reason)} ${inv.planningHours?0:1}h de planejamento fora do total (${brl(inv.planningHours?0:HOURLY_RATE)}).</p>
-    ${inv.invalid.length?'<p class="notice warn">Existem registros sem duração válida. Não foi estimada nenhuma hora para eles. Corrija os horários na origem antes de fechar a nota.</p>':''}
+    ${inv.invalid.length?'<p class="notice warn">Existem blocos sem horário válido, sem vínculo verificável ou duplicados. Confira o planejamento e o vínculo com o Calendário Geral antes de emitir a nota.</p>':''}
     <details><summary>Conferir todas as aulas e a subtração</summary><h4>Aulas incluídas no resultado</h4>${inv.included.map(r=>`<p>${esc(workshopMap(d).get(r.workshop_id)?.name)} · ${esc(fmtDate(r.scheduled_date))} · ${esc(r.id)} · ${esc(time5(r.start_time))}–${esc(time5(r.end_time))} · ${esc(r.status)} · +${num(r.minutes/60)}h</p>`).join('')||'<p>Nenhuma aula incluída.</p>'}<h4>Aulas excluídas</h4>${inv.exclusions.map(r=>`<p>${esc(fmtDate(r.scheduled_date))} · ${esc(r.id)} · ${esc(time5(r.start_time))}–${esc(time5(r.end_time))} · ${esc(r.status)} · ${num(r.minutes/60)}h · ${brl(r.minutes/60*HOURLY_RATE)}</p>`).join('')||'<p>Nenhuma aula cancelada registrada.</p>'}<p>Aulas: ${num(inv.serviceHours+inv.cancelledHours)}h − ${num(inv.cancelledHours)}h = ${num(inv.serviceHours)}h válidas. Planejamento: +${num(inv.planningHours)}h. Total: ${num(inv.billableHours)}h × ${brl(HOURLY_RATE)} = ${brl(inv.total)}.</p></details>
     <small class="ip-muted" data-ip-invoice-sync>Calendário consultado às ${updated}. Atualização automática.</small>
     <div class="ip-nf-text">${esc(inv.description)}</div>
@@ -165,7 +181,7 @@ function dashboardHtml(d){
       ${taskHtml({title:'Recebimento',description:`Pagamento referente à competência ${shortMonth(d.current)} previsto até o dia 10 do mês seguinte.`,status:payStatus,buttonField:'payment_received_at',buttonText:admin.payment_received_at?'Desmarcar recebimento':'Marcar como recebido',done:!!admin.payment_received_at})}
     </section>
     ${invoiceHtml(d)}
-    <section class="ip-card"><h3>Tomador / dados para emissão</h3><div class="ip-workshop"><b>${esc(AVANTE.legalName)}</b><div class="ip-muted">CNPJ ${esc(AVANTE.cnpj)}</div></div><div class="ip-workshop"><b>Endereço</b><div class="ip-muted">${esc(AVANTE.address)}</div></div><div class="notice info" style="margin-top:12px">O valor previsto acompanha as aulas válidas do Calendário Geral da competência atual. Aulas canceladas saem do cálculo; aulas acrescentadas e alterações de duração atualizam o total. A hora mensal de planejamento permanece discriminada separadamente.</div></section>
+    <section class="ip-card"><h3>Tomador / dados para emissão</h3><div class="ip-workshop"><b>${esc(AVANTE.legalName)}</b><div class="ip-muted">CNPJ ${esc(AVANTE.cnpj)}</div></div><div class="ip-workshop"><b>Endereço</b><div class="ip-muted">${esc(AVANTE.address)}</div></div><div class="notice info" style="margin-top:12px">O valor usa as horas do planejamento mensal, subtraindo as aulas vinculadas canceladas no Calendário Geral. Novas aulas e durações só alteram a base quando registradas no planejamento. A hora mensal de planejamento permanece discriminada separadamente.</div></section>
     <section class="ip-card full"><h3>Minhas oficinas</h3>${d.workshops.map(w=>`<div class="ip-workshop"><b>${esc(w.name)}</b> ${w.active?'<span class="ip-badge success">Ativa</span>':'<span class="ip-badge warn">Inativa</span>'}<div class="ip-muted">${esc(w.days||'Agenda conforme planejamento')} · ${esc(time5(w.start_time)||'—')}–${esc(time5(w.end_time)||'—')} · ${esc(w.location_other||w.location_type||'Local não informado')}</div></div>`).join('')||'<div class="ip-empty">Nenhuma oficina está vinculada ao seu cadastro.</div>'}</section>
   </div>`;
 }
@@ -196,7 +212,7 @@ async function setAdminField(field,done){
 }
 function bindInvoiceCopy(host,d){
   const inv=currentInvoice(d);
-  host.querySelector('[data-ip-copy="invoice"]')?.addEventListener('click',async()=>{try{const fresh=await loadPortalData(),value=currentInvoice(fresh);if(value.invalid.length){toast('Corrija os horários sem duração válida antes de confirmar a nota.','danger');return;}if(!confirm(`Confirmar cálculo atualizado?\nHoras brutas: ${num(value.grossHours)}h\nSubtração: ${num(value.grossHours)}h − ${num(value.cancelledHours)}h = ${num(value.serviceHours)}h\nAulas válidas: ${num(value.serviceHours)}h\nAulas excluídas: ${num(value.cancelledHours)}h (${brl(value.excludedValue)})\n${value.planning.reason}\nTotal: ${brl(value.total)}`))return;copyText(value.description+' '+value.planning.reason+` Exclusão de aulas: ${num(value.cancelledHours)}h, ${brl(value.excludedValue)}.`,'Descrição da nota');}catch(e){toast(e.message,'danger')}});
+  host.querySelector('[data-ip-copy="invoice"]')?.addEventListener('click',async()=>{try{const fresh=await loadPortalData(),value=currentInvoice(fresh);if(value.invalid.length){toast('Confira os horários e os vínculos dos blocos do planejamento com o calendário antes de confirmar a nota.','danger');return;}if(!confirm(`Confirmar cálculo atualizado?\nHoras brutas: ${num(value.grossHours)}h\nSubtração: ${num(value.grossHours)}h − ${num(value.cancelledHours)}h = ${num(value.serviceHours)}h\nAulas válidas: ${num(value.serviceHours)}h\nAulas excluídas: ${num(value.cancelledHours)}h (${brl(value.excludedValue)})\n${value.planning.reason}\nTotal: ${brl(value.total)}`))return;copyText(value.description+' '+value.planning.reason+` Exclusão de aulas: ${num(value.cancelledHours)}h, ${brl(value.excludedValue)}.`,'Descrição da nota');}catch(e){toast(e.message,'danger')}});
   host.querySelector('[data-ip-copy="institution"]')?.addEventListener('click',()=>copyText(invoiceInstitutionText(),'Dados da Avante'));
 }
 function invoicePanelActive(){return isInstructor()&&routeName()==='oficineiro'&&params().get('view')!=='planejamento'}

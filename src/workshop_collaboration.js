@@ -57,7 +57,7 @@ function enhanceInstructorHelp(){
   document.addEventListener('click',e=>{if(!e.target.closest('.wc-help-wrap'))document.querySelectorAll('.wc-help.active').forEach(x=>x.classList.remove('active'))},{once:true});
   const invoiceCard=[...document.querySelectorAll('.ip-card')].find(card=>norm(card.querySelector('h3')?.textContent).includes('dados para nota fiscal'));
   if(invoiceCard&&!invoiceCard.querySelector('.wc-invoice-rule')){
-    const title=invoiceCard.querySelector('h3');if(title)title.insertAdjacentHTML('beforeend',helpMarkup('Como o valor é calculado','O resultado usa as horas brutas do calendário menos as horas canceladas, acrescido somente do planejamento elegível. Confira os registros incluídos e excluídos no cálculo.','29h brutas − 15h canceladas + 0h de planejamento = 14h × R$ 71,67 = R$ 1.003,38.'));
+    const title=invoiceCard.querySelector('h3');if(title)title.insertAdjacentHTML('beforeend',helpMarkup('Como o valor é calculado','O resultado usa as horas do planejamento mensal menos a duração planejada das aulas canceladas no Calendário Geral, acrescido somente do planejamento elegível. Confira os registros incluídos e excluídos no cálculo.','29h brutas − 15h canceladas + 0h de planejamento = 14h × R$ 71,67 = R$ 1.003,38.'));
     invoiceCard.insertAdjacentHTML('beforeend',`<div class="notice info wc-invoice-rule"><b>Remuneração calculada pelas horas válidas.</b><br>Cancelamentos registrados são excluídos na própria competência. Consulte a relação de aulas incluídas e excluídas antes de confirmar. A hora de planejamento depende do preenchimento e do prazo aplicável.</div>`);
   }
 }
