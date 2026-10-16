@@ -1,0 +1,32 @@
+begin;
+do $$
+declare actor uuid; w uuid; original uuid; alt uuid; manual uuid; executed uuid; r jsonb; prior_count bigint;
+begin
+ select id into actor from public.profiles where role='coordenacao_articulacao' and active=true limit 1;
+ perform set_config('request.jwt.claim.sub',actor::text,true);
+ r:=public.save_workshop_month(null,'2028-01-01','{"name":"TESTE COLISAO HORARIO","workshop_type":"permanente","category":"Cultura","schedule_mode":"semanal_fixa","fixed_weekdays":[1],"planned_start_date":"2028-01-01","start_time":"10:00","end_time":"12:00","location_type":"LABPoca","active":true}',0,'Teste transacional');
+ w:=(r->>'workshop_id')::uuid;
+ select id into original from public.workshop_calendar where workshop_id=w and scheduled_date='2028-01-03';
+ update public.workshop_plan_lessons set objective='Conteúdo preservado' where calendar_entry_id=original;
+ insert into public.workshop_calendar(workshop_id,scheduled_date,start_time,end_time,status,location_type) values(w,'2028-01-03','11:00','13:00','planejada','LABPoca') returning id into alt;
+ select id into manual from public.workshop_calendar where workshop_id=w and scheduled_date='2028-01-10';
+ update public.workshop_calendar set status='cancelada',monthly_cancelled=false where id=manual;
+ insert into public.workshop_calendar(workshop_id,scheduled_date,start_time,end_time,status,location_type) values(w,'2028-01-10','11:00','13:00','planejada','LABPoca');
+ insert into public.workshop_calendar(workshop_id,scheduled_date,start_time,end_time,status,location_type) values(w,'2028-01-17','11:00','13:00','realizada','LABPoca') returning id into executed;
+ select count(*) into prior_count from public.workshop_calendar where workshop_id=w;
+ perform public.save_workshop_month(w,'2028-01-01','{"start_time":"10:00","end_time":"12:00"}',2,'Reproduzir colisões');
+ if (select count(*) from public.workshop_calendar where workshop_id=w)<>prior_count then raise exception 'Registros do histórico removidos';end if;
+ if not exists(select 1 from public.workshop_calendar where id=original and status='planejada' and start_time='10:00') then raise exception 'Slot de destino não preservado';end if;
+ if not exists(select 1 from public.workshop_plan_lessons where calendar_entry_id=original and objective='Conteúdo preservado' and included) then raise exception 'Bloco ou vínculo perdido';end if;
+ if not exists(select 1 from public.workshop_calendar where id=alt and status='cancelada' and start_time='11:00') then raise exception 'Ocorrência substituída não preservada';end if;
+ if not exists(select 1 from public.workshop_calendar where id=manual and status='cancelada' and monthly_cancelled=false) then raise exception 'Cancelamento manual foi desfeito';end if;
+ if not exists(select 1 from public.workshop_calendar where id=executed and status='realizada' and start_time='11:00') then raise exception 'Aula realizada foi alterada';end if;
+ if exists(select 1 from public.workshop_calendar where workshop_id=w and scheduled_date='2028-01-17' and id<>executed and status='planejada') then raise exception 'Aula realizada duplicada';end if;
+ perform public.save_workshop_month(w,'2028-01-01','{"start_time":"09:00","end_time":"11:00"}',3,'Mover para horário novo');
+ if (select start_time from public.workshop_calendar where id=original)<>'09:00'::time then raise exception 'Mudança para novo horário falhou';end if;
+ perform public.refresh_workshop_month(w,'2028-01-01');
+ if exists(select 1 from public.workshop_calendar where workshop_id=w and status='planejada' group by scheduled_date having count(*)>1) then raise exception 'Sincronização repetida duplicou aulas';end if;
+ if not exists(select 1 from public.workshop_month_changes where workshop_id=w and source_table='workshop_calendar' and before_data is not null and after_data is not null) then raise exception 'Sem auditoria';end if;
+end $$;
+rollback;
+select 'Colisões de slots, conteúdo, vínculos, cancelamentos manuais, execuções, auditoria e repetição: OK (rollback)' validation;

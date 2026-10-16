@@ -54,7 +54,7 @@ $$;
 
 create or replace function app_private.sync_workshop_month(p_id uuid,p_month date) returns void
 language plpgsql security definer set search_path='' as $$
-declare cfg public.workshops; v jsonb; c public.workshop_calendar; oldc jsonb; d date; target_dates date[]; pid uuid; idx integer:=0; lid uuid; changed boolean; stamp text:='Alteração mensal '||to_char(p_month,'MM/YYYY')||' em '||to_char(timezone('America/Sao_Paulo',now()),'DD/MM/YYYY HH24:MI')||' por '||coalesce(auth.uid()::text,'renovação automática');
+declare cfg public.workshops; v jsonb; c public.workshop_calendar; oldc jsonb; d date; target_dates date[]; pid uuid; idx integer:=0; lid uuid; primary_slot uuid; single_slot boolean; changed boolean; stamp text:='Alteração mensal '||to_char(p_month,'MM/YYYY')||' em '||to_char(timezone('America/Sao_Paulo',now()),'DD/MM/YYYY HH24:MI')||' por '||coalesce(auth.uid()::text,'renovação automática');
 begin
  perform set_config('crj.monthly_sync',p_id::text||'/'||p_month::text,true);
  select configuration into strict v from public.workshop_month_settings where workshop_id=p_id and reference_month=p_month for update;
@@ -68,11 +68,29 @@ begin
    select array_agg(distinct scheduled_date) into target_dates from public.workshop_calendar where workshop_id=p_id and scheduled_date>=p_month and scheduled_date<(p_month+interval '1 month')::date;
  end if;
  target_dates:=coalesce(target_dates,'{}'::date[]);
+ single_slot:=cfg.schedule_mode='semanal_fixa' or cfg.workshop_type='pontual' or v ? 'execution_dates';
  -- Never delete calendar rows: every existing foreign key remains stable.
  for c in select * from public.workshop_calendar where workshop_id=p_id and scheduled_date>=p_month and scheduled_date<(p_month+interval '1 month')::date for update loop
    if c.status='realizada' or c.session_id is not null or exists(select 1 from public.workshop_sessions where calendar_entry_id=c.id) then continue; end if;
    oldc:=to_jsonb(c);
-   if not(c.scheduled_date=any(target_dates)) then
+   primary_slot:=null;
+   if single_slot and c.scheduled_date=any(target_dates) then
+     -- A daily monthly rule has one canonical occurrence. Reserve an existing
+     -- destination slot before changing its time, including cancelled history.
+     -- Executed occurrences take precedence and are never moved or duplicated.
+     select r.id into primary_slot from public.workshop_calendar r
+     where r.workshop_id=p_id and r.scheduled_date=c.scheduled_date
+     order by (r.status='realizada' or r.session_id is not null or exists(select 1 from public.workshop_sessions x where x.calendar_entry_id=r.id)) desc,
+       (r.start_time=cfg.start_time) desc nulls last,
+       (r.status='planejada') desc,
+       (select count(*) from public.workshop_plan_lessons l where l.calendar_entry_id=r.id and l.included and (nullif(btrim(l.objective),'') is not null or nullif(btrim(l.proposed_activities),'') is not null or nullif(btrim(l.resources),'') is not null)) desc,
+       r.created_at,r.id limit 1;
+   end if;
+   if primary_slot is not null and c.id<>primary_slot then
+     if c.status='planejada' then
+       update public.workshop_calendar set status='cancelada',monthly_cancelled=true,notes=concat_ws(E'\n',notes,stamp||': ocorrência substituída pelo registro '||primary_slot||'; vínculo e horário originais preservados'),updated_at=now() where id=c.id returning * into c;
+     end if;
+   elsif not(c.scheduled_date=any(target_dates)) then
      if c.status='planejada' then update public.workshop_calendar set status='cancelada',monthly_cancelled=true,notes=concat_ws(E'\n',notes,stamp||': aula retirada desta competência'),updated_at=now() where id=c.id returning * into c; end if;
    elsif c.status='planejada' or c.monthly_cancelled then
      -- A flexible calendar retains its per-date times; fixed rules take the monthly values.
