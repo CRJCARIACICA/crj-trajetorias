@@ -276,7 +276,8 @@ async function editDate(e,parentModal){
 async function removeDate(e,parentModal){
   if(!confirm('Remover/cancelar esta data no registro de origem? O histórico da atividade será preservado sempre que o módulo possuir status de cancelamento.'))return;
   const patch={};
-  if(e.source==='calendar_events')patch.status='cancelled';
+  if(e.source==='workshop_calendar')patch.status='cancelada';
+  else if(e.source==='calendar_events')patch.status='cancelled';
   else if(e.source==='access_resource_bookings')patch.status='cancelado';
   else{patch[e.dateField]=null;if(e.row.start_time!==undefined)patch.start_time=null;if(e.row.end_time!==undefined)patch.end_time=null;}
   const q=await client().from(e.source).update(patch).eq('id',e.id);if(q.error){alert(q.error.message);return}parentModal.remove();cached.loadedAt=0;lastRenderKey='';await renderCalendar(true);

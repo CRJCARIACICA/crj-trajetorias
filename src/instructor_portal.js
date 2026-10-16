@@ -8,6 +8,7 @@ const AVANTE={
 };
 
 let me=null,observer=null,timer=null,rendering=false,styleReady=false;
+let invoiceChannel=null,invoiceChannelUser=null,invoicePoll=null,invoiceTimer=null,invoiceRefreshing=false,invoiceQueued=false;
 const esc=(v='')=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const client=()=>{if(apiMode()!=='live')throw new Error('Banco ainda não conectado.');return supabaseClient()};
 const brl=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v||0));
@@ -42,7 +43,7 @@ function statusInfo(doneAt,deadline,{futureLabel='Prazo'}={}){
 function durationHours(start,end){
   if(!start||!end)return 0;
   const [sh,sm]=time5(start).split(':').map(Number),[eh,em]=time5(end).split(':').map(Number);
-  if(!Number.isFinite(sh)||!Number.isFinite(eh))return 0;
+  if(![sh,sm,eh,em].every(Number.isFinite))return 0;
   return Math.max(0,((eh*60+em)-(sh*60+sm))/60);
 }
 function toast(message,type='success'){
@@ -76,24 +77,55 @@ async function loadPortalData(){
     c.from('workshop_instructor_monthly_admin').select('*').eq('instructor_user_id',me.id).eq('reference_month',current).maybeSingle()
   ]);
   for(const q of [wq,pq,aq])if(q.error)throw q.error;
-  const plans=pq.data||[],ids=plans.map(x=>x.id);let lessons=[];
-  if(ids.length){const lq=await c.from('workshop_plan_lessons').select('*').in('plan_id',ids).order('scheduled_date').order('lesson_number');if(lq.error)throw lq.error;lessons=lq.data||[]}
-  return {current,next,workshops:wq.data||[],plans,lessons,admin:aq.data||null};
+  const plans=pq.data||[],ids=plans.map(x=>x.id),workshops=wq.data||[],workshopIds=workshops.map(w=>w.id);
+  const [lq,cq]=await Promise.all([
+    ids.length?c.from('workshop_plan_lessons').select('*').in('plan_id',ids).order('scheduled_date').order('lesson_number'):Promise.resolve({data:[]}),
+    workshopIds.length?c.from('workshop_calendar').select('id,workshop_id,scheduled_date,start_time,end_time,status,updated_at').in('workshop_id',workshopIds).gte('scheduled_date',current).lt('scheduled_date',next).order('scheduled_date').order('start_time'):Promise.resolve({data:[]})
+  ]);
+  if(lq.error)throw lq.error;if(cq.error)throw cq.error;
+  return {current,next,workshops,plans,lessons:lq.data||[],calendar:cq.data||[],admin:aq.data||null,loadedAt:new Date().toISOString()};
 }
+
 function workshopMap(d){return new Map(d.workshops.map(w=>[w.id,w]))}
 function lessonsForPlan(d,id){return d.lessons.filter(x=>x.plan_id===id&&x.included!==false)}
+function cancelledLesson(row){
+  const status=String(row.status||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,'_');
+  return ['cancelada','cancelado','cancelled','canceled','nao_realizada','nao_realizado','excluida','excluido','removida','removido'].includes(status);
+}
 function currentInvoice(d){
-  const wmap=workshopMap(d),currentPlans=d.plans.filter(p=>String(p.plan_month).slice(0,10)===d.current),groups=[];let serviceHours=0;
-  for(const p of currentPlans){
-    const w=wmap.get(p.workshop_id),rows=lessonsForPlan(d,p.id);let hours=0;
-    for(const l of rows){hours+=durationHours(l.start_time||w?.start_time,l.end_time||w?.end_time)}
-    serviceHours+=hours;groups.push({name:w?.name||'Oficina',hours,lessons:rows.length});
+  if(!Array.isArray(d.calendar))throw new Error('Calendário da competência não carregado.');
+  const wmap=workshopMap(d),currentPlans=d.plans.filter(p=>String(p.plan_month).slice(0,10)===d.current),byWorkshop=new Map();
+  const calendar=[...new Map(d.calendar.map(row=>[row.id,row])).values()].filter(row=>wmap.has(row.workshop_id)&&row.scheduled_date>=d.current&&row.scheduled_date<d.next);
+  let serviceMinutes=0,cancelled=0;
+  for(const row of calendar){
+    if(cancelledLesson(row)){cancelled++;continue}
+    const minutes=Math.round(durationHours(row.start_time,row.end_time)*60);
+    if(minutes<=0)continue;
+    const group=byWorkshop.get(row.workshop_id)||{name:wmap.get(row.workshop_id).name,hours:0,lessons:0};
+    group.hours+=minutes/60;group.lessons++;byWorkshop.set(row.workshop_id,group);serviceMinutes+=minutes;
   }
-  const planningHours=currentPlans.length?1:0,billableHours=serviceHours+planningHours,total=billableHours*HOURLY_RATE;
-  const description=currentPlans.length
-    ?`Prestação de serviços como oficineiro(a) do Centro de Referência das Juventudes – CRJ Cariacica, competência ${shortMonth(d.current)}, referente a ${num(serviceHours)}h de atividades previstas no planejamento mensal + 1h de planejamento, totalizando ${num(billableHours)}h, ao valor de ${brl(HOURLY_RATE)}/h. Valor total previsto: ${brl(total)}.`
-    :'Ainda não há planejamento da competência atual disponível para calcular a nota fiscal.';
-  return {currentPlans,groups,serviceHours,planningHours,billableHours,total,description};
+  // Preserve the existing single monthly planning hour, separately from classes.
+  const groups=[...byWorkshop.values()],serviceHours=serviceMinutes/60,planningHours=currentPlans.length?1:0,billableHours=serviceHours+planningHours;
+  const total=Math.round(billableHours*HOURLY_RATE*100)/100;
+  const description=`Prestação de serviços como oficineiro(a) do Centro de Referência das Juventudes – CRJ Cariacica, competência ${shortMonth(d.current)}, referente a ${num(serviceHours)}h de aulas válidas no Calendário Geral${planningHours?' + 1h de planejamento':''}, totalizando ${num(billableHours)}h, ao valor de ${brl(HOURLY_RATE)}/h. Valor total previsto: ${brl(total)}.`;
+  return {currentPlans,groups,serviceHours,planningHours,billableHours,total,description,cancelled};
+}
+function invoiceHtml(d){
+  const inv=currentInvoice(d),updated=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date(d.loadedAt||Date.now()));
+  return `<section class="ip-card" data-ip-invoice><h3>Dados para nota fiscal</h3><div class="ip-muted">Cálculo automático pelo Calendário Geral da competência atual. Inclusões, cancelamentos e alterações de horário recalculam o valor previsto.</div>
+    <div class="ip-kpi" aria-live="polite">${brl(inv.total)} <small>valor previsto</small></div>
+    <div class="ip-invoice-box"><div class="ip-invoice-lines">
+      ${inv.groups.map(x=>`<span>${esc(x.name)} · ${x.lessons} aula(s)</span><b>${num(x.hours)}h</b>`).join('')||'<span>Horas de aulas válidas no calendário</span><b>0h</b>'}
+      <span>Aulas canceladas / não realizadas (excluídas do valor)</span><b>${inv.cancelled}</b>
+      <span>Planejamento mensal</span><b>${num(inv.planningHours)}h</b>
+      <span>Valor por hora</span><b>${brl(HOURLY_RATE)}</b>
+      <span class="total">Total de horas faturáveis</span><b class="total">${num(inv.billableHours)}h</b>
+      <span class="total">Total previsto</span><b class="total">${brl(inv.total)}</b>
+    </div></div>
+    <small class="ip-muted" data-ip-invoice-sync>Calendário consultado às ${updated}. Atualização automática.</small>
+    <div class="ip-nf-text">${esc(inv.description)}</div>
+    <div class="ip-actions"><button class="btn" type="button" data-ip-copy="invoice">Copiar descrição da nota</button><button class="btn" type="button" data-ip-copy="institution">Copiar dados da Avante</button></div>
+  </section>`;
 }
 function nextPlanningProgress(d){
   const plans=d.plans.filter(p=>String(p.plan_month).slice(0,10)===d.next),rows=plans.flatMap(p=>lessonsForPlan(d,p.id));
@@ -116,20 +148,8 @@ function dashboardHtml(d){
       ${taskHtml({title:`Planejamento de ${monthLabel(d.next)}`,description:'Preencher Objetivo, Atividades propostas e Recursos necessários em todos os blocos do próximo mês.',status:planningStatus})}
       ${taskHtml({title:'Recebimento',description:`Pagamento referente à competência ${shortMonth(d.current)} previsto até o dia 10 do mês seguinte.`,status:payStatus,buttonField:'payment_received_at',buttonText:admin.payment_received_at?'Desmarcar recebimento':'Marcar como recebido',done:!!admin.payment_received_at})}
     </section>
-    <section class="ip-card"><h3>Dados para nota fiscal</h3><div class="ip-muted">Cálculo automático a partir das horas previstas no planejamento da competência atual.</div>
-      <div class="ip-kpi">${brl(inv.total)} <small>valor previsto</small></div>
-      <div class="ip-invoice-box"><div class="ip-invoice-lines">
-        ${inv.groups.map(x=>`<span>${esc(x.name)} · ${x.lessons} aula(s)</span><b>${num(x.hours)}h</b>`).join('')||'<span>Horas de aulas previstas</span><b>0h</b>'}
-        <span>Planejamento mensal</span><b>${num(inv.planningHours)}h</b>
-        <span>Valor por hora</span><b>${brl(HOURLY_RATE)}</b>
-        <span class="total">Total de horas faturáveis</span><b class="total">${num(inv.billableHours)}h</b>
-        <span class="total">Total previsto</span><b class="total">${brl(inv.total)}</b>
-      </div></div>
-      ${inv.currentPlans.length?'':'<div class="notice warn" style="margin-top:10px">O cálculo ficará completo quando existir planejamento da competência atual vinculado ao seu cadastro.</div>'}
-      <div class="ip-nf-text">${esc(inv.description)}</div>
-      <div class="ip-actions"><button class="btn" type="button" data-ip-copy="invoice">Copiar descrição da nota</button><button class="btn" type="button" data-ip-copy="institution">Copiar dados da Avante</button></div>
-    </section>
-    <section class="ip-card"><h3>Tomador / dados para emissão</h3><div class="ip-workshop"><b>${esc(AVANTE.legalName)}</b><div class="ip-muted">CNPJ ${esc(AVANTE.cnpj)}</div></div><div class="ip-workshop"><b>Endereço</b><div class="ip-muted">${esc(AVANTE.address)}</div></div><div class="notice info" style="margin-top:12px">O valor acima é uma referência automática baseada no planejamento atual. Se o planejamento for alterado, o cálculo também será atualizado.</div></section>
+    ${invoiceHtml(d)}
+    <section class="ip-card"><h3>Tomador / dados para emissão</h3><div class="ip-workshop"><b>${esc(AVANTE.legalName)}</b><div class="ip-muted">CNPJ ${esc(AVANTE.cnpj)}</div></div><div class="ip-workshop"><b>Endereço</b><div class="ip-muted">${esc(AVANTE.address)}</div></div><div class="notice info" style="margin-top:12px">O valor previsto acompanha as aulas válidas do Calendário Geral da competência atual. Aulas canceladas saem do cálculo; aulas acrescentadas e alterações de duração atualizam o total. A hora mensal de planejamento permanece discriminada separadamente.</div></section>
     <section class="ip-card full"><h3>Minhas oficinas</h3>${d.workshops.map(w=>`<div class="ip-workshop"><b>${esc(w.name)}</b> ${w.active?'<span class="ip-badge success">Ativa</span>':'<span class="ip-badge warn">Inativa</span>'}<div class="ip-muted">${esc(w.days||'Agenda conforme planejamento')} · ${esc(time5(w.start_time)||'—')}–${esc(time5(w.end_time)||'—')} · ${esc(w.location_other||w.location_type||'Local não informado')}</div></div>`).join('')||'<div class="ip-empty">Nenhuma oficina está vinculada ao seu cadastro.</div>'}</section>
   </div>`;
 }
@@ -158,11 +178,51 @@ async function setAdminField(field,done){
   else q=await c.from('workshop_instructor_monthly_admin').insert({instructor_user_id:me.id,reference_month:reference,[field]:value});
   if(q.error)throw q.error;
 }
-async function bindPortal(host,d){
-  host.querySelectorAll('[data-ip-admin]').forEach(btn=>btn.addEventListener('click',async()=>{btn.disabled=true;try{await setAdminField(btn.dataset.ipAdmin,btn.dataset.ipDone==='1');toast('Lembrete atualizado');await renderPortal(true)}catch(err){toast(err.message||String(err),'danger');btn.disabled=false}}));
+function bindInvoiceCopy(host,d){
   const inv=currentInvoice(d);
   host.querySelector('[data-ip-copy="invoice"]')?.addEventListener('click',()=>copyText(inv.description,'Descrição da nota'));
   host.querySelector('[data-ip-copy="institution"]')?.addEventListener('click',()=>copyText(invoiceInstitutionText(),'Dados da Avante'));
+}
+function invoicePanelActive(){return isInstructor()&&routeName()==='oficineiro'&&params().get('view')!=='planejamento'}
+function queueInvoiceRefresh(){clearTimeout(invoiceTimer);invoiceTimer=setTimeout(()=>refreshInvoice(),150)}
+async function refreshInvoice(){
+  if(!invoicePanelActive()||document.visibilityState==='hidden')return;
+  if(invoiceRefreshing){invoiceQueued=true;return}
+  invoiceRefreshing=true;
+  try{
+    const d=await loadPortalData();
+    const card=document.querySelector('[data-ip-invoice]');
+    if(!invoicePanelActive()||!card)return;
+    card.outerHTML=invoiceHtml(d);
+    bindInvoiceCopy(document.querySelector('[data-ip-invoice]'),d);
+  }catch(error){
+    const note=document.querySelector('[data-ip-invoice-sync]');
+    if(note)note.textContent='Não foi possível atualizar o calendário agora. O valor exibido é da última consulta; tentando novamente.';
+    console.warn('Atualização do valor previsto',error);
+  }finally{invoiceRefreshing=false;if(invoiceQueued){invoiceQueued=false;queueInvoiceRefresh()}}
+}
+async function syncInvoiceSubscription(){
+  if(!invoicePanelActive()){
+    clearInterval(invoicePoll);invoicePoll=null;clearTimeout(invoiceTimer);
+    const old=invoiceChannel;invoiceChannel=null;invoiceChannelUser=null;
+    if(old)await client().removeChannel(old);
+    return;
+  }
+  if(invoiceChannel&&invoiceChannelUser===me.id)return;
+  if(invoiceChannel)await client().removeChannel(invoiceChannel);
+  invoiceChannelUser=me.id;
+  invoiceChannel=client().channel('instructor-invoice-'+me.id);
+  for(const table of ['workshop_calendar','workshops','workshop_monthly_plans']){
+    invoiceChannel.on('postgres_changes',{event:'*',schema:'public',table},queueInvoiceRefresh);
+  }
+  invoiceChannel.subscribe(status=>{if(status==='SUBSCRIBED')queueInvoiceRefresh()});
+  clearInterval(invoicePoll);
+  // Also recover missed events/reconnections and month rollover without a reload.
+  invoicePoll=setInterval(queueInvoiceRefresh,15000);
+}
+async function bindPortal(host,d){
+  host.querySelectorAll('[data-ip-admin]').forEach(btn=>btn.addEventListener('click',async()=>{btn.disabled=true;try{await setAdminField(btn.dataset.ipAdmin,btn.dataset.ipDone==='1');toast('Lembrete atualizado');await renderPortal(true)}catch(err){toast(err.message||String(err),'danger');btn.disabled=false}}));
+  bindInvoiceCopy(host,d);
   host.querySelectorAll('[data-ip-lesson-form]').forEach(form=>form.addEventListener('submit',async e=>{
     e.preventDefault();const btn=form.querySelector('button[type="submit"]'),state=form.querySelector('[data-ip-save-state]'),fd=new FormData(form);btn.disabled=true;btn.textContent='Salvando...';if(state)state.textContent='';
     try{
@@ -233,11 +293,12 @@ async function enforce(){
   if(!routeAllowed()&&document.querySelector('.app-shell')){location.hash='#oficineiro';return}
   patchNav();
   if(routeName()==='oficineiro')await renderPortal();
+  await syncInvoiceSubscription();
   if(routeName()==='caixa-equipes')enhanceInbox();
 }
 function schedule(force=false){clearTimeout(timer);timer=setTimeout(()=>{if(force){const h=document.querySelector('.content');if(h)delete h.dataset.instructorPortalKey}enforce()},force?30:110)}
 function boot(){
-  injectStyle();observer=new MutationObserver(()=>schedule(false));observer.observe(document.body,{childList:true,subtree:true});window.addEventListener('hashchange',()=>schedule(true));window.addEventListener('focus',()=>schedule(false));
+  injectStyle();observer=new MutationObserver(()=>schedule(false));observer.observe(document.body,{childList:true,subtree:true});window.addEventListener('hashchange',()=>schedule(true));window.addEventListener('focus',()=>{schedule(false);queueInvoiceRefresh()});window.addEventListener('online',queueInvoiceRefresh);
   setInterval(()=>{if(!me)schedule(false)},1400);schedule(true);
 }
 boot();
