@@ -47,6 +47,10 @@ function periodFor(ind,m){
 function isYouth(ind){return /jovens/i.test(ind.unit||'')||/_JOVENS/.test(ind.code||'')}
 function isPercent(ind){return String(ind.unit||'').includes('%')}
 function actualValue(rows,ind){
+  if(ind.code==='M4.2_ATIVIDADES_PERCENTUAL'){
+    const value=Math.min(100,Math.round(rows.reduce((s,x)=>s+num(x.quantity),0)*100)/100);
+    return {value,identified:value,aggregate:0};
+  }
   const agg=rows.filter(x=>x.source_mode==='aggregate');
   const identified=rows.filter(x=>x.source_mode!=='aggregate');
   if(isYouth(ind)){
@@ -59,6 +63,7 @@ function actualValue(rows,ind){
   return {value:rows.reduce((s,x)=>s+num(x.quantity),0),identified:identified.reduce((s,x)=>s+num(x.quantity),0),aggregate:agg.reduce((s,x)=>s+num(x.quantity),0)};
 }
 function forecastValue(rows,ind){
+  if(ind.code==='M4.2_ATIVIDADES_PERCENTUAL')return Math.min(100,Math.round(rows.reduce((s,x)=>s+num(x.quantity),0)*100)/100);
   if(isPercent(ind))return rows.length?Math.max(...rows.map(x=>num(x.quantity))):0;
   return rows.reduce((s,x)=>s+num(x.quantity),0);
 }
@@ -72,6 +77,7 @@ function statusFor(ind,actual,projected){
 }
 function unitText(ind,v){return `${fmt(v)} ${ind.unit||''}`.trim()}
 function howGenerated(ind){
+  if(ind.code==='M4.2_ATIVIDADES_PERCENTUAL')return 'Concretizado = atividades realizadas com registro de execução ÷ atividades planejadas do Núcleo Socioafirmativo no mês × 100. Projeção = realizadas + previstas ainda executáveis, sobre o mesmo total. Oficinas, CFDH, PVida, ações complementares, empréstimos e demais ações com vínculo ao núcleo entram automaticamente. Rascunhos e ações sem data não entram; o CFDH transversal vinculado à mesma aula não duplica a atividade. Canceladas ou não realizadas permanecem no total previsto, sem contribuir como executadas.';
   if(isYouth(ind))return 'Jovens identificados são deduplicados por ID dentro da janela do indicador. Lançamentos agregados aparecem separados porque não podem ser deduplicados com segurança.';
   if(isPercent(ind))return 'O percentual considera o valor percentual registrado/evidenciado no período; o sistema não soma percentuais entre si.';
   if(/HORAS/.test(ind.code))return 'Soma das durações efetivamente executadas. Na previsão, soma a duração das ações/aulas ainda planejadas e não executadas.';
@@ -81,6 +87,7 @@ function howGenerated(ind){
 }
 function insight(ind,gap,projected,forecastRows){
   const g=Math.max(0,gap),code=ind.code||'';
+  if(code==='M4.2_ATIVIDADES_PERCENTUAL')return projected>=100?'Projeção de executar 100% das atividades válidas planejadas do núcleo. Isso não significa que já foram realizadas: o concretizado só avança com a execução registrada.':'A projeção usa as atividades finalizadas e datadas do núcleo. Conclua os rascunhos e registre as execuções; atividades canceladas ou não realizadas não recebem previsão de execução.';
   if(ind.target==null||ind.target_mode==='tracking')return 'Indicador de acompanhamento: mantenha os registros e evidências atualizados; não há mínimo contratual numérico cadastrado.';
   if(ind.target_mode==='ceiling')return projected>num(ind.target)?`A projeção ultrapassa o limite/referência em ${unitText(ind,projected-num(ind.target))}. Revise o planejamento antes de executar novas ações que alimentem este indicador.`:'A projeção está dentro do limite/referência contratual. Não é necessário aumentar o valor apenas para alcançar o teto.';
   if(g<=0)return 'O realizado somado ao que já está planejado é suficiente para alcançar a referência desta competência.';
@@ -115,7 +122,7 @@ async function load(m){
   for(const q of [catQ,schedQ,respQ,teamQ,actualQ,forecastQ])if(q.error)throw q.error;
   return {catalog:catQ.data||[],schedule:schedQ.data||[],responsibilities:respQ.data||[],team:teamQ.data||[],actual:actualQ.data||[],forecast:forecastQ.data||[]};
 }
-function dataForIndicator(ind,m,data){const p=periodFor(ind,m);const actual=data.actual.filter(x=>x.indicator_code===ind.code&&x.event_date>=p.start&&x.event_date<p.end);const forecast=data.forecast.filter(x=>x.indicator_code===ind.code&&x.forecast_date>=p.start&&x.forecast_date<p.end);const a=actualValue(actual,ind),f=forecastValue(forecast,ind);return {period:p,actualRows:actual,forecastRows:forecast,actual:a,forecast:f,projected:a.value+f}}
+function dataForIndicator(ind,m,data){const p=periodFor(ind,m);const actual=data.actual.filter(x=>x.indicator_code===ind.code&&x.event_date>=p.start&&x.event_date<p.end);const forecast=data.forecast.filter(x=>x.indicator_code===ind.code&&x.forecast_date>=p.start&&x.forecast_date<p.end);const a=actualValue(actual,ind),f=forecastValue(forecast,ind);return {period:p,actualRows:actual,forecastRows:forecast,actual:a,forecast:f,projected:ind.code==='M4.2_ATIVIDADES_PERCENTUAL'?Math.min(100,Math.round((a.value+f)*100)/100):a.value+f}}
 function responsibilityRows(ind,data){return data.responsibilities.filter(x=>x.indicator_code===ind.code)}
 function personMap(data){return new Map(data.team.map(x=>[x.id,x]))}
 function matchesResponsible(ind,computed,data,filter){if(filter==='all')return true;const rr=responsibilityRows(ind,data);if(filter.startsWith('role:')){const role=filter.slice(5);return rr.some(x=>x.staff_role===role)||computed.actualRows.some(x=>x.responsible_role===role)||computed.forecastRows.some(x=>personMap(data).get(x.responsible_user_id)?.role===role)}if(filter.startsWith('user:')){const id=filter.slice(5);return computed.actualRows.some(x=>x.responsible_user_id===id)||computed.forecastRows.some(x=>x.responsible_user_id===id)}return true}
