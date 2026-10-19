@@ -1,3 +1,4 @@
+import './numeric_error_explainer.js?v=20261019-1';
 import { capturePlanPreview } from './plan_preview_capture.js?v=20261016-1';
 import { supabaseClient } from './api.js?v=20261015-2';
 import { CONFIG } from './config.js';
