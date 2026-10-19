@@ -5,7 +5,7 @@ import { getSession } from './api.js?v=20261004-2';
 // quando a área correspondente é realmente aberta. Isso evita dezenas de
 // MutationObservers e consultas Supabase fora do menu em uso.
 
-const VERSION='20261016-hours1';
+const VERSION='20261019-instructor-sync1';
 const moduleCache=new Map();
 let routeSeq=0;
 let routeTimer=null;
@@ -39,11 +39,11 @@ const ROUTE_FEATURES={
     deferred:['articulation_workspace','articulation_request_context','joint_actions','document_header_standard','evidence_exports','attendance_export_fix']
   },
   educador:{
-    critical:['educator_complementary','workshop_plan_delete','workshop_plan_exports'],
+    critical:['educator_complementary','workshop_collaboration','workshop_live_sync','educator_instructor_plan_sync','workshop_plan_delete','workshop_plan_exports'],
     deferred:['articulation_workspace','articulation_request_context','joint_actions','document_header_standard','evidence_exports']
   },
   'planejamento-educador':{
-    critical:['educator_complementary','workshop_plan_delete','workshop_plan_exports'],
+    critical:['educator_complementary','workshop_collaboration','workshop_live_sync','educator_instructor_plan_sync','workshop_plan_delete','workshop_plan_exports'],
     deferred:['articulation_workspace','articulation_request_context','joint_actions','document_header_standard','evidence_exports']
   },
   cfdh:{
