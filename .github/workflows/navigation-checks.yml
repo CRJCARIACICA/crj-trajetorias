@@ -1,0 +1,19 @@
+name: Verificar navegação do CRJ
+
+on:
+  pull_request:
+  push:
+    branches: [fix/navegacao-menus-20261020]
+
+permissions:
+  contents: read
+
+jobs:
+  navigation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Instalar dependências dos testes
+        run: npm ci --prefix tests --ignore-scripts
+      - name: Testar rotas, concorrência e módulos publicados
+        run: node --test tests/*.test.cjs

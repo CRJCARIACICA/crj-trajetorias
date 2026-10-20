@@ -219,26 +219,44 @@ async function bindTechnicalPage(){
 }
 
 async function render(){
-  const publicRoute=route();
+  const isCurrent=beginNavigation();
+  const requestedRoute=route();
+  const publicRoute=requestedRoute;
   if(publicRoute.parts[0]==='presenca-oficina'&&publicRoute.parts[1]){
-    app.innerHTML=await pagePublicWorkshopCheckinV2(publicRoute.parts[1]);
+    const html=await pagePublicWorkshopCheckinV2(publicRoute.parts[1]);
+    if(!isCurrent())return;
+    app.innerHTML=html;
     await bindPublicWorkshopCheckinV2(publicRoute.parts[1]);
     return;
   }
   if(!state.user){
     try{
       const s=await getSession();
+      if(!isCurrent())return;
       state.user=s?.user||null;
     }catch(err){
+      if(!isCurrent())return;
       console.error('Falha ao restaurar sessão:',err);
       state.user=null;
     }
     if(!state.user){renderLogin();return;}
   }
+  if(!isCurrent())return;
   if(state.user?.role==='pendente'){renderPending();return;}
+  // Estas páginas pertencem a módulos. Monte o destino antes de carregar recursos
+  // ou contadores; o roteador nunca deve substituir uma área válida por um 404.
+  const moduleHost=routePlaceholder(requestedRoute.parts[0]);
+  if(moduleHost){
+    app.innerHTML=layout(moduleHost);
+    await bindRoute();
+    if(isCurrent())announceRouteReady();
+    return;
+  }
   if(!state.documentSettings){try{state.documentSettings=await getDocumentSettings();applyDocumentSettings(state.documentSettings)}catch(err){console.warn('Configuração de documentos indisponível:',err)}}
-  try{state.agendaUnread=await agendaUnreadCount();}catch{state.agendaUnread=0;}
-  const r=route(); let content=''; try{
+  if(!isCurrent())return;
+  try{const unread=await agendaUnreadCount();if(isCurrent())state.agendaUnread=unread;}catch{if(isCurrent())state.agendaUnread=0;}
+  if(!isCurrent())return;
+  const r=requestedRoute; let content=''; try{
     const [p1,p2,p3]=r.parts;
     if(!p1||p1==='dashboard') content=await pageDashboard();
     else if(p1==='jovens') content=await pageYouth();
@@ -258,14 +276,23 @@ async function render(){
     else if(p1==='lancamento-geral') content=await pageAggregate();
     else if(p1==='equipe') content=await pageTeam();
     else content='<div class="notice danger">Página não encontrada.</div>';
+    if(!isCurrent())return;
     app.innerHTML=layout(content); await bindRoute();
+    if(!isCurrent())return;
     if(p1==='educador') await bindEducatorPageV2();
+    if(!isCurrent())return;
     if(p1==='cfdh') await bindCfdhShared();
+    if(!isCurrent())return;
     if(p1==='equipe-tecnica') await bindTechnicalPage();
+    if(!isCurrent())return;
     if(p1==='oficina') await bindWorkshopDetailV2(p2);
+    if(!isCurrent())return;
     if(p1==='jhonatao') await bindJhonataoPage(state.user,{toast,rerender:render,nav});
+    if(!isCurrent())return;
     if(p1==='agenda') await bindAgendaPage(state.user,{toast,rerender:render,nav});
-  }catch(err){console.error(err);app.innerHTML=layout(`<div class="notice danger"><strong>Erro ao carregar.</strong><br>${esc(err.message)}</div>`);await bindRoute();}
+    if(!isCurrent())return;
+    announceRouteReady();
+  }catch(err){if(!isCurrent())return;console.error(err);app.innerHTML=layout(`<div class="notice danger"><strong>Erro ao carregar.</strong><br>${esc(err.message)}</div>`);await bindRoute();}
 }
 
 window.addEventListener('hashchange',render);

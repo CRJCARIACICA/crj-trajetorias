@@ -56,6 +56,8 @@ jobs:
             src/plan_preview_capture.js \
             src/document_header_standard.js \
             src/feature_loader.js \
+            src/route_lifecycle.js \
+            src/educator_instructor_plan_sync.js \
             src/management_workspace.js \
             src/meta1_point_completion.js \
             src/meta2_flow_bootstrap.js \
@@ -130,8 +132,8 @@ jobs:
           sed -i 's#permissions.js?v=20261003-6#permissions.js?v=20261009-1#g' _site/src/app.js
           # Mantém os módulos centrais atualizados sem recolocar recursos pesados no HTML inicial.
           sed -i -E 's#src/export_route_override\.js\?v=[a-zA-Z0-9_-]+#src/export_route_override.js?v=20261016-1#g' _site/index.html
-          sed -i -E 's#src/app\.js\?v=[a-zA-Z0-9_-]+#src/app.js?v=20261016-hours1#g' _site/index.html
-          sed -i -E 's#src/feature_loader\.js\?v=[^\"]+#src/feature_loader.js?v=20261016-hours1#g' _site/index.html
+          sed -i -E 's#src/app\.js\?v=[a-zA-Z0-9_-]+#src/app.js?v=20261020-navigation1#g' _site/index.html
+          sed -i -E 's#src/feature_loader\.js\?v=[^\"]+#src/feature_loader.js?v=20261020-navigation1#g' _site/index.html
 
           # A normalização de campos inteiros do Formulário Inicial é uma proteção global leve.
           # Ela precisa iniciar antes do app para impedir household_size="" em qualquer rota.
@@ -143,6 +145,11 @@ jobs:
           # URLs com query diferente são módulos ES diferentes para o navegador e podem
           # duplicar Supabase, sessão, subscriptions e estado interno.
           sed -i -E 's#api\.js\?v=[a-zA-Z0-9_-]+#api.js?v=20261016-hours1#g' _site/src/*.js _site/index.html
+
+      - name: Verificar navegação e regressões de interface
+        run: |
+          npm ci --prefix tests --ignore-scripts
+          node --test tests/*.test.cjs
 
       - name: Validar JavaScript e arquivos obrigatórios
         run: |
@@ -164,6 +171,8 @@ jobs:
             _site/src/agenda.js
             _site/src/permissions.js
             _site/src/feature_loader.js
+            _site/src/route_lifecycle.js
+            _site/src/educator_instructor_plan_sync.js
             _site/src/management_workspace.js
             _site/src/meta1_point_completion.js
             _site/src/meta2_flow_bootstrap.js
@@ -210,7 +219,7 @@ jobs:
           grep -q 'meta2_flow_bootstrap' _site/src/config.js
           grep -q 'access_create_booking_v2' _site/src/access_booking_youth.js
           grep -q 'Passagens e ingressos' _site/src/technical_support_requests.js
-          grep -q 'feature_loader.js?v=20261016-hours1' _site/index.html
+          grep -q 'feature_loader.js?v=20261020-navigation1' _site/index.html
           grep -q 'initial_form_numeric_guard.js?v=20261014-3' _site/index.html
           grep -q 'normalizeRestBody' _site/src/initial_form_numeric_guard.js
           grep -q 'technical-checkin.html' _site/src/technical_workspace.js
@@ -224,7 +233,7 @@ jobs:
           grep -q 'api.js?v=20261016-hours1' _site/src/initial_form_numeric_guard.js
           grep -q 'api.js?v=20261016-hours1' _site/src/access_booking_youth.js
           grep -q 'api.js?v=20261016-hours1' _site/src/technical_support_requests.js
-          grep -q 'src/app.js?v=20261016-hours1' _site/index.html
+          grep -q 'src/app.js?v=20261020-navigation1' _site/index.html
           grep -q 'validateBinaryResponse' _site/src/export_route_override.js
           grep -q 'methodological_action' _site/src/articulation_request_context.js
           grep -q 'Imprimir evidência' _site/src/articulation_request_context.js

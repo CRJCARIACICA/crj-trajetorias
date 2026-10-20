@@ -1,3 +1,4 @@
+import { captureRoute } from './route_lifecycle.js?v=20261020-navigation1';
 import { apiMode, supabaseClient } from './api.js?v=20261004-2';
 
 const ROUTES=new Set(['administrativo','coordenacao-geral','coordenacao-articulacao']);
@@ -192,12 +193,15 @@ async function content(){if(view()==='documentos'&&canEditDocs())return renderDo
 
 async function render(force=false){
   if(!ROUTES.has(rootRoute()))return;
-  if(!me)me=await profile();if(!me?.active||!allowedRoute())return;
+  const host=document.querySelector('.content');if(!host)return;
+  const isCurrent=captureRoute(host);
+  if(!me)me=await profile();if(!isCurrent())return;
+  if(!me?.active||!allowedRoute()){host.innerHTML='<div class="notice danger">Seu perfil não possui acesso a esta área.</div>';return}
   if(isCoordArt()&&view()!=='grupo'){routeGroup('composicao');return}
   const key=`${rootRoute()}:${location.hash}:${me.id}`;if(!force&&lastKey===key&&document.querySelector('[data-management-workspace]'))return;lastKey=key;
-  injectStyle();const host=document.querySelector('.content');if(!host)return;
+  injectStyle();
   host.innerHTML=`<div class="mw-shell" data-management-workspace>${header()}<div data-mw-body><div class="mw-empty">Carregando…</div></div></div>`;
-  const body=host.querySelector('[data-mw-body]');body.innerHTML=await content();bind();
+  const body=host.querySelector('[data-mw-body]'),html=await content();if(!isCurrent())return;body.innerHTML=html;bind();
 }
 function scheduleRender(force=false){clearTimeout(renderTimer);renderTimer=setTimeout(()=>render(force).catch(err=>{console.error('Área de gestão:',err);toast(err?.message||String(err),'danger')}),30)}
 
@@ -226,3 +230,5 @@ window.addEventListener('focus',()=>scheduleRender(true));
 const app=document.querySelector('#app');if(app)new MutationObserver(()=>{if(ROUTES.has(rootRoute())&&!document.querySelector('[data-management-workspace]'))scheduleRender(true)}).observe(app,{childList:true,subtree:true});
 
 scheduleRender(true);
+
+window.addEventListener('crj:features-ready',event=>{if(ROUTES.has(event.detail?.route))scheduleRender(false)});

@@ -1,3 +1,5 @@
+let renderQueued=false;
+import { captureRoute } from './route_lifecycle.js?v=20261020-navigation1';
 import { apiMode, supabaseClient, listWorkshops } from './api.js?v=20261016-workshop-month1';
 
 const ROUTE='calendario-geral';
@@ -239,15 +241,16 @@ async function renderCalendar(force=false){
   if(!isRoute())return;
   const content=document.querySelector('.content');if(!content)return;
   const month=activeMonth(),key=`${month}|${params().get('types')||'all'}`;
-  if(busy)return;if(!force&&lastRenderKey===key&&content.querySelector('[data-general-calendar-page]'))return;
+  if(busy){renderQueued=true;return}if(!force&&lastRenderKey===key&&content.querySelector('[data-general-calendar-page]'))return;
+  const isCurrent=captureRoute(content);
   busy=true;injectStyle();ensureMenu();markMenu();
   content.innerHTML='<div class="gc-loading">Carregando calendário geral do CRJ…</div>';
   try{
-    const data=await loadMonth(month,force),selected=selectedCategories();
+    const data=await loadMonth(month,force);if(!isCurrent())return;const selected=selectedCategories();
     content.innerHTML=`<div class="gc-page" data-general-calendar-page><div class="gc-head"><div><h2>Calendário Geral do CRJ</h2><p>Visão mensal integrada de planejamentos, agenda técnica, oficinas, ações, eventos e empréstimos.</p></div><div class="gc-head-actions"><button class="gc-btn" data-gc-refresh>Atualizar</button><button class="gc-btn" data-gc-docx>DOCX</button><button class="gc-btn primary" data-gc-pdf>PDF / imprimir</button></div></div><div class="gc-toolbar"><div class="gc-nav"><button class="gc-btn" data-month-prev>‹</button><button class="gc-btn" data-month-today>Hoje</button><div class="gc-month-title">${esc(monthTitle(month))}</div><button class="gc-btn" data-month-next>›</button></div><div><b style="font-size:12px">${data.events.length}</b> <span style="font-size:11px;color:#687671">registro(s) no mês</span></div></div><div class="gc-legend gc-filters">${filtersHtml(selected)}</div><div class="gc-calendar-wrap"><div class="gc-weekdays">${WEEKDAYS.map(x=>`<div>${x}</div>`).join('')}</div><div class="gc-grid">${monthGrid(month,data.events,selected)}</div></div>${!data.events.length?'<div class="gc-empty">Nenhuma atividade com data foi encontrada para este mês.</div>':''}</div>`;
     bindCalendar(data,selected);lastRenderKey=key;
-  }catch(err){content.innerHTML=`<div class="notice danger"><b>Não foi possível carregar o Calendário Geral.</b><br>${esc(err?.message||String(err))}</div>`;}
-  finally{busy=false}
+  }catch(err){if(!isCurrent())return;content.innerHTML=`<div class="notice danger"><b>Não foi possível carregar o Calendário Geral.</b><br>${esc(err?.message||String(err))}</div>`;}
+  finally{busy=false;if(renderQueued||(!isCurrent()&&isRoute())){renderQueued=false;schedule()}}
 }
 
 function tooltipHtml(e){const meta=CATEGORY_META[e.category]||CATEGORY_META.outro;const meth=e.methodology||[];return `<b>${esc(e.title)}</b><span>${esc(meta.icon+' '+meta.label)} · ${esc(e.date)}${e.start?' · '+esc(e.start)+(e.end?'–'+esc(e.end):''):''}</span>${e.location?`<span>Local: ${esc(e.location)}</span>`:''}<span>Status: ${esc(e.status)}</span>${meth.length?`<div class="gc-tip-method"><strong>Contribuições metodológicas</strong>${meth.slice(0,5).map(x=>`<span>• ${esc(x.label)}${x.detail?' — '+esc(x.detail):''}</span>`).join('')}</div>`:''}`;}
@@ -313,3 +316,5 @@ function schedule(){
 }
 function boot(){injectStyle();ensureMenu();observer=new MutationObserver(schedule);observer.observe(document.body,{childList:true,subtree:true});window.addEventListener('hashchange',()=>{lastRenderKey='';schedule()});schedule();}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+
+window.addEventListener('crj:features-ready',event=>{if(event.detail?.route===ROUTE)schedule()});
