@@ -58,7 +58,7 @@ function core(hash){
     layout:html=>'<div class="app-shell"><section class="content">'+html+'</section></div>',
     renderLogin:()=>{s.document.querySelector('#app').innerHTML='<p>Entrar</p>'},
     renderPending:()=>{s.document.querySelector('#app').innerHTML='<p>Acesso pendente</p>'},
-    esc:value=>String(value),
+    esc:value=>String(value),toast:()=>{},nav:()=>{},
     bindRoute:async()=>{},
     bindEducatorPageV2:async()=>{},bindCfdhShared:async()=>{},bindTechnicalPage:async()=>{},
     bindWorkshopDetailV2:async()=>{},bindJhonataoPage:async()=>{},bindAgendaPage:async()=>{},

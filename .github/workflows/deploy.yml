@@ -53,6 +53,7 @@ jobs:
             src/initial_form_numeric_guard.js \
             src/attendance_export_fix.js \
             src/export_route_override.js \
+            src/numeric_error_explainer.js \
             src/plan_preview_capture.js \
             src/document_header_standard.js \
             src/feature_loader.js \
@@ -187,6 +188,7 @@ jobs:
             _site/src/document_header_standard.js
             _site/src/evidence_exports.js
             _site/src/export_route_override.js
+            _site/src/numeric_error_explainer.js
             _site/src/joint_actions.js
             _site/src/general_calendar.js
             _site/src/cfdh_transversal_integration.js
