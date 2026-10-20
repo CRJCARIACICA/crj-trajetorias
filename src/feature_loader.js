@@ -5,7 +5,7 @@ import { getSession } from './api.js?v=20261004-2';
 // quando a área correspondente é realmente aberta. Isso evita dezenas de
 // MutationObservers e consultas Supabase fora do menu em uso.
 
-const VERSION='20261019-meta1-management1';
+const VERSION='20261019-meta1-history2';
 const moduleCache=new Map();
 let routeSeq=0;
 let routeTimer=null;
@@ -86,7 +86,7 @@ const ROUTE_FEATURES={
   administrativo:{critical:['management_workspace'],deferred:['document_header_standard','evidence_exports']},
   'coordenacao-geral':{critical:['management_workspace'],deferred:['document_header_standard','evidence_exports']},
   'coordenacao-articulacao':{critical:['management_workspace'],deferred:['document_header_standard','evidence_exports']},
-  metas:{critical:['goals_workspace'],deferred:[]},
+  metas:{critical:['goals_workspace','meta1_point_completion'],deferred:[]},
   equipe:{critical:['instructor_management'],deferred:[]},
   'equipe-permissoes':{critical:['instructor_management'],deferred:[]},
   jhonatao:{critical:['jhonatao_multimodal','jhonatao_live'],deferred:[]},
