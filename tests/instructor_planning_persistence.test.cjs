@@ -72,7 +72,7 @@ test('salvar um bloco preserva todas as descrições digitadas nos demais',async
 });
 test('erro de salvamento mantém campos, rascunho e botão utilizável',async()=>{
   const s=setup({rpc:async()=>({data:null,error:{message:'Sem conexão'}})});await s.bind();const form=s.form(0);fill(s,form,'Preservar');
-  await assert.rejects(s.save(form),/Sem conexão/);
+  await assert.rejects(s.save(form),error=>error.message==='Sem conexão');
   assert.equal(form.querySelector('[name="objective"]').value,'Preservar objective');
   assert.equal(form.querySelector('button[type="submit"]').disabled,false);
   assert(s.storage.has('crj_instructor_plan_v1:'+user.id+':'+s.lessons[0].id));
@@ -158,4 +158,16 @@ test('formulários de bloco usam chave estável e excluem a restauração genér
   const html=new Function('esc','fmtDate','time5',source.slice(at,end)+';return lessonHtml({id:"lesson-id",lesson_number:1,updated_at:"now"},{});')(String,String,String);
   assert.match(html,/id="instructor-lesson-lesson-id"/);assert.match(html,/data-no-draft/);
   assert.doesNotMatch(source,/setTimeout\(\(\)=>renderPortal\(true\),350\)/);
+});
+
+test('Planejamentos apresenta versões guardadas com os dois downloads e retomada de falhas',async()=>{
+  const ready={id:id(100),request_id:id(101),reference_month:'2026-11-01',version:2,status:'ready',file_name:'Planejamento_v2',pdf_path:'version2.pdf',docx_path:'version2.docx',created_at:'2026-10-20T17:30:00Z'};
+  const failed={...ready,id:id(200),request_id:id(201),version:1,status:'failed',pdf_path:null,docx_path:null};
+  const s=setup({draftRead:async()=>[ready,failed]});s.context.actor=user;
+  const archive=await s.eval('planningArchiveHtml(actor)');
+  s.host.innerHTML=archive.html;
+  assert.match(s.host.textContent,/Planejamentos/);assert.match(s.host.textContent,/versão 2/);
+  assert.equal(s.host.querySelectorAll('[data-ip-evidence-download]').length,2);
+  assert.equal(s.host.querySelectorAll('[data-ip-evidence-retry]').length,1);
+  assert.equal(archive.rows[0].pdf_path,'version2.pdf');
 });
