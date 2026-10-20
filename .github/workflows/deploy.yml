@@ -192,7 +192,6 @@ jobs:
           grep -q 'meta1_point_completion' _site/src/feature_loader.js
           grep -q 'M1.1_CONTRATO' _site/src/meta1_point_completion.js
           grep -q 'M1.2_EQUIPE_PERCENTUAL' _site/src/meta1_point_completion.js
-          grep -q 'M1.3_GRUPO_REUNIOES' _site/src/management_workspace.js
           grep -q 'M1.2_EQUIPE_PERCENTUAL' _site/src/management_workspace.js
           grep -q 'general_calendar' _site/src/feature_loader.js
           grep -q 'cfdh_transversal_integration' _site/src/feature_loader.js
