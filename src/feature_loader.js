@@ -5,7 +5,7 @@ import { getSession } from './api.js?v=20261004-2';
 // quando a área correspondente é realmente aberta. Isso evita dezenas de
 // MutationObservers e consultas Supabase fora do menu em uso.
 
-const VERSION='20261019-instructor-sync1';
+const VERSION='20261019-meta1-management1';
 const moduleCache=new Map();
 let routeSeq=0;
 let routeTimer=null;
@@ -14,6 +14,11 @@ let profileCache=null;
 let utilityNavTimer=null;
 
 const ACCESS_ROLES=new Set(['coordenacao_geral','controlador_acesso','monitoramento']);
+const MANAGEMENT_ROUTES={
+  administrativo:{route:'administrativo',label:'Área Administrativa',icon:'▤'},
+  coordenacao_geral:{route:'coordenacao-geral',label:'Coordenação Geral',icon:'◆'},
+  coordenacao_articulacao:{route:'coordenacao-articulacao',label:'Coordenação de Articulação',icon:'◇'}
+};
 
 const ROUTE_FEATURES={
   jovens:{critical:['youth_list_fields'],deferred:[]},
@@ -78,6 +83,9 @@ const ROUTE_FEATURES={
     critical:['instructor_portal','workshop_collaboration'],
     deferred:['joint_actions','document_header_standard']
   },
+  administrativo:{critical:['management_workspace'],deferred:['document_header_standard','evidence_exports']},
+  'coordenacao-geral':{critical:['management_workspace'],deferred:['document_header_standard','evidence_exports']},
+  'coordenacao-articulacao':{critical:['management_workspace'],deferred:['document_header_standard','evidence_exports']},
   metas:{critical:['goals_workspace'],deferred:[]},
   equipe:{critical:['instructor_management'],deferred:[]},
   'equipe-permissoes':{critical:['instructor_management'],deferred:[]},
@@ -194,6 +202,25 @@ function insertAccessNav(nav,profile){
   nav.insertBefore(link,sep||null);
 }
 
+function insertManagementNav(nav,profile){
+  const existing=nav.querySelector('[data-management-area-link]');
+  const config=profile?.active!==false?MANAGEMENT_ROUTES[String(profile?.role||'')]:null;
+  if(!config){existing?.remove();return}
+  if(existing){
+    existing.href=`#${config.route}`;
+    existing.innerHTML=`<span>${config.icon}</span><span>${config.label}</span>`;
+    existing.classList.toggle('active',routeName()===config.route);
+    return;
+  }
+  const link=document.createElement('a');
+  link.dataset.managementAreaLink='1';
+  link.href=`#${config.route}`;
+  link.className=routeName()===config.route?'active':'';
+  link.innerHTML=`<span>${config.icon}</span><span>${config.label}</span>`;
+  const sep=nav.querySelector('.sep');
+  nav.insertBefore(link,sep||null);
+}
+
 async function ensureUtilityNav(){
   const nav=document.querySelector('.sidebar .nav');
   if(!nav)return;
@@ -201,6 +228,7 @@ async function ensureUtilityNav(){
   if(!profile)return;
   insertCalendarNav(nav,profile);
   insertAccessNav(nav,profile);
+  insertManagementNav(nav,profile);
 }
 
 function scheduleUtilityNav(){
