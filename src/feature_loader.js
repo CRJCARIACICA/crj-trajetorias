@@ -1,11 +1,14 @@
 import { getSession } from './api.js?v=20261004-2';
+import { MODULE_ROUTES, routeName, routeShellReady, captureRoute } from './route_lifecycle.js?v=20261020-navigation1';
 
 // Carregador incremental do CRJ Trajetórias.
 // O núcleo (app.js) renderiza a rota; complementos pesados só são importados
 // quando a área correspondente é realmente aberta. Isso evita dezenas de
 // MutationObservers e consultas Supabase fora do menu em uso.
 
-const VERSION='20261019-meta1-history2';
+const VERSION='20261020-navigation1';
+const modulePreloads=new Set();
+const moduleAttempts=new Map();
 const moduleCache=new Map();
 let routeSeq=0;
 let routeTimer=null;
@@ -93,22 +96,20 @@ const ROUTE_FEATURES={
   'calendario-geral':{critical:['general_calendar'],deferred:[]}
 };
 
-function routeName(hash=location.hash){
-  return String(hash||'#dashboard').split('?')[0].replace(/^#/,'').split('/')[0]||'dashboard';
-}
-
 function featureSet(route){
   return ROUTE_FEATURES[route]||{critical:[],deferred:[]};
 }
 
 function moduleUrl(name){
-  return `./${name}.js?v=${VERSION}`;
+  const retry=moduleAttempts.get(name)||0;
+  return `./${name}.js?v=${VERSION}${retry?'&retry='+retry:''}`;
 }
 
 function loadModule(name){
   if(moduleCache.has(name))return moduleCache.get(name);
   const promise=import(moduleUrl(name)).catch(error=>{
     moduleCache.delete(name);
+    moduleAttempts.set(name,(moduleAttempts.get(name)||0)+1);
     console.warn(`CRJ lazy-load: falha ao carregar ${name}`,error);
     throw error;
   });
@@ -132,29 +133,56 @@ function idle(callback,timeout=900){
   setTimeout(callback,Math.min(timeout,300));
 }
 
+function prefetchModule(name){
+  if(modulePreloads.has(name)||moduleCache.has(name))return;
+  modulePreloads.add(name);
+  const link=document.createElement('link');
+  link.rel='modulepreload';
+  link.href=new URL(moduleUrl(name),import.meta.url).href;
+  link.addEventListener('error',()=>{modulePreloads.delete(name);link.remove()},{once:true});
+  document.head.appendChild(link);
+}
+
+function showModuleFailure(route,isCurrent){
+  if(!isCurrent())return;
+  const content=document.querySelector('.content');
+  if(!content)return;
+  content.innerHTML='<div class="notice danger" role="alert"><strong>Não foi possível abrir esta página.</strong><p>Verifique sua conexão e tente novamente.</p><button class="btn primary" type="button" data-crj-route-retry>Tentar novamente</button></div>';
+  content.querySelector('[data-crj-route-retry]')?.addEventListener('click',()=>{
+    content.innerHTML='<div class="card" role="status"><div class="empty">Carregando…</div></div>';
+    loadForRoute(route).catch(err=>console.warn('CRJ lazy-load:',err));
+  },{once:true});
+}
+
 async function loadForRoute(route,{prefetch=false}={}){
   const group=featureSet(route);
   const critical=[...new Set(group.critical||[])];
-  if(!critical.length&&!(group.deferred||[]).length)return;
-
-  // No hover/focus apenas aquece o cache; os módulos se auto-limitam pela rota.
   if(prefetch){
-    await Promise.allSettled(critical.map(loadModule));
+    critical.forEach(prefetchModule);
     return;
   }
-
-  const seq=++routeSeq;
-  const current=routeName();
+  // O hash muda antes de o núcleo terminar a página. A montagem é o sinal
+  // definitivo; importação antecipada executava boot() e perdia a renderização.
+  if(!routeShellReady()||routeName()!==route)return;
+  const seq=++routeSeq,isCurrent=captureRoute();
+  const currentHash=location.hash;
   const results=await Promise.allSettled(critical.map(loadModule));
-  if(seq!==routeSeq||routeName()!==current)return;
-  if(results.some(r=>r.status==='fulfilled'))pulseContent();
+  if(seq!==routeSeq||!isCurrent())return;
+  const owner=MODULE_ROUTES[route]?.module;
+  const ownerIndex=critical.indexOf(owner);
+  if(ownerIndex>=0&&results[ownerIndex].status==='rejected'){
+    showModuleFailure(route,isCurrent);
+    return;
+  }
+  pulseContent();
+  window.dispatchEvent(new CustomEvent('crj:features-ready',{detail:{route,hash:currentHash}}));
 
   const deferred=[...new Set(group.deferred||[])].filter(x=>!critical.includes(x));
   if(deferred.length){
     idle(async()=>{
-      const expected=routeName();
+      if(seq!==routeSeq||!isCurrent())return;
       await Promise.allSettled(deferred.map(loadModule));
-      if(routeName()===expected)pulseContent();
+      if(seq===routeSeq&&isCurrent())pulseContent();
     },700);
   }
 }
@@ -256,13 +284,14 @@ document.addEventListener('click',event=>{
 },true);
 
 window.addEventListener('hashchange',()=>{
+  routeSeq++;
+  scheduleUtilityNav();
+});
+window.addEventListener('crj:route-rendered',()=>{
   scheduleRouteLoad();
   scheduleUtilityNav();
 });
-window.addEventListener('focus',()=>{
-  scheduleUtilityNav();
-  scheduleRouteLoad();
-});
+window.addEventListener('focus',scheduleUtilityNav);
 
 const appRoot=document.querySelector('#app');
 if(appRoot){

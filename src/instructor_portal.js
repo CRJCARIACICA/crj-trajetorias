@@ -1,3 +1,4 @@
+import { captureRoute } from './route_lifecycle.js?v=20261020-navigation1';
 import { apiMode, supabaseClient, listWorkshops } from './api.js?v=20261016-workshop-month1';
 
 const AVANTE={
@@ -6,7 +7,7 @@ const AVANTE={
   address:'R. José Hemetério Andrade, 950, andares 5 e 6, Buritis, Belo Horizonte - MG, CEP 30493-180'
 };
 
-let me=null,observer=null,timer=null,rendering=false,styleReady=false;
+let me=null,observer=null,timer=null,rendering=false,styleReady=false,renderQueued=false;
 let invoiceChannel=null,invoiceChannelUser=null,invoicePoll=null,invoiceTimer=null,invoiceRefreshing=false,invoiceQueued=false;
 const esc=(v='')=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const client=()=>{if(apiMode()!=='live')throw new Error('Banco ainda não conectado.');return supabaseClient()};
@@ -225,14 +226,16 @@ async function bindPortal(host,d){
   }));
 }
 async function renderPortal(force=false){
-  if(!isInstructor()||routeName()!=='oficineiro'||rendering)return;
+  if(!isInstructor()||routeName()!=='oficineiro')return;
+  if(rendering){renderQueued=true;return}
   const host=document.querySelector('.content');if(!host)return;
+  const isCurrent=captureRoute(host);
   const view=params().get('view')==='planejamento'?'planejamento':'painel',key=`${view}|${params().get('month')||''}`;
   if(!force&&host.dataset.instructorPortalKey===key&&host.querySelector('[data-instructor-portal-page]'))return;
   rendering=true;host.dataset.instructorPortalKey=key;host.innerHTML='<div class="card"><div class="empty">Carregando seu espaço…</div></div>';
-  try{const d=await loadPortalData();host.innerHTML=pageShell(view==='planejamento'?planningHtml(d):dashboardHtml(d),view);host.dataset.instructorPortalKey=key;await bindPortal(host,d)}
-  catch(err){host.innerHTML=`<div class="notice danger"><b>Não foi possível carregar a área do oficineiro.</b><br>${esc(err.message||String(err))}<div class="ip-actions"><button class="btn primary" type="button" data-ip-retry>Tentar novamente</button></div></div>`;host.querySelector('[data-ip-retry]')?.addEventListener('click',()=>renderPortal(true))}
-  finally{rendering=false}
+  try{const d=await loadPortalData();if(!isCurrent())return;host.innerHTML=pageShell(view==='planejamento'?planningHtml(d):dashboardHtml(d),view);host.dataset.instructorPortalKey=key;await bindPortal(host,d)}
+  catch(err){if(!isCurrent())return;host.innerHTML=`<div class="notice danger"><b>Não foi possível carregar a área do oficineiro.</b><br>${esc(err.message||String(err))}<div class="ip-actions"><button class="btn primary" type="button" data-ip-retry>Tentar novamente</button></div></div>`;host.querySelector('[data-ip-retry]')?.addEventListener('click',()=>renderPortal(true))}
+  finally{rendering=false;if(renderQueued||(!isCurrent()&&routeName()==='oficineiro')){renderQueued=false;schedule(false)}}
 }
 function patchNav(){
   if(!isInstructor())return;
@@ -281,7 +284,10 @@ function enhanceInbox(){
 }
 async function enforce(){
   if(!me){try{me=await resolveProfile()}catch{return}}
-  if(!isInstructor())return;
+  if(!isInstructor()){
+    if(routeName()==='oficineiro'){const host=document.querySelector('.content');if(host)host.innerHTML='<div class="notice danger">Seu perfil não possui acesso à Área do Oficineiro.</div>'}
+    return;
+  }
   injectStyle();
   if(!routeAllowed()&&document.querySelector('.app-shell')){location.hash='#oficineiro';return}
   patchNav();
@@ -295,3 +301,5 @@ function boot(){
   setInterval(()=>{if(!me)schedule(false)},1400);schedule(true);
 }
 boot();
+
+window.addEventListener('crj:features-ready',event=>{if(['oficineiro','caixa-equipes'].includes(event.detail?.route))schedule(true)});

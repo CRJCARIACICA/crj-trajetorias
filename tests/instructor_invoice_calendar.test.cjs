@@ -5,7 +5,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const {parseHTML}=require('linkedom');
 const root=path.resolve(__dirname,'..');
-const source=fs.readFileSync(path.join(root,'src/instructor_portal.js'),'utf8').replace(/^import .*;\n/,'').replace(/\nboot\(\);\s*$/,'');
+const source=fs.readFileSync(path.join(root,'src/instructor_portal.js'),'utf8').replace(/^import .*;\n/gm,'').replace(/^boot\(\);[ \t]*$/gm,'');
 function setup(){
  const {window}=parseHTML('<html><head></head><body></body></html>');
  const timers=new Map(),handlers=[],intervals=new Map();let seq=0;
