@@ -1,3 +1,4 @@
+import { bindInstructorPlanning, planningEvidenceFooter, planningArchiveHtml, bindPlanningArchive } from './instructor_planning.js?v=20261020-planning1';
 import { captureRoute } from './route_lifecycle.js?v=20261020-navigation1';
 import { apiMode, supabaseClient, listWorkshops } from './api.js?v=20261016-workshop-month1';
 
@@ -149,7 +150,7 @@ function dashboardHtml(d){
   </div>`;
 }
 function lessonHtml(l,w){
-  return `<form class="ip-lesson" data-ip-lesson-form="${l.id}"><div class="ip-lesson-head"><div><b>Aula ${esc(l.lesson_number||'')}</b><div class="ip-lesson-meta">${esc(fmtDate(l.scheduled_date))} · ${esc(time5(l.start_time||w?.start_time))}–${esc(time5(l.end_time||w?.end_time))}</div></div><span class="ip-badge info">Seu bloco</span></div>
+  return `<form class="ip-lesson" id="instructor-lesson-${l.id}" data-no-draft data-ip-lesson-form="${l.id}" data-ip-updated-at="${esc(l.updated_at||'')}"><div class="ip-lesson-head"><div><b>Aula ${esc(l.lesson_number||'')}</b><div class="ip-lesson-meta">${esc(fmtDate(l.scheduled_date))} · ${esc(time5(l.start_time||w?.start_time))}–${esc(time5(l.end_time||w?.end_time))}</div></div><span class="ip-badge info">Seu bloco</span></div>
     <div class="ip-readonly"><div><b>Tema</b>${esc(l.theme||'Não definido')}</div><div><b>Data</b>${esc(fmtDate(l.scheduled_date))}</div><div><b>Horário</b>${esc(time5(l.start_time||w?.start_time))}–${esc(time5(l.end_time||w?.end_time))}</div><div><b>Local</b>${esc(l.location_other||l.location_type||w?.location_other||w?.location_type||'Não definido')}</div></div>
     <div class="field"><label>Objetivo</label><textarea class="input" name="objective" required>${esc(l.objective||'')}</textarea></div>
     <div class="field"><label>Atividades propostas</label><textarea class="input" name="proposed_activities" required>${esc(l.proposed_activities||'')}</textarea></div>
@@ -157,11 +158,11 @@ function lessonHtml(l,w){
     <div class="ip-actions"><button class="btn primary" type="submit">Salvar este bloco</button><span class="ip-muted" data-ip-save-state></span></div></form>`;
 }
 function planningHtml(d){
-  const p=params(),requested=p.get('month'),selected=[d.current,d.next].includes(requested)?requested:d.next,wmap=workshopMap(d),plans=d.plans.filter(x=>String(x.plan_month).slice(0,10)===selected),progress=selected===d.next?nextPlanningProgress(d):null;
+  const p=params(),requested=p.get('month'),selected=[d.current,d.next].includes(requested)?requested:d.next,wmap=workshopMap(d),plans=d.plans.filter(x=>String(x.plan_month).slice(0,10)===selected&&x.status!=='arquivado'),progress=selected===d.next?nextPlanningProgress(d):null;
   return `<div class="ip-hero"><div><h2>Planejamento das minhas oficinas</h2><p>Você pode alterar somente <b>Objetivo</b>, <b>Atividades propostas</b> e <b>Recursos necessários</b>. Datas, horários, locais, temas e demais definições permanecem protegidos.</p></div><div class="ip-actions"><a class="btn" href="#oficineiro">Voltar ao painel</a></div></div>
   <div class="ip-plan-tabs"><a class="${selected===d.current?'active':''}" href="#oficineiro?view=planejamento&month=${d.current}">Competência atual · ${esc(shortMonth(d.current))}</a><a class="${selected===d.next?'active':''}" href="#oficineiro?view=planejamento&month=${d.next}">Próximo mês · ${esc(shortMonth(d.next))}</a></div>
   ${progress?`<div class="ip-card full" style="margin-bottom:14px"><b>Prazo do próximo mês: ${fmtDate(planningDeadlineFor(d))}</b><div class="ip-muted">${progress.total?`${progress.filled} de ${progress.total} campos preenchidos`:'A estrutura do planejamento ainda não foi disponibilizada pela equipe.'}</div><div class="ip-progress"><span style="width:${progress.percent}%"></span></div></div>`:''}
-  ${plans.map(plan=>{const w=wmap.get(plan.workshop_id),rows=lessonsForPlan(d,plan.id);return `<section class="ip-plan"><div class="ip-plan-head"><div><h3>${esc(w?.name||'Oficina')}</h3><div class="ip-muted">Competência ${esc(shortMonth(plan.plan_month))} · ${rows.length} bloco(s) de aula</div></div><span class="ip-badge ${plan.status==='concluido'?'success':'info'}">${esc(String(plan.status||'planejamento').replaceAll('_',' '))}</span></div><div class="ip-lessons">${rows.map(l=>lessonHtml(l,w)).join('')||'<div class="ip-empty">Ainda não há blocos de aula nesta competência.</div>'}</div></section>`}).join('')||'<div class="ip-card full"><div class="ip-empty"><b>Planejamento ainda não criado para esta competência.</b><br>A equipe responsável precisa disponibilizar os blocos antes do seu preenchimento.</div></div>'}`;
+  ${plans.map(plan=>{const w=wmap.get(plan.workshop_id),rows=lessonsForPlan(d,plan.id);return `<section class="ip-plan"><div class="ip-plan-head"><div><h3>${esc(w?.name||'Oficina')}</h3><div class="ip-muted">Competência ${esc(shortMonth(plan.plan_month))} · ${rows.length} bloco(s) de aula</div></div><span class="ip-badge ${plan.status==='concluido'?'success':'info'}">${esc(String(plan.status||'planejamento').replaceAll('_',' '))}</span></div><div class="ip-lessons">${rows.map(l=>lessonHtml(l,w)).join('')||'<div class="ip-empty">Ainda não há blocos de aula nesta competência.</div>'}</div></section>`}).join('')||'<div class="ip-card full"><div class="ip-empty"><b>Planejamento ainda não criado para esta competência.</b><br>A equipe responsável precisa disponibilizar os blocos antes do seu preenchimento.</div></div>'}${planningEvidenceFooter(selected,plans.length>0)}`;
 }
 function pageShell(body,view){return `<div data-instructor-portal-page="${esc(view)}">${body}</div>`}
 async function setAdminField(field,done){
@@ -177,7 +178,7 @@ function bindInvoiceCopy(host,d){
   host.querySelector('[data-ip-copy="hours"]')?.addEventListener('click',async()=>{try{const fresh=await loadPortalData();copyText(calendarHours(fresh).description,'Resumo de horas')}catch(e){toast(e.message,'danger')}});
   host.querySelector('[data-ip-copy="institution"]')?.addEventListener('click',()=>copyText(invoiceInstitutionText(),'Dados da Avante'));
 }
-function invoicePanelActive(){return isInstructor()&&routeName()==='oficineiro'&&params().get('view')!=='planejamento'}
+function invoicePanelActive(){return isInstructor()&&routeName()==='oficineiro'&&!['planejamento','planejamentos'].includes(params().get('view'))}
 function queueInvoiceRefresh(){clearTimeout(invoiceTimer);invoiceTimer=setTimeout(()=>refreshInvoice(),150)}
 async function refreshInvoice(){
   if(!invoicePanelActive()||document.visibilityState==='hidden')return;
@@ -217,23 +218,18 @@ async function syncInvoiceSubscription(){
 async function bindPortal(host,d){
   host.querySelectorAll('[data-ip-admin]').forEach(btn=>btn.addEventListener('click',async()=>{btn.disabled=true;try{await setAdminField(btn.dataset.ipAdmin,btn.dataset.ipDone==='1');toast('Lembrete atualizado');await renderPortal(true)}catch(err){toast(err.message||String(err),'danger');btn.disabled=false}}));
   bindInvoiceCopy(host,d);
-  host.querySelectorAll('[data-ip-lesson-form]').forEach(form=>form.addEventListener('submit',async e=>{
-    e.preventDefault();const btn=form.querySelector('button[type="submit"]'),state=form.querySelector('[data-ip-save-state]'),fd=new FormData(form);btn.disabled=true;btn.textContent='Salvando...';if(state)state.textContent='';
-    try{
-      const {error}=await client().rpc('workshop_instructor_update_lesson',{p_lesson_id:form.dataset.ipLessonForm,p_objective:String(fd.get('objective')||''),p_proposed_activities:String(fd.get('proposed_activities')||''),p_resources:String(fd.get('resources')||'')});
-      if(error)throw error;if(state)state.textContent='Salvo agora';toast('Bloco do planejamento atualizado');setTimeout(()=>renderPortal(true),350);
-    }catch(err){toast(err.message||String(err),'danger');btn.disabled=false;btn.textContent='Salvar este bloco'}
-  }));
+  await bindInstructorPlanning(host,d,me);
+  if(d.evidenceArchive)bindPlanningArchive(host,d.evidenceArchive.rows,()=>renderPortal(true));
 }
 async function renderPortal(force=false){
   if(!isInstructor()||routeName()!=='oficineiro')return;
   if(rendering){renderQueued=true;return}
   const host=document.querySelector('.content');if(!host)return;
   const isCurrent=captureRoute(host);
-  const view=params().get('view')==='planejamento'?'planejamento':'painel',key=`${view}|${params().get('month')||''}`;
+  const requestedView=params().get('view'),view=['planejamento','planejamentos'].includes(requestedView)?requestedView:'painel',key=`${view}|${params().get('month')||''}`;
   if(!force&&host.dataset.instructorPortalKey===key&&host.querySelector('[data-instructor-portal-page]'))return;
   rendering=true;host.dataset.instructorPortalKey=key;host.innerHTML='<div class="card"><div class="empty">Carregando seu espaço…</div></div>';
-  try{const d=await loadPortalData();if(!isCurrent())return;host.innerHTML=pageShell(view==='planejamento'?planningHtml(d):dashboardHtml(d),view);host.dataset.instructorPortalKey=key;await bindPortal(host,d)}
+  try{const d=await loadPortalData();if(!isCurrent())return;if(view==='planejamentos')d.evidenceArchive=await planningArchiveHtml(me,params().get('month')||'');if(!isCurrent())return;const body=view==='planejamento'?planningHtml(d):view==='planejamentos'?d.evidenceArchive.html:dashboardHtml(d);host.innerHTML=pageShell(body,view);host.dataset.instructorPortalKey=key;await bindPortal(host,d)}
   catch(err){if(!isCurrent())return;host.innerHTML=`<div class="notice danger"><b>Não foi possível carregar a área do oficineiro.</b><br>${esc(err.message||String(err))}<div class="ip-actions"><button class="btn primary" type="button" data-ip-retry>Tentar novamente</button></div></div>`;host.querySelector('[data-ip-retry]')?.addEventListener('click',()=>renderPortal(true))}
   finally{rendering=false;if(renderQueued||(!isCurrent()&&routeName()==='oficineiro')){renderQueued=false;schedule(false)}}
 }
@@ -241,14 +237,14 @@ function patchNav(){
   if(!isInstructor())return;
   const nav=document.querySelector('.sidebar .nav');if(!nav)return;
   const r=routeName(),view=params().get('view')||'painel';
-  if(nav.dataset.instructorPortal!=='1'){
-    nav.dataset.instructorPortal='1';
-    nav.innerHTML=`<span class="ip-nav-note">ACESSO DO OFICINEIRO</span><a href="#oficineiro" data-ip-nav="painel"><span>◫</span><span>Meu painel</span></a><a href="#oficineiro?view=planejamento" data-ip-nav="planejamento"><span>◇</span><span>Planejamento</span></a><a href="#caixa-equipes" data-ip-nav="inbox"><span>✉</span><span>Caixa de entrada</span></a><div class="sep"></div><a href="#" data-ip-logout><span>↪</span><span>Sair</span></a>`;
+  if(nav.dataset.instructorPortal!=='2'){
+    nav.dataset.instructorPortal='2';
+    nav.innerHTML=`<span class="ip-nav-note">ACESSO DO OFICINEIRO</span><a href="#oficineiro" data-ip-nav="painel"><span>◫</span><span>Meu painel</span></a><a href="#oficineiro?view=planejamento" data-ip-nav="planejamento"><span>◇</span><span>Preencher planejamento</span></a><a href="#oficineiro?view=planejamentos" data-ip-nav="planejamentos"><span>▤</span><span>Planejamentos</span></a><a href="#caixa-equipes" data-ip-nav="inbox"><span>✉</span><span>Caixa de entrada</span></a><div class="sep"></div><a href="#" data-ip-logout><span>↪</span><span>Sair</span></a>`;
     nav.querySelector('[data-ip-logout]')?.addEventListener('click',async e=>{e.preventDefault();try{await client().auth.signOut()}finally{location.hash='';location.reload()}});
   }
   nav.querySelectorAll('a[data-ip-nav]').forEach(a=>a.classList.remove('active'));
   if(r==='caixa-equipes')nav.querySelector('[data-ip-nav="inbox"]')?.classList.add('active');
-  else nav.querySelector(`[data-ip-nav="${view==='planejamento'?'planejamento':'painel'}"]`)?.classList.add('active');
+  else nav.querySelector(`[data-ip-nav="${['planejamento','planejamentos'].includes(view)?view:'painel'}"]`)?.classList.add('active');
 }
 async function createThread(kind,form,bg){
   const fd=new FormData(form),team=String(fd.get('team')||''),user=String(fd.get('user')||'');

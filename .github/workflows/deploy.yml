@@ -87,6 +87,7 @@ jobs:
             src/workshop_devices.js \
             src/instructor_management.js \
             src/instructor_portal.js \
+            src/instructor_planning.js \
             src/workshop_collaboration.js \
             src/workshop_live_sync.js \
             src/workshop_plan_delete.js \
@@ -134,7 +135,7 @@ jobs:
           # Mantém os módulos centrais atualizados sem recolocar recursos pesados no HTML inicial.
           sed -i -E 's#src/export_route_override\.js\?v=[a-zA-Z0-9_-]+#src/export_route_override.js?v=20261016-1#g' _site/index.html
           sed -i -E 's#src/app\.js\?v=[a-zA-Z0-9_-]+#src/app.js?v=20261020-navigation1#g' _site/index.html
-          sed -i -E 's#src/feature_loader\.js\?v=[^\"]+#src/feature_loader.js?v=20261020-navigation1#g' _site/index.html
+          sed -i -E 's#src/feature_loader\.js\?v=[^\"]+#src/feature_loader.js?v=20261020-planning1#g' _site/index.html
 
           # A normalização de campos inteiros do Formulário Inicial é uma proteção global leve.
           # Ela precisa iniciar antes do app para impedir household_size="" em qualquer rota.
@@ -197,6 +198,7 @@ jobs:
             _site/src/youth_list_fields.js
             _site/src/articulation_request_context.js
             _site/src/workshop_plan_exports.js
+            _site/src/instructor_planning.js
             _site/assets/app.css
           )
 
@@ -221,7 +223,7 @@ jobs:
           grep -q 'meta2_flow_bootstrap' _site/src/config.js
           grep -q 'access_create_booking_v2' _site/src/access_booking_youth.js
           grep -q 'Passagens e ingressos' _site/src/technical_support_requests.js
-          grep -q 'feature_loader.js?v=20261020-navigation1' _site/index.html
+          grep -q 'feature_loader.js?v=20261020-planning1' _site/index.html
           grep -q 'initial_form_numeric_guard.js?v=20261014-3' _site/index.html
           grep -q 'normalizeRestBody' _site/src/initial_form_numeric_guard.js
           grep -q 'technical-checkin.html' _site/src/technical_workspace.js
