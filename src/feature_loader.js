@@ -6,7 +6,7 @@ import { MODULE_ROUTES, routeName, routeShellReady, captureRoute } from './route
 // quando a área correspondente é realmente aberta. Isso evita dezenas de
 // MutationObservers e consultas Supabase fora do menu em uso.
 
-const VERSION='20261020-planning1';
+const VERSION='20261020-educator-sync1';
 const modulePreloads=new Set();
 const moduleAttempts=new Map();
 const moduleCache=new Map();
@@ -35,15 +35,15 @@ const ROUTE_FEATURES={
   },
   formularios:{critical:['form_access'],deferred:[]},
   oficinas:{
-    critical:['workshop_devices','instructor_management','workshop_collaboration','workshop_live_sync','workshop_plan_delete','workshop_plan_exports','cfdh_transversal_integration'],
+    critical:['workshop_devices','instructor_management','workshop_collaboration','workshop_live_sync','educator_instructor_plan_sync','workshop_plan_delete','workshop_plan_exports','cfdh_transversal_integration'],
     deferred:['articulation_workspace','articulation_request_context','joint_actions','document_header_standard','evidence_exports','attendance_export_fix']
   },
   oficina:{
-    critical:['workshop_devices','instructor_management','workshop_collaboration','workshop_live_sync','workshop_plan_delete','workshop_plan_exports','cfdh_transversal_integration'],
+    critical:['workshop_devices','instructor_management','workshop_collaboration','workshop_live_sync','educator_instructor_plan_sync','workshop_plan_delete','workshop_plan_exports','cfdh_transversal_integration'],
     deferred:['articulation_workspace','articulation_request_context','joint_actions','document_header_standard','evidence_exports','attendance_export_fix']
   },
   workshops:{
-    critical:['workshop_devices','instructor_management','workshop_collaboration','workshop_live_sync','workshop_plan_delete','workshop_plan_exports','cfdh_transversal_integration'],
+    critical:['workshop_devices','instructor_management','workshop_collaboration','workshop_live_sync','educator_instructor_plan_sync','workshop_plan_delete','workshop_plan_exports','cfdh_transversal_integration'],
     deferred:['articulation_workspace','articulation_request_context','joint_actions','document_header_standard','evidence_exports','attendance_export_fix']
   },
   educador:{
