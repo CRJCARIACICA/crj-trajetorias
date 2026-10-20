@@ -10,7 +10,12 @@ function sync(){
   const r=route();
   if(r==='controlador-acesso')load('access_booking_youth');
   if(r==='equipe-tecnica')load('technical_support_requests');
+  else if(document.body.dataset.twTab==='support')delete document.body.dataset.twTab;
 }
+document.addEventListener('click',event=>{
+  const tab=event.target?.closest?.('.tw-tab');
+  if(tab&&!tab.matches('[data-tsr-tab]')&&document.body.dataset.twTab==='support')delete document.body.dataset.twTab;
+},true);
 window.addEventListener('hashchange',sync);
 window.addEventListener('focus',sync);
 queueMicrotask(sync);
