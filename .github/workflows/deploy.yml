@@ -58,6 +58,9 @@ jobs:
             src/feature_loader.js \
             src/management_workspace.js \
             src/meta1_point_completion.js \
+            src/meta2_flow_bootstrap.js \
+            src/access_booking_youth.js \
+            src/technical_support_requests.js \
             src/technical_service_flow.js \
             src/technical_team_enhancements.js \
             src/technical_program_actions.js \
@@ -163,6 +166,9 @@ jobs:
             _site/src/feature_loader.js
             _site/src/management_workspace.js
             _site/src/meta1_point_completion.js
+            _site/src/meta2_flow_bootstrap.js
+            _site/src/access_booking_youth.js
+            _site/src/technical_support_requests.js
             _site/src/initial_form_numeric_guard.js
             _site/src/technical_program_actions.js
             _site/src/technical_workspace.js
@@ -201,6 +207,9 @@ jobs:
           grep -q 'youth_list_fields' _site/src/feature_loader.js
           grep -q 'articulation_request_context' _site/src/feature_loader.js
           grep -q 'workshop_plan_exports' _site/src/feature_loader.js
+          grep -q 'meta2_flow_bootstrap' _site/src/config.js
+          grep -q 'access_create_booking_v2' _site/src/access_booking_youth.js
+          grep -q 'Passagens e ingressos' _site/src/technical_support_requests.js
           grep -q 'feature_loader.js?v=20261016-hours1' _site/index.html
           grep -q 'initial_form_numeric_guard.js?v=20261014-3' _site/index.html
           grep -q 'normalizeRestBody' _site/src/initial_form_numeric_guard.js
@@ -213,6 +222,8 @@ jobs:
           grep -q 'api.js?v=20261016-hours1' _site/src/articulation_request_context.js
           grep -q 'api.js?v=20261016-hours1' _site/src/workshop_plan_exports.js
           grep -q 'api.js?v=20261016-hours1' _site/src/initial_form_numeric_guard.js
+          grep -q 'api.js?v=20261016-hours1' _site/src/access_booking_youth.js
+          grep -q 'api.js?v=20261016-hours1' _site/src/technical_support_requests.js
           grep -q 'src/app.js?v=20261016-hours1' _site/index.html
           grep -q 'validateBinaryResponse' _site/src/export_route_override.js
           grep -q 'methodological_action' _site/src/articulation_request_context.js
