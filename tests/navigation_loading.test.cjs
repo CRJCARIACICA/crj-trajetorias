@@ -292,3 +292,19 @@ test('JavaScript alterado e app montado têm sintaxe válida de módulo ES',()=>
     assert.equal(result.status,0,name+'\n'+result.stderr);
   }
 });
+
+test('observação da própria tela de carregamento do oficineiro não força consultas repetidas',async()=>{
+  const s=environment('#oficineiro'),data=deferred(),scheduled=[];let requests=0;
+  const source=stripImports(read('src/instructor_portal.js')).replace(/^boot\(\);[ \t]*$/gm,'');
+  s.eval(source);
+  s.context.fixtureData=()=>{requests++;return data.promise};
+  s.context.recordSchedule=force=>scheduled.push(force);
+  s.eval("me={id:'test',role:'oficineiro',active:true};loadPortalData=()=>fixtureData();pageShell=()=>'<div data-instructor-portal-page>Área pronta</div>';dashboardHtml=()=>'';bindPortal=async()=>{};schedule=recordSchedule;");
+  const first=s.eval('renderPortal()');
+  await s.eval('renderPortal()');
+  data.resolve({});await first;
+  assert.deepEqual(scheduled,[false]);
+  await s.eval('renderPortal()');
+  assert.equal(requests,1);
+  assert.match(s.content().textContent,/Área pronta/);
+});

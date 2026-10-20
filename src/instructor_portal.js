@@ -235,7 +235,7 @@ async function renderPortal(force=false){
   rendering=true;host.dataset.instructorPortalKey=key;host.innerHTML='<div class="card"><div class="empty">Carregando seu espaço…</div></div>';
   try{const d=await loadPortalData();if(!isCurrent())return;host.innerHTML=pageShell(view==='planejamento'?planningHtml(d):dashboardHtml(d),view);host.dataset.instructorPortalKey=key;await bindPortal(host,d)}
   catch(err){if(!isCurrent())return;host.innerHTML=`<div class="notice danger"><b>Não foi possível carregar a área do oficineiro.</b><br>${esc(err.message||String(err))}<div class="ip-actions"><button class="btn primary" type="button" data-ip-retry>Tentar novamente</button></div></div>`;host.querySelector('[data-ip-retry]')?.addEventListener('click',()=>renderPortal(true))}
-  finally{rendering=false;if(renderQueued||(!isCurrent()&&routeName()==='oficineiro')){renderQueued=false;schedule(true)}}
+  finally{rendering=false;if(renderQueued||(!isCurrent()&&routeName()==='oficineiro')){renderQueued=false;schedule(false)}}
 }
 function patchNav(){
   if(!isInstructor())return;
