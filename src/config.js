@@ -1,4 +1,5 @@
 import './attendance_export_fix.js?v=20261008-4';
+import './meta2_flow_bootstrap.js?v=20261019-meta2-flow1';
 
 export const CONFIG = {
   appName: 'CRJ Trajetórias',
