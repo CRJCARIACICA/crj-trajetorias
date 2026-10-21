@@ -6,13 +6,15 @@ const LABELS={objective:'Objetivo',proposed_activities:'Atividades propostas',re
 const BUCKET='instructor-planning-evidence';
 const DRAFT_PREFIX='crj_instructor_plan_v1:';
 const draftTimers=new Map(),draftQueues=new Map(),saving=new Map();
-const esc=(v='')=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const esc=(v='')=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
 const client=()=>{if(apiMode()!=='live')throw new Error('Banco ainda não conectado.');return supabaseClient()};
 const fields=form=>Object.fromEntries(FIELDS.map(k=>[k,String(form.querySelector('[name="'+k+'"]')?.value||'')]));
 const normalized=value=>Object.fromEntries(FIELDS.map(k=>[k,String(value?.[k]||'').trim()]));
 const same=(a,b)=>FIELDS.every(k=>normalized(a)[k]===normalized(b)[k]);
+const contentStamp=row=>row?.instructor_content_updated_at||row?.updated_at||null;
 const draftKey=(user,id)=>'instructor-planning:'+user.id+':'+id;
 const localKey=(user,id)=>DRAFT_PREFIX+user.id+':'+id;
+const evidenceKey=(user,month,planId)=>DRAFT_PREFIX+'request:'+user.id+':'+month+':'+planId;
 function localRead(user,id){
   try{const d=JSON.parse(localStorage.getItem(localKey(user,id))||'null');
     return d?.lesson_id===id&&d?.user_id===user.id&&d?.fields&&Date.now()-Date.parse(d.changed_at)<30*86400000?d:null;
@@ -30,7 +32,7 @@ function stateText(form,message,type=''){
   const node=form.querySelector('[data-ip-save-state]');if(node){node.textContent=message;node.className='ip-muted '+type}
 }
 function snapshot(form,user){
-  return {version:1,user_id:user.id,lesson_id:form.dataset.ipLessonForm,
+  return {version:2,user_id:user.id,lesson_id:form.dataset.ipLessonForm,
     fields:fields(form),base_updated_at:form.dataset.ipUpdatedAt||null,changed_at:new Date().toISOString()};
 }
 function remember(form,user,{remote=true}={}){
@@ -57,7 +59,7 @@ function restore(form,user,payload){
   stateText(form,'Rascunho recuperado. Revise e salve este bloco para confirmar no sistema.');
 }
 async function showSavedVersion(form,user){
-  const {data,error}=await client().from('workshop_plan_lessons').select('id,objective,proposed_activities,resources,updated_at').eq('id',form.dataset.ipLessonForm).single();
+  const {data,error}=await client().from('workshop_plan_lessons').select('id,objective,proposed_activities,resources,updated_at,instructor_content_updated_at').eq('id',form.dataset.ipLessonForm).single();
   if(error)throw error;if(!form.isConnected)return;
   form.querySelector('[data-ip-server-version]')?.remove();
   const box=document.createElement('div');box.dataset.ipServerVersion='1';box.className='notice info';
@@ -65,14 +67,14 @@ async function showSavedVersion(form,user){
     '<p>Seu texto continua nos campos acima. Compare as versões antes de salvar.</p><button class="btn secondary" type="button" data-ip-keep-draft>Atualizar referência e manter meu texto</button>';
   form.appendChild(box);
   box.querySelector('[data-ip-keep-draft]').onclick=()=>{
-    form.dataset.ipUpdatedAt=data.updated_at;form._ipSavedFields=normalized(data);
+    form.dataset.ipUpdatedAt=contentStamp(data)||'';form._ipSavedFields=normalized(data);
     remember(form,user);box.remove();stateText(form,'Referência atualizada. Seu texto foi mantido; revise e clique em Salvar este bloco.');
   };
 }
 export async function saveInstructorBlock(form,user,{requireComplete=false}={}){
   if(saving.has(form)){await saving.get(form);return saveInstructorBlock(form,user,{requireComplete})}
   const submitted=fields(form),id=form.dataset.ipLessonForm,key=draftKey(user,id);
-  if(requireComplete&&FIELDS.some(k=>!submitted[k].trim()))throw new Error('Preencha os três campos de todos os blocos antes de gerar a evidência.');
+  if(requireComplete&&FIELDS.some(k=>!submitted[k].trim()))throw new Error('Preencha os três campos deste bloco antes de continuar.');
   const saved=form._ipSavedFields||{};
   if(form._ipSavedLesson&&same(submitted,saved))return form._ipSavedLesson;
   remember(form,user,{remote:false});clearTimeout(draftTimers.get(key));draftTimers.delete(key);
@@ -87,8 +89,8 @@ export async function saveInstructorBlock(form,user,{requireComplete=false}={}){
       });
       if(error)throw error;
       const lesson=data?.lesson;
-      if(data?.ok!==true||lesson?.id!==id||!lesson.updated_at||!same(lesson,submitted))throw new Error('O banco não confirmou todas as descrições. Seu texto continua protegido como rascunho.');
-      form.dataset.ipUpdatedAt=lesson.updated_at;form._ipSavedFields=normalized(lesson);form._ipSavedLesson=lesson;
+      if(data?.ok!==true||lesson?.id!==id||!contentStamp(lesson)||!same(lesson,submitted))throw new Error('O banco não confirmou todas as descrições. Seu texto continua protegido como rascunho.');
+      form.dataset.ipUpdatedAt=contentStamp(lesson);form._ipSavedFields=normalized(lesson);form._ipSavedLesson=lesson;
       if(same(fields(form),submitted)){
         form.dataset.ipDirty='0';localClear(user,id);clearTimeout(draftTimers.get(key));draftTimers.delete(key);
         await remoteQueue(key,()=>deleteUiDraft(key)).catch(()=>{});
@@ -109,7 +111,13 @@ export async function saveInstructorBlock(form,user,{requireComplete=false}={}){
   saving.set(form,task);
   try{return await task}finally{if(saving.get(form)===task)saving.delete(form)}
 }
-async function requestEvidence(month,requestId){
+async function requestEvidence(month,requestId,planId=null){
+  if(planId){
+    const prepared=await client().rpc('workshop_create_instructor_evidence_for_plan',{
+      p_reference_month:month,p_plan_id:planId,p_request_id:requestId
+    });
+    if(prepared.error)throw prepared.error;
+  }
   const {data:{session}}=await client().auth.getSession();
   if(!session)throw new Error('Sessão expirada. Entre novamente para gerar a evidência.');
   const response=await fetch(CONFIG.supabaseUrl+'/functions/v1/crj-instructor-planning-evidence',{
@@ -143,44 +151,48 @@ function bindDownloads(host,evidences){
   });
 }
 function progress(host){
-  const forms=[...host.querySelectorAll('[data-ip-lesson-form]')],filled=forms.filter(f=>FIELDS.every(k=>fields(f)[k].trim())).length;
-  const count=host.querySelector('[data-ip-planning-progress]');if(count)count.textContent=filled+' de '+forms.length+' blocos completos.';
-  const button=host.querySelector('[data-ip-generate-evidence]');if(button&&button.dataset.busy!=='1')button.disabled=!forms.length||filled!==forms.length;
+  host.querySelectorAll('[data-ip-evidence-footer]').forEach(footer=>{
+    const plan=footer.closest('[data-ip-plan-id]'),forms=[...(plan?.querySelectorAll('[data-ip-lesson-form]')||[])];
+    const filled=forms.filter(f=>FIELDS.every(k=>fields(f)[k].trim())).length;
+    const count=footer.querySelector('[data-ip-planning-progress]');if(count)count.textContent=filled+' de '+forms.length+' blocos completos nesta oficina.';
+    const button=footer.querySelector('[data-ip-generate-evidence]');if(button&&button.dataset.busy!=='1')button.disabled=!forms.length||filled!==forms.length;
+  });
 }
-export function planningEvidenceFooter(month,hasPlans){
-  if(!hasPlans)return '';
-  return '<section class="ip-plan" data-ip-evidence-footer><div class="ip-lessons"><h3>Concluir preenchimento e gerar evidência</h3>'+
-    '<p>Preencha Objetivo, Atividades propostas e Recursos necessários em todos os blocos. Ao gerar a evidência, o sistema salva e confere os textos e guarda uma versão em PDF e DOCX na área Planejamentos.</p>'+
+export function planningEvidenceFooter(month,planId,workshopName,hasLessons){
+  if(!hasLessons)return '';
+  return '<div class="ip-lessons" data-ip-evidence-footer><h3>Concluir e gerar evidência · '+esc(workshopName||'Oficina')+'</h3>'+
+    '<p>A evidência considera somente os blocos desta oficina. Outras oficinas incompletas na mesma competência não impedem esta geração.</p>'+
     '<p class="ip-muted" data-ip-planning-progress></p><div class="ip-actions">'+
-    '<button class="btn primary" type="button" data-ip-generate-evidence data-month="'+esc(month)+'" disabled>Gerar evidência</button>'+
-    '<a class="btn secondary" href="#oficineiro?view=planejamentos">Ver Planejamentos</a></div><div aria-live="polite" data-ip-evidence-state></div></div></section>';
+    '<button class="btn primary" type="button" data-ip-generate-evidence data-month="'+esc(month)+'" data-plan-id="'+esc(planId)+'" disabled>Gerar evidência desta oficina</button>'+
+    '<a class="btn secondary" href="#oficineiro?view=planejamentos">Ver Planejamentos</a></div><div aria-live="polite" data-ip-evidence-state></div></div>';
 }
 async function generateEvidence(host,user,button){
   if(button.dataset.busy==='1')return;
-  const forms=[...host.querySelectorAll('[data-ip-lesson-form]')],status=host.querySelector('[data-ip-evidence-state]');
+  const plan=button.closest('[data-ip-plan-id]'),footer=button.closest('[data-ip-evidence-footer]');
+  const forms=[...(plan?.querySelectorAll('[data-ip-lesson-form]')||[])],status=footer?.querySelector('[data-ip-evidence-state]');
   const invalid=forms.find(f=>FIELDS.some(k=>!fields(f)[k].trim()));
-  if(!forms.length||invalid){invalid?.querySelector('textarea:invalid')?.focus();throw new Error('Complete todos os blocos antes de gerar a evidência.')}
+  if(!forms.length||invalid){invalid?.querySelector('textarea:invalid')?.focus();throw new Error('Complete todos os blocos desta oficina antes de gerar a evidência.')}
   button.dataset.busy='1';button.disabled=true;const label=button.textContent;
   const inputs=forms.flatMap(f=>[...f.querySelectorAll('textarea,button[type="submit"]')]).map(node=>({node,disabled:node.disabled}));
   inputs.forEach(({node})=>node.disabled=true);
-  const month=button.dataset.month,nonceKey=DRAFT_PREFIX+'request:'+user.id+':'+month;
+  const month=button.dataset.month,planId=button.dataset.planId,nonceKey=evidenceKey(user,month,planId);
   let requestId;try{requestId=localStorage.getItem(nonceKey)}catch{}
   if(!requestId){requestId=crypto.randomUUID();try{localStorage.setItem(nonceKey,requestId)}catch{}}
   try{
     if(status)status.className='notice info';
     for(let i=0;i<forms.length;i++){
-      if(status)status.textContent='Salvando e conferindo bloco '+(i+1)+' de '+forms.length+'…';
+      if(status)status.textContent='Salvando e conferindo bloco '+(i+1)+' de '+forms.length+' desta oficina…';
       await saveInstructorBlock(forms[i],user,{requireComplete:true});
     }
     button.textContent='Gerando arquivos…';
-    if(status)status.textContent='Blocos conferidos. Gerando e armazenando PDF e DOCX…';
-    let evidence=await requestEvidence(month,requestId);
-    for(let n=0;evidence.status==='generating'&&n<15;n++){await new Promise(r=>setTimeout(r,1000));evidence=await requestEvidence(month,requestId)}
+    if(status)status.textContent='Blocos desta oficina conferidos. Gerando e armazenando PDF e DOCX…';
+    let evidence=await requestEvidence(month,requestId,planId);
+    for(let n=0;evidence.status==='generating'&&n<15;n++){await new Promise(r=>setTimeout(r,1000));evidence=await requestEvidence(month,requestId,planId)}
     if(evidence.status!=='ready')throw new Error('A evidência continua em geração. Consulte a área Planejamentos para acompanhar e baixar os arquivos.');
     try{localStorage.removeItem(nonceKey)}catch{}
     if(status&&status.isConnected){
       status.className='';
-      status.innerHTML='<div class="notice success"><b>Evidência armazenada · versão '+evidence.version+'</b><p>Os arquivos estão disponíveis em Planejamentos.</p><div class="ip-actions">'+evidenceButtons(evidence)+'</div></div>';
+      status.innerHTML='<div class="notice success"><b>Evidência da oficina armazenada · versão '+evidence.version+'</b><p>Os arquivos estão disponíveis em Planejamentos.</p><div class="ip-actions">'+evidenceButtons(evidence)+'</div></div>';
       bindDownloads(status,[evidence]);
     }
   }catch(error){
@@ -193,24 +205,26 @@ async function generateEvidence(host,user,button){
 }
 export async function bindInstructorPlanning(host,data,user){
   const forms=[...host.querySelectorAll('[data-ip-lesson-form]')],lessons=new Map(data.lessons.map(x=>[x.id,x]));
-  if(!forms.length)return;
   for(const form of forms){
     const row=lessons.get(form.dataset.ipLessonForm);if(!row)continue;
     form._ipSavedFields=normalized(row);form._ipSavedLesson=row;
-    form.dataset.ipUpdatedAt=row.updated_at;form.dataset.ipEditSeq='0';form.dataset.ipDirty='0';
+    form.dataset.ipUpdatedAt=contentStamp(row)||'';form.dataset.ipEditSeq='0';form.dataset.ipDirty='0';
     const local=localRead(user,row.id);if(local)restore(form,user,local);
     form.addEventListener('input',()=>{
       form.dataset.ipEditSeq=String(Number(form.dataset.ipEditSeq||0)+1);remember(form,user);progress(host);
-      const month=host.querySelector('[data-ip-generate-evidence]')?.dataset.month;
-      if(month&&host.querySelector('[data-ip-generate-evidence]')?.dataset.busy!=='1'){try{localStorage.removeItem(DRAFT_PREFIX+'request:'+user.id+':'+month)}catch{}}
+      const plan=form.closest('[data-ip-plan-id]'),button=plan?.querySelector('[data-ip-generate-evidence]');
+      const month=button?.dataset.month,planId=button?.dataset.planId;
+      if(month&&planId&&button?.dataset.busy!=='1'){try{localStorage.removeItem(evidenceKey(user,month,planId))}catch{}}
     });
     form.addEventListener('submit',event=>{
       event.preventDefault();saveInstructorBlock(form,user,{requireComplete:true}).then(()=>progress(host)).catch(()=>{});
     });
   }
-  const button=host.querySelector('[data-ip-generate-evidence]');
-  button?.addEventListener('click',()=>generateEvidence(host,user,button).catch(()=>{}));
+  host.querySelectorAll('[data-ip-generate-evidence]').forEach(button=>{
+    button.addEventListener('click',()=>generateEvidence(host,user,button).catch(()=>{}));
+  });
   progress(host);
+  if(!forms.length)return;
   try{
     const keys=forms.map(f=>draftKey(user,f.dataset.ipLessonForm));
     const q=await client().from('ui_drafts').select('draft_key,payload,updated_at,expires_at').eq('user_id',user.id).in('draft_key',keys);
@@ -226,15 +240,16 @@ export async function bindInstructorPlanning(host,data,user){
   }catch(error){console.warn('Rascunhos do planejamento: sincronização indisponível',error?.message||String(error))}
 }
 export async function planningArchiveHtml(user,month=''){
-  let query=client().from('workshop_instructor_evidences').select('id,request_id,reference_month,version,status,file_name,pdf_path,docx_path,created_at,pdf_bytes,docx_bytes').eq('instructor_user_id',user.id).order('reference_month',{ascending:false}).order('version',{ascending:false}).limit(100);
+  let query=client().from('workshop_instructor_evidences').select('id,request_id,plan_id,reference_month,version,status,file_name,pdf_path,docx_path,created_at,pdf_bytes,docx_bytes,snapshot').eq('instructor_user_id',user.id).order('reference_month',{ascending:false}).order('created_at',{ascending:false}).limit(100);
   if(/^\d{4}-\d{2}-01$/.test(month))query=query.eq('reference_month',month);
   const q=await query;if(q.error)throw q.error;
   const rows=q.data||[],statusLabel={pending:'Aguardando geração',generating:'Gerando arquivos',failed:'Geração não concluída',ready:'Arquivos disponíveis'};
-  const body='<div class="ip-hero"><div><h2>Planejamentos</h2><p>Evidências de preenchimento guardadas por competência e versão. Cada arquivo preserva o conteúdo confirmado no momento da geração.</p></div><div class="ip-actions"><a class="btn primary" href="#oficineiro?view=planejamento">Preencher planejamento</a><button class="btn secondary" type="button" data-ip-archive-refresh>Atualizar lista</button></div></div>'+
+  const evidenceName=e=>{const names=(e.snapshot?.plans||[]).map(p=>p.workshop_name).filter(Boolean);return names.length?names.join(', '):'Planejamento mensal'};
+  const body='<div class="ip-hero"><div><h2>Planejamentos</h2><p>Evidências de preenchimento guardadas por oficina, competência e versão. Cada arquivo preserva o conteúdo confirmado no momento da geração.</p></div><div class="ip-actions"><a class="btn primary" href="#oficineiro?view=planejamento">Preencher planejamento</a><button class="btn secondary" type="button" data-ip-archive-refresh>Atualizar lista</button></div></div>'+
     '<div class="field"><label>Filtrar por competência</label><input class="input" type="month" data-ip-archive-month value="'+esc(month.slice(0,7))+'"></div>'+
-    (rows.map(e=>'<section class="ip-plan"><div class="ip-lessons"><h3>'+esc(e.reference_month.slice(0,7).split('-').reverse().join('/'))+' · versão '+e.version+'</h3><p class="ip-muted">Gerada em '+esc(new Date(e.created_at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}))+' · '+statusLabel[e.status]+'</p><div class="ip-actions">'+
+    (rows.map(e=>'<section class="ip-plan"><div class="ip-lessons"><h3>'+esc(evidenceName(e))+' · '+esc(e.reference_month.slice(0,7).split('-').reverse().join('/'))+' · versão '+e.version+'</h3><p class="ip-muted">Gerada em '+esc(new Date(e.created_at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}))+' · '+statusLabel[e.status]+'</p><div class="ip-actions">'+
       (e.status==='ready'?evidenceButtons(e):'<button class="btn secondary" type="button" data-ip-evidence-retry="'+e.id+'">Tentar novamente / conferir geração</button>')+
-      '</div><div data-ip-archive-status="'+e.id+'" aria-live="polite"></div></div></section>').join('')||'<div class="ip-empty"><b>Nenhuma evidência nesta consulta.</b><p>Após preencher todos os blocos, clique em Gerar evidência para guardar os arquivos aqui.</p></div>');
+      '</div><div data-ip-archive-status="'+e.id+'" aria-live="polite"></div></div></section>').join('')||'<div class="ip-empty"><b>Nenhuma evidência nesta consulta.</b><p>Após preencher todos os blocos de uma oficina, clique em Gerar evidência desta oficina para guardar os arquivos aqui.</p></div>');
   return {html:body,rows};
 }
 export function bindPlanningArchive(host,rows,refresh){
