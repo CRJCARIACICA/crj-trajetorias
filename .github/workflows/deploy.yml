@@ -135,7 +135,7 @@ jobs:
           # Mantém os módulos centrais atualizados sem recolocar recursos pesados no HTML inicial.
           sed -i -E 's#src/export_route_override\.js\?v=[a-zA-Z0-9_-]+#src/export_route_override.js?v=20261016-1#g' _site/index.html
           sed -i -E 's#src/app\.js\?v=[a-zA-Z0-9_-]+#src/app.js?v=20261020-navigation1#g' _site/index.html
-          sed -i -E 's#src/feature_loader\.js\?v=[^\"]+#src/feature_loader.js?v=20261020-educator-sync1#g' _site/index.html
+          sed -i -E 's#src/feature_loader\.js\?v=[^\"]+#src/feature_loader.js?v=20261021-cfdh-direct-lesson1#g' _site/index.html
 
           # A normalização de campos inteiros do Formulário Inicial é uma proteção global leve.
           # Ela precisa iniciar antes do app para impedir household_size="" em qualquer rota.
@@ -223,7 +223,7 @@ jobs:
           grep -q 'meta2_flow_bootstrap' _site/src/config.js
           grep -q 'access_create_booking_v2' _site/src/access_booking_youth.js
           grep -q 'Passagens e ingressos' _site/src/technical_support_requests.js
-          grep -q 'feature_loader.js?v=20261020-educator-sync1' _site/index.html
+          grep -q 'feature_loader.js?v=20261021-cfdh-direct-lesson1' _site/index.html
           grep -q 'initial_form_numeric_guard.js?v=20261014-3' _site/index.html
           grep -q 'normalizeRestBody' _site/src/initial_form_numeric_guard.js
           grep -q 'technical-checkin.html' _site/src/technical_workspace.js
@@ -243,9 +243,9 @@ jobs:
           grep -q 'Imprimir evidência' _site/src/articulation_request_context.js
           grep -q 'crj-export-document-safe' _site/src/workshop_plan_exports.js
           grep -q 'Baixar planejamento do mês' _site/src/workshop_plan_exports.js
-          grep -q 'eligiblePlanLessons' _site/src/cfdh_transversal_integration.js
-          grep -q 'Esta aula possui CFDH transversal' _site/src/cfdh_transversal_integration.js
-          grep -q 'Vinculado ao planejamento da oficina' _site/src/cfdh_transversal_integration.js
+          grep -q 'availablePlanLessons' _site/src/cfdh_transversal_integration.js
+          grep -q 'Aula da oficina para receber o CFDH' _site/src/cfdh_transversal_integration.js
+          grep -q 'Pendente de elaboração do CFDH Compartilhado Transversal' _site/src/cfdh_transversal_integration.js
           grep -q 'CFDH_TRANSVERSAL_ALLOW_OVERLAP' _site/src/api.js
 
           # Nenhum JS publicado pode apontar para uma versão antiga de api.js.
