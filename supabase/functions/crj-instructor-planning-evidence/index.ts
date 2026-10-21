@@ -26,8 +26,11 @@ export function createEvidenceHandler({clientFactory=createClient,env=name=>Deno
       const profileQ=await userClient.from("profiles").select("id,role,active").eq("id",actor).single();
       if(profileQ.error||profileQ.data?.active!==true||profileQ.data?.role!=="oficineiro")return json({error:"Seu perfil não pode gerar esta evidência."},403);
       const body=await req.json();
-      if(!UUID.test(String(body.request_id||""))||!/^\d{4}-(0[1-9]|1[0-2])-01$/.test(String(body.reference_month||"")))return json({error:"Competência ou solicitação inválida."},400);
-      const createQ=await userClient.rpc("workshop_create_instructor_evidence",{p_reference_month:body.reference_month,p_request_id:body.request_id});
+      const planId=String(body.plan_id||"");
+      if(!UUID.test(String(body.request_id||""))||!/^\d{4}-(0[1-9]|1[0-2])-01$/.test(String(body.reference_month||""))||(planId&&!UUID.test(planId)))return json({error:"Competência, planejamento ou solicitação inválida."},400);
+      const createQ=planId
+        ?await userClient.rpc("workshop_create_instructor_evidence_for_plan",{p_reference_month:body.reference_month,p_plan_id:planId,p_request_id:body.request_id})
+        :await userClient.rpc("workshop_create_instructor_evidence",{p_reference_month:body.reference_month,p_request_id:body.request_id});
       if(createQ.error)return json({error:createQ.error.message||"Não foi possível confirmar os blocos."},422);
       evidenceId=createQ.data?.id;
       if(!UUID.test(String(evidenceId||"")))throw new Error("O banco não confirmou a evidência.");
