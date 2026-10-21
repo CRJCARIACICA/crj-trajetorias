@@ -6,7 +6,7 @@ const LABELS={objective:'Objetivo',proposed_activities:'Atividades propostas',re
 const BUCKET='instructor-planning-evidence';
 const DRAFT_PREFIX='crj_instructor_plan_v1:';
 const draftTimers=new Map(),draftQueues=new Map(),saving=new Map();
-const esc=(v='')=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+const esc=(v='')=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const client=()=>{if(apiMode()!=='live')throw new Error('Banco ainda não conectado.');return supabaseClient()};
 const fields=form=>Object.fromEntries(FIELDS.map(k=>[k,String(form.querySelector('[name="'+k+'"]')?.value||'')]));
 const normalized=value=>Object.fromEntries(FIELDS.map(k=>[k,String(value?.[k]||'').trim()]));
@@ -150,6 +150,13 @@ function bindDownloads(host,evidences){
     try{await downloadPlanningEvidence(byId.get(id),format)}catch(error){alert(error.message||String(error))}finally{b.disabled=false;b.textContent=old}
   });
 }
+function evidenceFooterHtml(month,planId,workshopName){
+  return '<div class="ip-lessons" data-ip-evidence-footer><h3>Concluir e gerar evidência · '+esc(workshopName||'Oficina')+'</h3>'+
+    '<p>A evidência considera somente os blocos desta oficina. Outras oficinas incompletas na mesma competência não impedem esta geração.</p>'+
+    '<p class="ip-muted" data-ip-planning-progress></p><div class="ip-actions">'+
+    '<button class="btn primary" type="button" data-ip-generate-evidence data-month="'+esc(month)+'" data-plan-id="'+esc(planId)+'" disabled>Gerar evidência desta oficina</button>'+
+    '<a class="btn secondary" href="#oficineiro?view=planejamentos">Ver Planejamentos</a></div><div aria-live="polite" data-ip-evidence-state></div></div>';
+}
 function progress(host){
   host.querySelectorAll('[data-ip-evidence-footer]').forEach(footer=>{
     const plan=footer.closest('[data-ip-plan-id]'),forms=[...(plan?.querySelectorAll('[data-ip-lesson-form]')||[])];
@@ -158,13 +165,9 @@ function progress(host){
     const button=footer.querySelector('[data-ip-generate-evidence]');if(button&&button.dataset.busy!=='1')button.disabled=!forms.length||filled!==forms.length;
   });
 }
-export function planningEvidenceFooter(month,planId,workshopName,hasLessons){
-  if(!hasLessons)return '';
-  return '<div class="ip-lessons" data-ip-evidence-footer><h3>Concluir e gerar evidência · '+esc(workshopName||'Oficina')+'</h3>'+
-    '<p>A evidência considera somente os blocos desta oficina. Outras oficinas incompletas na mesma competência não impedem esta geração.</p>'+
-    '<p class="ip-muted" data-ip-planning-progress></p><div class="ip-actions">'+
-    '<button class="btn primary" type="button" data-ip-generate-evidence data-month="'+esc(month)+'" data-plan-id="'+esc(planId)+'" disabled>Gerar evidência desta oficina</button>'+
-    '<a class="btn secondary" href="#oficineiro?view=planejamentos">Ver Planejamentos</a></div><div aria-live="polite" data-ip-evidence-state></div></div>';
+export function planningEvidenceFooter(month,hasPlans){
+  if(!hasPlans)return '';
+  return '<div data-ip-evidence-root data-month="'+esc(month)+'"></div>';
 }
 async function generateEvidence(host,user,button){
   if(button.dataset.busy==='1')return;
@@ -204,7 +207,19 @@ async function generateEvidence(host,user,button){
   }
 }
 export async function bindInstructorPlanning(host,data,user){
-  const forms=[...host.querySelectorAll('[data-ip-lesson-form]')],lessons=new Map(data.lessons.map(x=>[x.id,x]));
+  const lessons=new Map(data.lessons.map(x=>[x.id,x]));
+  const evidenceRoot=host.querySelector('[data-ip-evidence-root]'),month=evidenceRoot?.dataset.month;
+  if(evidenceRoot&&month){
+    host.querySelectorAll('.ip-plan').forEach(section=>{
+      const first=section.querySelector('[data-ip-lesson-form]');if(!first)return;
+      const row=lessons.get(first.dataset.ipLessonForm),planId=row?.plan_id;if(!planId)return;
+      const plan=data.plans.find(p=>p.id===planId),workshop=data.workshops.find(w=>w.id===plan?.workshop_id);
+      section.dataset.ipPlanId=planId;
+      if(!section.querySelector('[data-ip-evidence-footer]'))section.insertAdjacentHTML('beforeend',evidenceFooterHtml(month,planId,workshop?.name||section.querySelector('.ip-plan-head h3')?.textContent||'Oficina'));
+    });
+    evidenceRoot.remove();
+  }
+  const forms=[...host.querySelectorAll('[data-ip-lesson-form]')];
   for(const form of forms){
     const row=lessons.get(form.dataset.ipLessonForm);if(!row)continue;
     form._ipSavedFields=normalized(row);form._ipSavedLesson=row;
@@ -213,8 +228,8 @@ export async function bindInstructorPlanning(host,data,user){
     form.addEventListener('input',()=>{
       form.dataset.ipEditSeq=String(Number(form.dataset.ipEditSeq||0)+1);remember(form,user);progress(host);
       const plan=form.closest('[data-ip-plan-id]'),button=plan?.querySelector('[data-ip-generate-evidence]');
-      const month=button?.dataset.month,planId=button?.dataset.planId;
-      if(month&&planId&&button?.dataset.busy!=='1'){try{localStorage.removeItem(evidenceKey(user,month,planId))}catch{}}
+      const m=button?.dataset.month,planId=button?.dataset.planId;
+      if(m&&planId&&button?.dataset.busy!=='1'){try{localStorage.removeItem(evidenceKey(user,m,planId))}catch{}}
     });
     form.addEventListener('submit',event=>{
       event.preventDefault();saveInstructorBlock(form,user,{requireComplete:true}).then(()=>progress(host)).catch(()=>{});
@@ -231,7 +246,7 @@ export async function bindInstructorPlanning(host,data,user){
     if(q.error)throw q.error;
     for(const item of q.data||[]){
       if(Date.parse(item.expires_at)<Date.now())continue;
-      const form=forms.find(f=>draftKey(user,f.dataset.ipLessonForm)===item.draft_key);
+      const form=forms.find(f=>draftKey(user,form?.dataset?.ipLessonForm)===item.draft_key);
       if(!form?.isConnected)continue;
       const local=localRead(user,form.dataset.ipLessonForm);
       if(!local||Date.parse(item.payload?.changed_at)>Date.parse(local.changed_at))restore(form,user,item.payload);
