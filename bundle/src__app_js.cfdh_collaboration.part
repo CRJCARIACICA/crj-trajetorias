@@ -1,0 +1,506 @@
+
+/* CFDH_COLLABORATION_20261021
+ * Edição colaborativa do CFDH Estrutural.
+ * - salva uma ação por vez;
+ * - sincroniza alterações via Supabase Realtime;
+ * - oferece consulta manual ao banco;
+ * - preserva campos locais ainda não salvos;
+ * - usa updated_at como versão otimista para evitar sobrescrita silenciosa.
+ */
+import { supabaseClient as cfdhCollabSupabaseClient } from './api.js?v=20261016-workshop-month1';
+
+const cfdhCollabState={
+  form:null,
+  planId:'',
+  planType:'',
+  client:null,
+  channel:null,
+  baseline:new Map(),
+  remoteSnapshots:new Map(),
+  profiles:new Map(),
+  classification:[],
+  applying:false,
+  initTimer:null,
+  syncInFlight:false
+};
+
+const cfdhCollabActionFields=[
+  'workshop_id','schedule_mode','workshop_calendar_id','workshop_plan_lesson_id',
+  'scheduled_date','start_time','end_time','planned_duration_hours',
+  'location_type','location_other','title','action_theme','objective','activities','resources',
+  'has_additional_methodology'
+];
+const cfdhCollabPlanFields=[
+  'cfdh_theme_code','cfdh_theme_custom','activity_title','description_objective',
+  'cfdh_action_count','expected_participants','team_text','partners',
+  'mobilization_plan','expected_results','cfdh_monthly_notes'
+];
+
+function cfdhCollabInjectStyle(){
+  if(document.querySelector('#cfdh-collab-style'))return;
+  const style=document.createElement('style');
+  style.id='cfdh-collab-style';
+  style.textContent=`
+    .cfdh-collab-toolbar{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:0 0 14px;padding:12px 14px;border:1px solid #cfe0db;border-radius:14px;background:#f6fbf9}
+    .cfdh-collab-toolbar-main{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .cfdh-collab-toolbar small{display:block;color:#60716b;line-height:1.4}
+    .cfdh-collab-sync-state{font-size:11px;color:#52645e}
+    .cfdh-collab-actionbar{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin:0 0 10px;padding:8px 10px;border-radius:10px;background:#f7faf9;border:1px solid #e2ebe8}
+    .cfdh-collab-actionbar .btn{padding:7px 10px}
+    .cfdh-collab-action-status{margin-right:auto;font-size:11px;color:#5e706a}
+    .cfdh-collab-action-status.success{color:#176844;font-weight:700}
+    .cfdh-collab-action-status.warn{color:#875f05;font-weight:700}
+    .cfdh-collab-action-status.danger{color:#a03939;font-weight:700}
+    [data-cfdh-action-card].cfdh-collab-remote-update{outline:2px solid rgba(17,120,86,.22);outline-offset:2px}
+    [data-cfdh-action-card].cfdh-collab-conflict{outline:2px solid rgba(181,117,16,.38);outline-offset:2px}
+    .cfdh-collab-conflict-actions{display:flex;gap:6px;flex-wrap:wrap}
+    @media(max-width:760px){.cfdh-collab-toolbar,.cfdh-collab-actionbar{align-items:stretch}.cfdh-collab-toolbar-main{width:100%}.cfdh-collab-actionbar .btn{width:100%}}
+  `;
+  document.head.appendChild(style);
+}
+
+function cfdhCollabRouteInfo(){
+  const raw=(location.hash||'').slice(1),[path,q='']=raw.split('?');
+  return {path,params:new URLSearchParams(q)};
+}
+function cfdhCollabCurrentPlanId(){
+  const r=cfdhCollabRouteInfo();
+  return r.path==='cfdh'?String(r.params.get('plan')||''):'';
+}
+function cfdhCollabNowLabel(){
+  return new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+function cfdhCollabRemoteTime(value){
+  if(!value)return 'agora';
+  return new Date(value).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+function cfdhCollabActionCardById(id){
+  if(!id||!cfdhCollabState.form)return null;
+  return [...cfdhCollabState.form.querySelectorAll('[data-cfdh-action-card]')].find(card=>String(card.dataset.actionId||'')===String(id))||null;
+}
+function cfdhCollabActionCards(){
+  return cfdhCollabState.form?[...cfdhCollabState.form.querySelectorAll('[data-cfdh-action-card]')]:[];
+}
+function cfdhCollabSetTopStatus(text,type=''){
+  const el=cfdhCollabState.form?.querySelector('[data-cfdh-collab-sync-state]');
+  if(!el)return;
+  el.textContent=text;
+  el.className='cfdh-collab-sync-state'+(type?` ${type}`:'');
+}
+function cfdhCollabSetActionStatus(card,text,type=''){
+  const el=card?.querySelector('[data-cfdh-collab-action-status]');
+  if(!el)return;
+  el.textContent=text;
+  el.className='cfdh-collab-action-status'+(type?` ${type}`:'');
+}
+function cfdhCollabDirtyInputs(root){
+  return root?[...root.querySelectorAll('[data-cfdh-collab-dirty="1"]')]:[];
+}
+function cfdhCollabIsActionDirty(card){return cfdhCollabDirtyInputs(card).length>0}
+function cfdhCollabMarkDirty(event){
+  if(cfdhCollabState.applying)return;
+  const target=event.target;
+  if(!(target instanceof HTMLElement)||!target.matches('input,select,textarea'))return;
+  if(target.closest('.cfdh-program-metrics'))return;
+  target.dataset.cfdhCollabDirty='1';
+  const card=target.closest('[data-cfdh-action-card]');
+  if(card){
+    card.dataset.cfdhCollabDirty='1';
+    const actionNo=card.dataset.actionNumber||'';
+    cfdhCollabSetActionStatus(card,`Ação ${actionNo}: alterações locais ainda não salvas.`,'warn');
+  }else if(target.closest('#cfdh-plan-editor')){
+    target.dataset.cfdhCollabPlanDirty='1';
+  }
+}
+function cfdhCollabClearDirty(root){
+  if(!root)return;
+  root.querySelectorAll('[data-cfdh-collab-dirty]').forEach(el=>delete el.dataset.cfdhCollabDirty);
+  if(root.matches?.('[data-cfdh-action-card]'))delete root.dataset.cfdhCollabDirty;
+}
+function cfdhCollabFieldValue(root,name){
+  const el=root?.querySelector(`[name="${CSS.escape(name)}"]`);
+  return el?String(el.value??''):'';
+}
+function cfdhCollabNormalizeDbValue(name,value){
+  if(name==='planned_duration_hours'||name==='expected_participants'||name==='cfdh_action_count')return value===null||value===undefined?'':String(value);
+  if(name==='has_additional_methodology')return value===true?'yes':'no';
+  return value===null||value===undefined?'':String(value);
+}
+function cfdhCollabSetInput(root,name,value,{force=false}={}){
+  const nodes=root?[...root.querySelectorAll(`[name="${CSS.escape(name)}"]`)]:[];
+  if(!nodes.length)return {changed:false,protected:false};
+  const dbValue=cfdhCollabNormalizeDbValue(name,value);
+  let changed=false,protectedField=false;
+  for(const el of nodes){
+    if(el.type==='radio'){
+      const should=String(el.value)===dbValue;
+      if(!force&&el.dataset.cfdhCollabDirty==='1'&&el.checked!==should){protectedField=true;continue}
+      if(el.checked!==should){el.checked=should;changed=true;el.dispatchEvent(new Event('change',{bubbles:true}))}
+      if(force)delete el.dataset.cfdhCollabDirty;
+      continue;
+    }
+    if(el.type==='checkbox')continue;
+    if(!force&&el.dataset.cfdhCollabDirty==='1'&&String(el.value??'')!==dbValue){protectedField=true;continue}
+    if(String(el.value??'')!==dbValue){
+      el.value=dbValue;changed=true;
+      el.dispatchEvent(new Event('input',{bubbles:true}));
+      el.dispatchEvent(new Event('change',{bubbles:true}));
+    }
+    if(force)delete el.dataset.cfdhCollabDirty;
+  }
+  return {changed,protected:protectedField};
+}
+function cfdhCollabAdditionalKeys(row){
+  return new Set((Array.isArray(row?.additional_classifications)?row.additional_classifications:[]).map(x=>`${x.axis_code||''}|${x.item_code||''}`));
+}
+function cfdhCollabApplyAdditional(card,row,{force=false}={}){
+  const keys=cfdhCollabAdditionalKeys(row);let changed=false,protectedField=false;
+  for(const el of card.querySelectorAll('[name="additional_classification_key"]')){
+    const should=keys.has(String(el.value||''));
+    if(!force&&el.dataset.cfdhCollabDirty==='1'&&el.checked!==should){protectedField=true;continue}
+    if(el.checked!==should){el.checked=should;changed=true;el.dispatchEvent(new Event('change',{bubbles:true}))}
+    if(force)delete el.dataset.cfdhCollabDirty;
+  }
+  return {changed,protected:protectedField};
+}
+function cfdhCollabApplyResponsibles(card,userIds,{force=false}={}){
+  const wanted=new Set((userIds||[]).map(String));let changed=false,protectedField=false;
+  for(const el of card.querySelectorAll('[name="responsible_user_id"]')){
+    const should=wanted.has(String(el.value));
+    if(!force&&el.dataset.cfdhCollabDirty==='1'&&el.checked!==should){protectedField=true;continue}
+    if(el.checked!==should){el.checked=should;changed=true;el.dispatchEvent(new Event('change',{bubbles:true}))}
+    if(force)delete el.dataset.cfdhCollabDirty;
+  }
+  return {changed,protected:protectedField};
+}
+function cfdhCollabTriggerPreview(){
+  const form=cfdhCollabState.form;if(!form)return;
+  form.dispatchEvent(new Event('input',{bubbles:true}));
+  form.dispatchEvent(new CustomEvent('cfdh:collaboration-updated',{bubbles:true,detail:{planId:cfdhCollabState.planId}}));
+}
+async function cfdhCollabLoadProfiles(ids){
+  const missing=[...new Set((ids||[]).filter(Boolean).map(String))].filter(id=>!cfdhCollabState.profiles.has(id));
+  if(!missing.length||!cfdhCollabState.client)return;
+  const {data,error}=await cfdhCollabState.client.from('profiles').select('id,display_name,role').in('id',missing);
+  if(error){console.warn('CFDH colaboração: perfis indisponíveis',error);return}
+  for(const p of data||[])cfdhCollabState.profiles.set(String(p.id),p);
+}
+function cfdhCollabEditorName(row){
+  const id=String(row?.updated_by||'');
+  if(!id)return 'outro colaborador';
+  if(id===String(state.user?.id||''))return state.user?.display_name||'você';
+  return cfdhCollabState.profiles.get(id)?.display_name||'outro colaborador';
+}
+async function cfdhCollabFetchResponsibles(actionIds){
+  const map=new Map((actionIds||[]).map(id=>[String(id),[]]));
+  if(!actionIds?.length||!cfdhCollabState.client)return map;
+  const {data,error}=await cfdhCollabState.client.from('cfdh_action_responsibles').select('action_id,user_id').in('action_id',actionIds);
+  if(error)throw error;
+  for(const r of data||[]){const key=String(r.action_id);if(!map.has(key))map.set(key,[]);map.get(key).push(String(r.user_id))}
+  return map;
+}
+function cfdhCollabApplyActionRow(card,row,responsibleIds,{force=false,source='manual'}={}){
+  if(!card||!row)return {changed:false,protectedCount:0};
+  let changed=false,protectedCount=0;
+  cfdhCollabState.applying=true;
+  try{
+    for(const name of cfdhCollabActionFields){
+      const result=cfdhCollabSetInput(card,name,row[name],{force});
+      changed=changed||result.changed;if(result.protected)protectedCount++;
+    }
+    const extra=cfdhCollabApplyAdditional(card,row,{force});changed=changed||extra.changed;if(extra.protected)protectedCount++;
+    const resp=cfdhCollabApplyResponsibles(card,responsibleIds,{force});changed=changed||resp.changed;if(resp.protected)protectedCount++;
+  }finally{cfdhCollabState.applying=false}
+  cfdhCollabState.remoteSnapshots.set(String(row.id),{row,responsibleIds:[...(responsibleIds||[])]});
+  if(force||protectedCount===0){
+    cfdhCollabState.baseline.set(String(row.id),row.updated_at||'');
+    cfdhCollabClearDirty(card);
+    card.classList.remove('cfdh-collab-conflict');
+    delete card.dataset.cfdhCollabConflict;
+  }else{
+    card.classList.add('cfdh-collab-conflict');
+    card.dataset.cfdhCollabConflict='1';
+  }
+  if(changed)cfdhCollabTriggerPreview();
+  const editor=cfdhCollabEditorName(row),when=cfdhCollabRemoteTime(row.updated_at);
+  if(protectedCount){
+    cfdhCollabSetActionStatus(card,`Novidade de ${editor} (${when}). ${protectedCount} campo(s) local(is) preservado(s).`,'warn');
+    cfdhCollabRenderConflictActions(card);
+  }else if(source==='realtime'){
+    card.classList.add('cfdh-collab-remote-update');setTimeout(()=>card.classList.remove('cfdh-collab-remote-update'),2200);
+    cfdhCollabSetActionStatus(card,`Atualizada em tempo real por ${editor} · ${when}.`,'success');
+  }else{
+    cfdhCollabSetActionStatus(card,`Versão do banco: ${editor} · ${when}.`,'success');
+  }
+  return {changed,protectedCount};
+}
+function cfdhCollabRenderConflictActions(card){
+  const bar=card?.querySelector('[data-cfdh-collab-actionbar]');if(!bar)return;
+  let actions=bar.querySelector('[data-cfdh-collab-conflict-actions]');
+  if(!card.dataset.cfdhCollabConflict){actions?.remove();return}
+  if(!actions){
+    actions=document.createElement('span');actions.dataset.cfdhCollabConflictActions='1';actions.className='cfdh-collab-conflict-actions';
+    actions.innerHTML='<button class="btn secondary" type="button" data-cfdh-collab-use-remote>Usar versão do banco</button><button class="btn secondary" type="button" data-cfdh-collab-keep-local>Manter meu rascunho</button>';
+    bar.appendChild(actions);
+  }
+}
+async function cfdhCollabUseRemote(card){
+  const id=String(card?.dataset.actionId||''),snapshot=cfdhCollabState.remoteSnapshots.get(id);if(!snapshot)return;
+  cfdhCollabApplyActionRow(card,snapshot.row,snapshot.responsibleIds,{force:true,source:'manual'});
+  cfdhCollabRenderConflictActions(card);
+  toast('Versão do banco aplicada nesta ação.','success');
+}
+async function cfdhCollabKeepLocal(card){
+  const id=String(card?.dataset.actionId||''),snapshot=cfdhCollabState.remoteSnapshots.get(id);if(!snapshot)return;
+  cfdhCollabState.baseline.set(id,snapshot.row.updated_at||'');
+  card.classList.remove('cfdh-collab-conflict');delete card.dataset.cfdhCollabConflict;
+  cfdhCollabRenderConflictActions(card);
+  cfdhCollabSetActionStatus(card,'Rascunho local mantido. Revise e clique em “Salvar ação” para publicar sua versão.','warn');
+}
+function cfdhCollabBuildAdditional(card){
+  const cat=cfdhCollabState.classification||[];
+  return [...card.querySelectorAll('[name="additional_classification_key"]:checked')].map(el=>{
+    const [axisCode,itemCodeRaw='']=String(el.value||'').split('|'),itemCode=itemCodeRaw||null;
+    const row=cat.find(x=>x.axis_code===axisCode&&(x.item_code||null)===itemCode);
+    return row?{nucleus_code:row.nucleus_code,nucleus_name:row.nucleus_name,axis_code:row.axis_code,axis_name:row.axis_name,item_code:row.item_code||null,item_label:row.item_label||null}:null;
+  }).filter(Boolean);
+}
+function cfdhCollabActionPayload(card){
+  const v=name=>cfdhCollabFieldValue(card,name);
+  return {
+    workshop_id:v('workshop_id')||null,
+    schedule_mode:v('schedule_mode')||'structural',
+    workshop_calendar_id:v('workshop_calendar_id')||null,
+    workshop_plan_lesson_id:v('workshop_plan_lesson_id')||null,
+    scheduled_date:v('scheduled_date')||null,
+    start_time:v('start_time')||null,
+    end_time:v('end_time')||null,
+    planned_duration_hours:v('planned_duration_hours')===''?null:Number(v('planned_duration_hours')),
+    location_type:v('location_type')||null,
+    location_other:v('location_other')||null,
+    title:v('title')||`Ação ${card.dataset.actionNumber||''}`,
+    action_theme:v('action_theme')||null,
+    objective:v('objective')||'',
+    activities:v('activities')||'',
+    resources:v('resources')||'',
+    nucleus_code:'N1',axis_code:'N1.E1',item_code:'C',item_label:'Circuito Formativo em Direitos Humanos',
+    additional_classifications:cfdhCollabState.classification.length?cfdhCollabBuildAdditional(card):(cfdhCollabState.remoteSnapshots.get(String(card.dataset.actionId||''))?.row?.additional_classifications||[]),
+    has_additional_methodology:v('has_additional_methodology')==='yes',
+    updated_by:state.user?.id||null,
+    updated_at:new Date().toISOString()
+  };
+}
+async function cfdhCollabSaveResponsibles(actionId,card){
+  const ids=[...card.querySelectorAll('[name="responsible_user_id"]:checked')].map(el=>String(el.value));
+  const client=cfdhCollabState.client;
+  const currentQ=await client.from('cfdh_action_responsibles').select('user_id').eq('action_id',actionId);
+  if(currentQ.error)throw currentQ.error;
+  const current=new Set((currentQ.data||[]).map(x=>String(x.user_id))),wanted=new Set(ids);
+  const add=ids.filter(id=>!current.has(id)),remove=[...current].filter(id=>!wanted.has(id));
+  if(add.length){
+    const ins=await client.from('cfdh_action_responsibles').insert(add.map(user_id=>({action_id:actionId,user_id,assigned_by:state.user?.id||null})));
+    if(ins.error)throw ins.error;
+  }
+  if(remove.length){
+    const del=await client.from('cfdh_action_responsibles').delete().eq('action_id',actionId).in('user_id',remove);
+    if(del.error)throw del.error;
+  }
+  return ids;
+}
+async function cfdhCollabSaveAction(card){
+  const client=cfdhCollabState.client,id=String(card?.dataset.actionId||'');
+  if(!client||!id){toast('Esta ação ainda precisa ser criada no planejamento antes do salvamento individual.','warn');return}
+  const button=card.querySelector('[data-cfdh-collab-save-action]');if(button)button.disabled=true;
+  try{
+    cfdhCollabSetActionStatus(card,'Conferindo a versão mais recente no banco…');
+    const currentQ=await client.from('cfdh_actions').select('*').eq('id',id).maybeSingle();
+    if(currentQ.error)throw currentQ.error;
+    if(!currentQ.data)throw new Error('A ação não foi encontrada no banco de dados.');
+    const current=currentQ.data,baseline=cfdhCollabState.baseline.get(id);
+    if(baseline&&current.updated_at&&String(current.updated_at)!==String(baseline)){
+      const resp=await cfdhCollabFetchResponsibles([id]);
+      await cfdhCollabLoadProfiles([current.updated_by,...(resp.get(id)||[])]);
+      cfdhCollabState.remoteSnapshots.set(id,{row:current,responsibleIds:resp.get(id)||[]});
+      card.classList.add('cfdh-collab-conflict');card.dataset.cfdhCollabConflict='1';
+      cfdhCollabSetActionStatus(card,`Ação atualizada por ${cfdhCollabEditorName(current)} em ${cfdhCollabRemoteTime(current.updated_at)}. Escolha como reconciliar antes de salvar.`,'danger');
+      cfdhCollabRenderConflictActions(card);
+      toast('Há uma versão mais nova desta ação no banco. Nada foi sobrescrito.','warn');
+      return;
+    }
+    const payload=cfdhCollabActionPayload(card);
+    let update=client.from('cfdh_actions').update(payload).eq('id',id);
+    if(current.updated_at)update=update.eq('updated_at',current.updated_at);
+    const updatedQ=await update.select('*').maybeSingle();
+    if(updatedQ.error)throw updatedQ.error;
+    if(!updatedQ.data){
+      cfdhCollabSetActionStatus(card,'Outra pessoa atualizou esta ação antes do seu salvamento. Consulte as novidades.','danger');
+      toast('Conflito detectado: sua versão não foi gravada.','warn');return;
+    }
+    const responsibleIds=await cfdhCollabSaveResponsibles(id,card);
+    cfdhCollabState.baseline.set(id,updatedQ.data.updated_at||payload.updated_at);
+    cfdhCollabState.remoteSnapshots.set(id,{row:updatedQ.data,responsibleIds});
+    cfdhCollabClearDirty(card);
+    card.classList.remove('cfdh-collab-conflict');delete card.dataset.cfdhCollabConflict;
+    cfdhCollabRenderConflictActions(card);
+    cfdhCollabSetActionStatus(card,`Salva por ${state.user?.display_name||'você'} · ${cfdhCollabRemoteTime(updatedQ.data.updated_at||payload.updated_at)}.`,'success');
+    cfdhCollabTriggerPreview();
+    toast(`Ação ${card.dataset.actionNumber||''} salva e sincronizada.`,'success');
+  }catch(error){
+    console.error('CFDH colaboração: falha ao salvar ação',error);
+    cfdhCollabSetActionStatus(card,`Não foi possível salvar: ${error.message||error}`,'danger');
+    toast(error.message||'Não foi possível salvar a ação.','danger');
+  }finally{if(button)button.disabled=false}
+}
+async function cfdhCollabApplyPlanRow(plan,{force=false}={}){
+  const form=cfdhCollabState.form;if(!form||!plan)return {changed:false,protectedCount:0};
+  let changed=false,protectedCount=0;cfdhCollabState.applying=true;
+  try{
+    for(const name of cfdhCollabPlanFields){
+      const result=cfdhCollabSetInput(form,name,plan[name],{force});changed=changed||result.changed;if(result.protected)protectedCount++;
+    }
+  }finally{cfdhCollabState.applying=false}
+  if(changed)cfdhCollabTriggerPreview();
+  return {changed,protectedCount};
+}
+async function cfdhCollabRefreshFromDb({silent=false,reason='manual'}={}){
+  if(cfdhCollabState.syncInFlight||!cfdhCollabState.client||!cfdhCollabState.planId)return;
+  cfdhCollabState.syncInFlight=true;
+  const button=cfdhCollabState.form?.querySelector('[data-cfdh-collab-refresh]');if(button)button.disabled=true;
+  try{
+    cfdhCollabSetTopStatus('Consultando o banco de dados…');
+    const client=cfdhCollabState.client,planId=cfdhCollabState.planId;
+    const [planQ,actionsQ]=await Promise.all([
+      client.from('educator_plans').select('*').eq('id',planId).maybeSingle(),
+      client.from('cfdh_actions').select('*').eq('plan_id',planId).order('action_number')
+    ]);
+    if(planQ.error)throw planQ.error;if(actionsQ.error)throw actionsQ.error;
+    const rows=actionsQ.data||[],actionIds=rows.map(r=>String(r.id));
+    const responsibles=await cfdhCollabFetchResponsibles(actionIds);
+    await cfdhCollabLoadProfiles(rows.map(r=>r.updated_by).concat([...responsibles.values()].flat()));
+    const planResult=await cfdhCollabApplyPlanRow(planQ.data||{});
+    let novelty=0,changed=planResult.changed?1:0,protectedCount=planResult.protectedCount,newStructure=false;
+    const cards=cfdhCollabActionCards();
+    for(const row of rows){
+      const id=String(row.id),card=cfdhCollabActionCardById(id),before=cfdhCollabState.baseline.get(id);
+      if(!card){newStructure=true;continue}
+      const newer=Boolean(before&&row.updated_at&&String(before)!==String(row.updated_at));
+      if(newer)novelty++;
+      const result=cfdhCollabApplyActionRow(card,row,responsibles.get(id)||[],{force:false,source:reason});
+      if(result.changed)changed++;protectedCount+=result.protectedCount;
+      if(!before&&!cfdhCollabIsActionDirty(card))cfdhCollabState.baseline.set(id,row.updated_at||'');
+      cfdhCollabRenderConflictActions(card);
+    }
+    if(cards.some(card=>card.dataset.actionId&&!actionIds.includes(String(card.dataset.actionId))))newStructure=true;
+    const now=cfdhCollabNowLabel();
+    cfdhCollabSetTopStatus(`Última sincronização: ${now}${protectedCount?` · ${protectedCount} campo(s) local(is) preservado(s)`:''}`);
+    if(newStructure&&!silent)toast('A estrutura de ações mudou em outro computador. Salve seu rascunho antes de recarregar a tela.','warn');
+    else if(!silent){
+      if(novelty||changed)toast(`${Math.max(novelty,changed)} novidade(s) aplicada(s) ao documento e à pré-visualização${protectedCount?`; ${protectedCount} campo(s) local(is) foram preservado(s)`:''}.`,'success');
+      else toast('Nenhuma novidade encontrada. Você já está na versão mais recente.','success');
+    }
+    cfdhCollabTriggerPreview();
+  }catch(error){
+    console.error('CFDH colaboração: falha ao consultar novidades',error);
+    cfdhCollabSetTopStatus('Falha na última consulta ao banco.');
+    if(!silent)toast(error.message||'Não foi possível consultar as novidades.','danger');
+  }finally{cfdhCollabState.syncInFlight=false;if(button)button.disabled=false}
+}
+async function cfdhCollabHandleRealtimeAction(payload){
+  const row=payload?.new;if(!row||String(row.plan_id)!==String(cfdhCollabState.planId))return;
+  const card=cfdhCollabActionCardById(row.id);if(!card)return;
+  const id=String(row.id),before=cfdhCollabState.baseline.get(id);
+  if(before&&row.updated_at&&String(before)===String(row.updated_at))return;
+  const resp=await cfdhCollabFetchResponsibles([id]);
+  await cfdhCollabLoadProfiles([row.updated_by,...(resp.get(id)||[])]);
+  cfdhCollabApplyActionRow(card,row,resp.get(id)||[],{force:false,source:'realtime'});
+  cfdhCollabSetTopStatus(`Atualização em tempo real recebida às ${cfdhCollabNowLabel()}.`);
+}
+async function cfdhCollabHandleRealtimeResponsibles(payload){
+  const actionId=String(payload?.new?.action_id||payload?.old?.action_id||'');
+  const card=cfdhCollabActionCardById(actionId);if(!card)return;
+  const resp=await cfdhCollabFetchResponsibles([actionId]);
+  cfdhCollabState.applying=true;try{cfdhCollabApplyResponsibles(card,resp.get(actionId)||[],{force:false})}finally{cfdhCollabState.applying=false}
+  cfdhCollabTriggerPreview();
+}
+async function cfdhCollabHandleRealtimePlan(payload){
+  const row=payload?.new;if(!row||String(row.id)!==String(cfdhCollabState.planId))return;
+  const result=await cfdhCollabApplyPlanRow(row,{force:false});
+  if(result.changed||result.protectedCount)cfdhCollabSetTopStatus(`Dados gerais atualizados em tempo real às ${cfdhCollabNowLabel()}${result.protectedCount?' · rascunhos locais preservados':''}.`);
+}
+function cfdhCollabSubscribe(){
+  const client=cfdhCollabState.client,planId=cfdhCollabState.planId;if(!client||!planId)return;
+  if(cfdhCollabState.channel){try{client.removeChannel(cfdhCollabState.channel)}catch{}cfdhCollabState.channel=null}
+  const channel=client.channel(`cfdh-collab-${planId}-${Math.random().toString(36).slice(2,8)}`)
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'cfdh_actions',filter:`plan_id=eq.${planId}`},payload=>{cfdhCollabHandleRealtimeAction(payload).catch(err=>console.warn('CFDH realtime ação',err))})
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'cfdh_actions',filter:`plan_id=eq.${planId}`},()=>{cfdhCollabSetTopStatus('Novas ações foram adicionadas por outro colaborador. Use “Consultar novidades”.','warn')})
+    .on('postgres_changes',{event:'DELETE',schema:'public',table:'cfdh_actions'},payload=>{if(cfdhCollabActionCardById(payload?.old?.id))cfdhCollabSetTopStatus('Uma ação foi removida por outro colaborador. Use “Consultar novidades”.','warn')})
+    .on('postgres_changes',{event:'*',schema:'public',table:'cfdh_action_responsibles'},payload=>{cfdhCollabHandleRealtimeResponsibles(payload).catch(err=>console.warn('CFDH realtime responsáveis',err))})
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'educator_plans',filter:`id=eq.${planId}`},payload=>{cfdhCollabHandleRealtimePlan(payload).catch(err=>console.warn('CFDH realtime plano',err))})
+    .subscribe(status=>{
+      if(status==='SUBSCRIBED')cfdhCollabSetTopStatus(`Sincronização em tempo real ativa · ${cfdhCollabNowLabel()}.`);
+      else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')cfdhCollabSetTopStatus('Tempo real indisponível. Use “Consultar novidades” para conferir o banco.','warn');
+    });
+  cfdhCollabState.channel=channel;
+}
+function cfdhCollabEnsureActionBars(){
+  for(const card of cfdhCollabActionCards()){
+    if(card.querySelector('[data-cfdh-collab-actionbar]'))continue;
+    const bar=document.createElement('div');bar.dataset.cfdhCollabActionbar='1';bar.className='cfdh-collab-actionbar';
+    const number=card.dataset.actionNumber||'';
+    bar.innerHTML=`<span class="cfdh-collab-action-status" data-cfdh-collab-action-status>Ação ${number}: pronta para colaboração.</span><button class="btn primary" type="button" data-cfdh-collab-save-action>Salvar ação</button>`;
+    card.prepend(bar);
+    cfdhCollabRenderConflictActions(card);
+  }
+}
+function cfdhCollabEnsureToolbar(){
+  const form=cfdhCollabState.form;if(!form||form.querySelector('[data-cfdh-collab-toolbar]'))return;
+  const toolbar=document.createElement('div');toolbar.dataset.cfdhCollabToolbar='1';toolbar.className='cfdh-collab-toolbar';
+  toolbar.innerHTML=`<div><b>Elaboração colaborativa do CFDH Estrutural</b><small>Cada ação pode ser salva separadamente. Alterações de outros computadores aparecem em tempo real e também podem ser conferidas diretamente no banco.</small></div><div class="cfdh-collab-toolbar-main"><button class="btn secondary" type="button" data-cfdh-collab-refresh>Consultar novidades</button><span class="cfdh-collab-sync-state" data-cfdh-collab-sync-state>Preparando sincronização…</span></div>`;
+  form.prepend(toolbar);
+}
+function cfdhCollabBindFormEvents(){
+  const form=cfdhCollabState.form;if(!form||form.dataset.cfdhCollabEvents==='1')return;
+  form.dataset.cfdhCollabEvents='1';
+  form.addEventListener('input',cfdhCollabMarkDirty,true);
+  form.addEventListener('change',cfdhCollabMarkDirty,true);
+  form.addEventListener('click',event=>{
+    const save=event.target.closest?.('[data-cfdh-collab-save-action]');
+    if(save){event.preventDefault();cfdhCollabSaveAction(save.closest('[data-cfdh-action-card]'));return}
+    const refresh=event.target.closest?.('[data-cfdh-collab-refresh]');
+    if(refresh){event.preventDefault();cfdhCollabRefreshFromDb({silent:false,reason:'manual'});return}
+    const remote=event.target.closest?.('[data-cfdh-collab-use-remote]');
+    if(remote){event.preventDefault();cfdhCollabUseRemote(remote.closest('[data-cfdh-action-card]'));return}
+    const local=event.target.closest?.('[data-cfdh-collab-keep-local]');
+    if(local){event.preventDefault();cfdhCollabKeepLocal(local.closest('[data-cfdh-action-card]'));return}
+  });
+  const actionObserver=new MutationObserver(()=>cfdhCollabEnsureActionBars());
+  actionObserver.observe(form,{childList:true,subtree:true});
+}
+async function cfdhCollabInitialize(){
+  const planId=cfdhCollabCurrentPlanId(),form=document.querySelector('#cfdh-plan-editor');
+  if(!planId||!form)return;
+  if(form===cfdhCollabState.form&&planId===cfdhCollabState.planId){cfdhCollabEnsureActionBars();return}
+  let client;
+  try{client=cfdhCollabSupabaseClient()}catch{return}
+  if(!client)return;
+  const planQ=await client.from('educator_plans').select('id,plan_type').eq('id',planId).maybeSingle();
+  if(planQ.error||!planQ.data||planQ.data.plan_type!=='cfdh_estrutural')return;
+  if(cfdhCollabState.channel&&cfdhCollabState.client){try{cfdhCollabState.client.removeChannel(cfdhCollabState.channel)}catch{}}
+  cfdhCollabState.form=form;cfdhCollabState.planId=planId;cfdhCollabState.planType=planQ.data.plan_type;cfdhCollabState.client=client;cfdhCollabState.channel=null;cfdhCollabState.baseline=new Map();cfdhCollabState.remoteSnapshots=new Map();cfdhCollabState.profiles=new Map();
+  cfdhCollabInjectStyle();cfdhCollabEnsureToolbar();cfdhCollabEnsureActionBars();cfdhCollabBindFormEvents();
+  const classQ=await client.from('methodology_classification_catalog').select('nucleus_code,nucleus_name,axis_code,axis_name,item_code,item_label');
+  cfdhCollabState.classification=classQ.error?[]:(classQ.data||[]);
+  await cfdhCollabRefreshFromDb({silent:true,reason:'manual'});
+  cfdhCollabSubscribe();
+}
+function cfdhCollabSchedule(){
+  clearTimeout(cfdhCollabState.initTimer);
+  cfdhCollabState.initTimer=setTimeout(()=>cfdhCollabInitialize().catch(err=>console.warn('CFDH colaboração: inicialização',err)),80);
+}
+window.addEventListener('hashchange',()=>{
+  if(!cfdhCollabCurrentPlanId()&&cfdhCollabState.channel&&cfdhCollabState.client){try{cfdhCollabState.client.removeChannel(cfdhCollabState.channel)}catch{}cfdhCollabState.channel=null;cfdhCollabState.form=null;cfdhCollabState.planId=''}
+  cfdhCollabSchedule();
+});
+const cfdhCollabObserver=new MutationObserver(cfdhCollabSchedule);
+cfdhCollabObserver.observe(document.querySelector('#app')||document.body,{childList:true,subtree:true});
+cfdhCollabSchedule();
