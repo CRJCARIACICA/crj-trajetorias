@@ -54,7 +54,7 @@ function restore(form,user,payload){
   if(!payload?.fields||payload.lesson_id!==form.dataset.ipLessonForm||payload.user_id!==user.id||form.dataset.ipEditSeq!=='0')return;
   if(same(payload.fields,form._ipSavedFields))return;
   for(const key of FIELDS){const node=form.querySelector('[name="'+key+'"]');if(node)node.value=String(payload.fields[key]||'')}
-  form.dataset.ipUpdatedAt=payload.base_updated_at||form.dataset.ipUpdatedAt;
+  if(Number(payload.version||1)>=2&&payload.base_updated_at)form.dataset.ipUpdatedAt=payload.base_updated_at;
   form.dataset.ipDirty='1';localWrite(user,form.dataset.ipLessonForm,payload);
   stateText(form,'Rascunho recuperado. Revise e salve este bloco para confirmar no sistema.');
 }
@@ -246,7 +246,7 @@ export async function bindInstructorPlanning(host,data,user){
     if(q.error)throw q.error;
     for(const item of q.data||[]){
       if(Date.parse(item.expires_at)<Date.now())continue;
-      const form=forms.find(f=>draftKey(user,form?.dataset?.ipLessonForm)===item.draft_key);
+      const form=forms.find(f=>draftKey(user,f.dataset.ipLessonForm)===item.draft_key);
       if(!form?.isConnected)continue;
       const local=localRead(user,form.dataset.ipLessonForm);
       if(!local||Date.parse(item.payload?.changed_at)>Date.parse(local.changed_at))restore(form,user,item.payload);
