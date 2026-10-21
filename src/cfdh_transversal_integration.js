@@ -6,7 +6,7 @@ const time5=v=>String(v||'').slice(0,5);
 const client=()=>apiMode()==='live'?supabaseClient():null;
 const esc=(v='')=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const PENDING_TEXT='Pendente de elaboração do CFDH Compartilhado Transversal.';
-let workshopsCache=null,profilesCache=null,cacheAt=0,scheduled=false,distributing=false;
+let workshopsCache=null,profilesCache=null,cacheAt=0,scheduled=false,distributing=false,enhancing=false,pendingEnhance=false;
 let linkedCache=new Map(),linkedCacheKey='',linkedCacheAt=0,linkedLoading=null;
 let lessonsCache={key:'',at:0,rows:[]};
 
@@ -74,10 +74,12 @@ function updateTransversalCopy(){
   if(!form||form.querySelector('[name="plan_type"]')?.value!=='cfdh_transversal')return;
   const block=form.querySelector('[data-cfdh-workshops-block]');
   const p=block?.querySelector('.page-head p');
-  if(p)p.textContent='Selecione uma ou mais oficinas. A distribuição inteligente sugere uma ação por oficina e permite vincular cada ação diretamente a uma aula disponível do planejamento mensal.';
+  const copy='Selecione uma ou mais oficinas. A distribuição inteligente sugere uma ação por oficina e permite vincular cada ação diretamente a uma aula disponível do planejamento mensal.';
+  if(p&&p.textContent!==copy)p.textContent=copy;
   block?.querySelectorAll('small').forEach(el=>{
     if(/atíp|distribu|ocorrência|planejad|transversal/i.test(el.textContent||'')){
-      el.textContent='As aulas são escolhidas dentro de cada ação a partir da oficina de referência. Não é necessário marcar CFDH previamente no planejamento da oficina.';
+      const helper='As aulas são escolhidas dentro de cada ação a partir da oficina de referência. Não é necessário marcar CFDH previamente no planejamento da oficina.';
+      if(el.textContent!==helper)el.textContent=helper;
     }
   });
   hideLegacyCalendarAndConflicts(form);
@@ -102,7 +104,7 @@ async function addReferenceLabels(){
       info.style.fontWeight='700';
       label.querySelector('span')?.appendChild(info);
     }
-    info.textContent=text;
+    if(info.textContent!==text)info.textContent=text;
   });
 }
 
@@ -156,8 +158,10 @@ async function availablePlanLessons(ids,force=false){
 function setValue(card,name,value,{event=true}={}){
   const el=card.querySelector(`[name="${name}"]`);
   if(!el)return;
-  if(el.tagName==='SELECT'&&value&&!Array.from(el.options).some(o=>o.value===String(value)))return;
-  el.value=value??'';
+  const next=String(value??'');
+  if(el.tagName==='SELECT'&&next&&!Array.from(el.options).some(o=>o.value===next))return;
+  if(String(el.value??'')===next)return;
+  el.value=next;
   if(event){emit(el,'input');emit(el,'change')}
 }
 function ensureLessonIdInput(card){
@@ -179,61 +183,97 @@ function clearSlot(card,{keepWorkshop=true}={}){
   setValue(card,'end_time','',{event:false});
   if(!keepWorkshop)setValue(card,'workshop_id','',{event:false});
   const status=card.querySelector('[data-cfdh-schedule-link-status]');
-  if(status)status.textContent='Selecione uma aula disponível desta oficina.';
+  if(status&&status.textContent!=='Selecione uma aula disponível desta oficina.')status.textContent='Selecione uma aula disponível desta oficina.';
 }
 function applySlot(card,w,slot,wm){
   const workshopSel=card.querySelector('[data-cfdh-action-workshop]');
   if(workshopSel&&!Array.from(workshopSel.options).some(o=>o.value===String(w.id))){
     const op=document.createElement('option');op.value=w.id;op.textContent=w.name||'Oficina';workshopSel.appendChild(op);
   }
-  card.dataset.cfdhPlanLessonId=slot.id;
-  ensureLessonIdInput(card).value=slot.id;
-  setValue(card,'workshop_id',w.id);
-  setValue(card,'schedule_mode','workshop_planned');
-  setValue(card,'workshop_calendar_id',slot.calendar_entry_id);
-  setValue(card,'scheduled_date',slot.scheduled_date);
-  setValue(card,'start_time',time5(slot.start_time));
-  setValue(card,'end_time',time5(slot.end_time));
-  const h=durationHours(slot.start_time,slot.end_time);
-  if(h)setValue(card,'planned_duration_hours',h);
-  if(slot.location_type!=null)setValue(card,'location_type',slot.location_type);
-  if(slot.location_other!=null)setValue(card,'location_other',slot.location_other);
-  defaultReferenceEducator(card,w.id,wm);
-  const status=card.querySelector('[data-cfdh-schedule-link-status]');
-  if(status)status.textContent=`Aula ${slot.lesson_number} vinculada · ${brDate(slot.scheduled_date)} · ${time5(slot.start_time)}–${time5(slot.end_time)}`;
-  const picker=card.querySelector('[data-cfdh-lesson-select]');
-  if(picker)picker.value=String(slot.id);
+  const workshopChanged=!!workshopSel&&String(workshopSel.value||'')!==String(w.id);
+  card.dataset.cfdhApplyingSlot='1';
+  try{
+    card.dataset.cfdhPlanLessonId=slot.id;
+    ensureLessonIdInput(card).value=slot.id;
+    setValue(card,'workshop_id',w.id,{event:false});
+    setValue(card,'schedule_mode','workshop_planned');
+    setValue(card,'workshop_calendar_id',slot.calendar_entry_id);
+    setValue(card,'scheduled_date',slot.scheduled_date);
+    setValue(card,'start_time',time5(slot.start_time));
+    setValue(card,'end_time',time5(slot.end_time));
+    const h=durationHours(slot.start_time,slot.end_time);
+    if(h)setValue(card,'planned_duration_hours',h);
+    if(slot.location_type!=null)setValue(card,'location_type',slot.location_type);
+    if(slot.location_other!=null)setValue(card,'location_other',slot.location_other);
+    defaultReferenceEducator(card,w.id,wm);
+    const status=card.querySelector('[data-cfdh-schedule-link-status]');
+    const text=`Aula ${slot.lesson_number} vinculada · ${brDate(slot.scheduled_date)} · ${time5(slot.start_time)}–${time5(slot.end_time)}`;
+    if(status&&status.textContent!==text)status.textContent=text;
+    const picker=card.querySelector('[data-cfdh-lesson-select]');
+    if(picker)picker.value=String(slot.id);
+    card.dataset.cfdhPickerWorkshopId=String(w.id);
+    if(workshopChanged&&workshopSel){emit(workshopSel,'input');emit(workshopSel,'change')}
+  }finally{
+    delete card.dataset.cfdhApplyingSlot;
+  }
   hideLegacyCalendarAndConflicts(card);
 }
 
 async function populateLessonPicker(card,workshopId,{force=false}={}){
   const select=card.querySelector('[data-cfdh-lesson-select]');
   if(!select)return;
-  const wid=String(workshopId||'');
+  const wid=String(workshopId||''),key=`${monthKey()}|${wid}`;
+  const currentLesson=String(card.dataset.cfdhPlanLessonId||ensureLessonIdInput(card).value||'');
+  if(!wid){
+    if(select.dataset.cfdhLessonPickerKey!==key||select.textContent!=='Selecione primeiro a oficina de referência'){
+      select.innerHTML='<option value="">Selecione primeiro a oficina de referência</option>';
+    }
+    select.disabled=true;
+    select.dataset.cfdhLessonPickerKey=key;
+    select.dataset.cfdhLessonPickerState='empty';
+    return;
+  }
+  if(!force&&select.dataset.cfdhLessonPickerKey===key&&select.dataset.cfdhLessonPickerState==='ready'){
+    if(currentLesson&&Array.from(select.options).some(o=>o.value===currentLesson))select.value=currentLesson;
+    return;
+  }
+  if(select.dataset.cfdhLessonPickerKey===key&&select.dataset.cfdhLessonPickerState==='loading')return;
+
+  const seq=String(Number(select.dataset.cfdhLessonPickerSeq||0)+1);
+  select.dataset.cfdhLessonPickerSeq=seq;
+  select.dataset.cfdhLessonPickerKey=key;
+  select.dataset.cfdhLessonPickerState='loading';
   select.disabled=true;
   select.innerHTML='<option value="">Carregando aulas…</option>';
-  if(!wid){select.innerHTML='<option value="">Selecione primeiro a oficina de referência</option>';return}
   try{
     const rows=(await availablePlanLessons([wid],force)).filter(r=>String(r.workshop_id)===wid);
-    const currentLesson=String(card.dataset.cfdhPlanLessonId||ensureLessonIdInput(card).value||'');
+    const activeWorkshop=String(card.querySelector('[data-cfdh-action-workshop]')?.value||'');
+    if(!select.isConnected||select.dataset.cfdhLessonPickerSeq!==seq||activeWorkshop!==wid||`${monthKey()}|${wid}`!==key)return;
+    const current=String(card.dataset.cfdhPlanLessonId||ensureLessonIdInput(card).value||currentLesson||'');
     const currentCalendar=String(card.querySelector('[name="workshop_calendar_id"]')?.value||'');
-    const selected=rows.find(r=>String(r.id)===currentLesson)||rows.find(r=>String(r.calendar_entry_id)===currentCalendar);
+    const selected=rows.find(r=>String(r.id)===current)||rows.find(r=>String(r.calendar_entry_id)===currentCalendar);
     select.innerHTML='<option value="">Selecione uma aula disponível</option>'+rows.map(r=>`<option value="${esc(r.id)}">${esc(`Aula ${r.lesson_number} · ${brDate(r.scheduled_date)} · ${time5(r.start_time)}–${time5(r.end_time)}`)}</option>`).join('');
     select.disabled=false;
+    select.dataset.cfdhLessonPickerState='ready';
     if(selected){
       card.dataset.cfdhPlanLessonId=selected.id;
       ensureLessonIdInput(card).value=selected.id;
       select.value=String(selected.id);
       const status=card.querySelector('[data-cfdh-schedule-link-status]');
-      if(status)status.textContent=`Aula ${selected.lesson_number} vinculada · ${brDate(selected.scheduled_date)} · ${time5(selected.start_time)}–${time5(selected.end_time)}`;
+      const text=`Aula ${selected.lesson_number} vinculada · ${brDate(selected.scheduled_date)} · ${time5(selected.start_time)}–${time5(selected.end_time)}`;
+      if(status&&status.textContent!==text)status.textContent=text;
     }else if(!rows.length){
       select.innerHTML='<option value="">Nenhuma aula ativa disponível neste mês</option>';
       const status=card.querySelector('[data-cfdh-schedule-link-status]');
-      if(status)status.textContent='Esta oficina não possui aula ativa disponível no mês selecionado.';
+      const text='Esta oficina não possui aula ativa disponível no mês selecionado.';
+      if(status&&status.textContent!==text)status.textContent=text;
     }
   }catch(err){
+    if(select.dataset.cfdhLessonPickerSeq!==seq)return;
     console.warn('[CFDH transversal aulas]',err);
     select.innerHTML='<option value="">Não foi possível carregar as aulas</option>';
+    select.disabled=false;
+    select.dataset.cfdhLessonPickerState='error';
   }
 }
 
@@ -259,16 +299,26 @@ async function bindActionWorkshopDefaults(){
       if(grid)grid.insertAdjacentElement('afterend',field);else host.appendChild(field);
     }
     ensureLessonIdInput(card);
+    if(!('cfdhPickerWorkshopId' in card.dataset))card.dataset.cfdhPickerWorkshopId=String(workshopSel.value||'');
 
     const helper=host.querySelector(':scope > small');
-    if(helper)helper.textContent='Selecione uma aula da oficina. Data, horário e local vêm da própria aula; o CFDH fica incorporado a ela e não cria outra reserva de agenda.';
+    const helperText='Selecione uma aula da oficina. Data, horário e local vêm da própria aula; o CFDH fica incorporado a ela e não cria outra reserva de agenda.';
+    if(helper&&helper.textContent!==helperText)helper.textContent=helperText;
 
     if(workshopSel.dataset.directLessonBound!=='1'){
       workshopSel.dataset.directLessonBound='1';
       workshopSel.addEventListener('change',async()=>{
-        clearSlot(card);
-        defaultReferenceEducator(card,workshopSel.value,wm);
-        await populateLessonPicker(card,workshopSel.value,{force:true});
+        const wid=String(workshopSel.value||'');
+        if(card.dataset.cfdhApplyingSlot==='1'){
+          card.dataset.cfdhPickerWorkshopId=wid;
+          return;
+        }
+        const previous=String(card.dataset.cfdhPickerWorkshopId||'');
+        if(previous!==wid)clearSlot(card);
+        card.dataset.cfdhPickerWorkshopId=wid;
+        defaultReferenceEducator(card,wid,wm);
+        await populateLessonPicker(card,wid,{force:previous!==wid});
+        hideLegacyCalendarAndConflicts(card);
       });
     }
 
@@ -276,15 +326,19 @@ async function bindActionWorkshopDefaults(){
     if(lessonSel.dataset.bound!=='1'){
       lessonSel.dataset.bound='1';
       lessonSel.addEventListener('change',async()=>{
-        const wid=String(workshopSel.value||'');
-        if(!wid||!lessonSel.value){clearSlot(card);return}
+        const wid=String(workshopSel.value||''),lessonId=String(lessonSel.value||'');
+        if(!wid||!lessonId){clearSlot(card);return}
         const rows=await availablePlanLessons([wid]);
-        const slot=rows.find(r=>String(r.id)===String(lessonSel.value));
+        if(String(lessonSel.value||'')!==lessonId||String(workshopSel.value||'')!==wid)return;
+        const slot=rows.find(r=>String(r.id)===lessonId);
         const w=wm.get(wid);
         if(slot&&w)applySlot(card,w,slot,wm);
       });
     }
-    await populateLessonPicker(card,workshopSel.value);
+    const desiredKey=`${monthKey()}|${String(workshopSel.value||'')}`;
+    if(lessonSel.dataset.cfdhLessonPickerKey!==desiredKey||!['ready','loading','empty'].includes(lessonSel.dataset.cfdhLessonPickerState||'')){
+      await populateLessonPicker(card,workshopSel.value);
+    }
   }
 }
 
@@ -356,14 +410,15 @@ function prepareWorkshopPlanField(card){
   ta.placeholder=PENDING_TEXT;
   ta.style.background='#f3f7f5';
   const label=field?.querySelector('label');
-  if(label)label.textContent='CFDH TRANSVERSAL DO PLANEJAMENTO';
+  if(label&&label.textContent!=='CFDH TRANSVERSAL DO PLANEJAMENTO')label.textContent='CFDH TRANSVERSAL DO PLANEJAMENTO';
   let helper=field?.querySelector('[data-cfdh-workshop-field-help]');
   if(!helper&&field){
     helper=document.createElement('small');
     helper.dataset.cfdhWorkshopFieldHelp='1';
     field.appendChild(helper);
   }
-  if(helper)helper.textContent='Preenchimento automático pelo CFDH Compartilhado Transversal. Este campo não é marcado nem preenchido manualmente na oficina.';
+  const helperText='Preenchimento automático pelo CFDH Compartilhado Transversal. Este campo não é marcado nem preenchido manualmente na oficina.';
+  if(helper&&helper.textContent!==helperText)helper.textContent=helperText;
 }
 
 function enhanceWorkshopPlan(){
@@ -446,11 +501,17 @@ async function decorateLinkedWorkshopLessons(){
 }
 
 async function enhance(){
+  if(enhancing){pendingEnhance=true;return}
+  enhancing=true;
   try{
     updateTransversalCopy();
     enhanceWorkshopPlan();
     await Promise.all([addReferenceLabels(),bindActionWorkshopDefaults(),decorateLinkedWorkshopLessons()]);
   }catch(err){console.warn('[CFDH transversal UI]',err?.message||err)}
+  finally{
+    enhancing=false;
+    if(pendingEnhance){pendingEnhance=false;schedule()}
+  }
 }
 function schedule(){
   if(scheduled)return;
@@ -469,14 +530,23 @@ document.addEventListener('click',e=>{
 },true);
 
 document.addEventListener('change',e=>{
-  if(e.target.matches?.('[name="cfdh_workshop_id"],[data-cfdh-action-workshop],[data-cfdh-type],[data-cfdh-lesson-select]')){
+  if(e.target.matches?.('[name="cfdh_workshop_id"],[data-cfdh-type]')){
     linkedCacheAt=0;
     lessonsCache.at=0;
     schedule();
   }
 },true);
 
-const observer=new MutationObserver(schedule);
+const STRUCTURAL_SELECTOR='#cfdh-plan-editor,#workshop-plan-form,[data-cfdh-action-card],[data-plan-lesson],[data-cfdh-action-workshop]';
+function mutationTouchesRelevantStructure(record){
+  return [...record.addedNodes,...record.removedNodes].some(node=>{
+    if(node?.nodeType!==1)return false;
+    return node.matches?.(STRUCTURAL_SELECTOR)||node.querySelector?.(STRUCTURAL_SELECTOR);
+  });
+}
+const observer=new MutationObserver(records=>{
+  if(records.some(mutationTouchesRelevantStructure))schedule();
+});
 observer.observe(document.documentElement,{childList:true,subtree:true});
 window.addEventListener('hashchange',()=>{linkedCacheAt=0;lessonsCache.at=0;schedule()});
 window.addEventListener('focus',()=>{linkedCacheAt=0;schedule()});
