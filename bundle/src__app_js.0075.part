@@ -1,0 +1,15 @@
+
+/* CFDH_PARALLEL_SCHEDULING_UI_20261021
+ * Mantém a interface coerente com a regra operacional do CFDH:
+ * simultaneidade com outras ações é permitida e não aparece como conflito bloqueante.
+ * Fechamentos do CRJ, fins de semana e limites 10:00–21:00 continuam validados.
+ */
+cfdhStructuralWindow = function(date){
+  const dow=cfdhWeekday(date);
+  if(dow==null||dow===0||dow===6)return null;
+  return {start:CRJ_OPEN_START,end:CRJ_OPEN_END,note:'CFDH estrutural permitido durante o horário de funcionamento do CRJ, inclusive em paralelo a outras ações.'};
+};
+
+cfdhActionCalendarConflicts = function(){
+  return [];
+};
