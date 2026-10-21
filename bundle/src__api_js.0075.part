@@ -1,0 +1,20 @@
+
+/* CFDH_PARALLEL_SCHEDULING_20261021
+ * Regra operacional:
+ * - CFDH pode ocorrer em paralelo a oficinas, reuniões, atendimentos, eventos e outras ações;
+ * - sobreposição de agenda não bloqueia salvamento;
+ * - CFDH estrutural só é bloqueado em dia fechado/fim de semana ou fora do funcionamento do CRJ (10:00–21:00).
+ *
+ * Este override é carregado depois do núcleo CFDH (.007) e antes das extensões finais do api.js.
+ */
+cfdhApiStructuralWindow = function(date){
+  const dow=cfdhApiWeekday(date);
+  if(dow==null||dow===0||dow===6)return null;
+  return {start:'10:00',end:'21:00'};
+};
+
+// Conflitos de simultaneidade deixam de ser impeditivos para CFDH.
+// As validações de fechamento e horário de funcionamento permanecem independentes.
+cfdhApiOverlaps = function(){
+  return false;
+};
