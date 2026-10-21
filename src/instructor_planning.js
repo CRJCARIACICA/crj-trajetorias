@@ -112,17 +112,11 @@ export async function saveInstructorBlock(form,user,{requireComplete=false}={}){
   try{return await task}finally{if(saving.get(form)===task)saving.delete(form)}
 }
 async function requestEvidence(month,requestId,planId=null){
-  if(planId){
-    const prepared=await client().rpc('workshop_create_instructor_evidence_for_plan',{
-      p_reference_month:month,p_plan_id:planId,p_request_id:requestId
-    });
-    if(prepared.error)throw prepared.error;
-  }
   const {data:{session}}=await client().auth.getSession();
   if(!session)throw new Error('Sessão expirada. Entre novamente para gerar a evidência.');
   const response=await fetch(CONFIG.supabaseUrl+'/functions/v1/crj-instructor-planning-evidence',{
     method:'POST',headers:{Authorization:'Bearer '+session.access_token,apikey:CONFIG.supabasePublishableKey,'Content-Type':'application/json'},
-    body:JSON.stringify({reference_month:month,request_id:requestId})
+    body:JSON.stringify({reference_month:month,request_id:requestId,...(planId?{plan_id:planId}:{})})
   });
   const data=await response.json().catch(()=>({}));
   if(!response.ok)throw new Error(data.error||'Não foi possível gerar a evidência. Os blocos salvos foram preservados.');
@@ -195,7 +189,7 @@ async function generateEvidence(host,user,button){
     try{localStorage.removeItem(nonceKey)}catch{}
     if(status&&status.isConnected){
       status.className='';
-      status.innerHTML='<div class="notice success"><b>Evidência da oficina armazenada · versão '+evidence.version+'</b><p>Os arquivos estão disponíveis em Planejamentos.</p><div class="ip-actions">'+evidenceButtons(evidence)+'</div></div>';
+      status.innerHTML='<div class="notice success"><b>Evidência armazenada · oficina · versão '+evidence.version+'</b><p>Os arquivos estão disponíveis em Planejamentos.</p><div class="ip-actions">'+evidenceButtons(evidence)+'</div></div>';
       bindDownloads(status,[evidence]);
     }
   }catch(error){
@@ -207,19 +201,28 @@ async function generateEvidence(host,user,button){
   }
 }
 export async function bindInstructorPlanning(host,data,user){
-  const lessons=new Map(data.lessons.map(x=>[x.id,x]));
+  const lessons=new Map((data.lessons||[]).map(x=>[x.id,x]));
+  const forms=[...host.querySelectorAll('[data-ip-lesson-form]')];
   const evidenceRoot=host.querySelector('[data-ip-evidence-root]'),month=evidenceRoot?.dataset.month;
   if(evidenceRoot&&month){
-    host.querySelectorAll('.ip-plan').forEach(section=>{
-      const first=section.querySelector('[data-ip-lesson-form]');if(!first)return;
-      const row=lessons.get(first.dataset.ipLessonForm),planId=row?.plan_id;if(!planId)return;
-      const plan=data.plans.find(p=>p.id===planId),workshop=data.workshops.find(w=>w.id===plan?.workshop_id);
-      section.dataset.ipPlanId=planId;
-      if(!section.querySelector('[data-ip-evidence-footer]'))section.insertAdjacentHTML('beforeend',evidenceFooterHtml(month,planId,workshop?.name||section.querySelector('.ip-plan-head h3')?.textContent||'Oficina'));
-    });
+    const sections=[...host.querySelectorAll('.ip-plan')];
+    if(sections.length){
+      sections.forEach(section=>{
+        const first=section.querySelector('[data-ip-lesson-form]');if(!first)return;
+        const row=lessons.get(first.dataset.ipLessonForm),planId=row?.plan_id;if(!planId)return;
+        const plan=(data.plans||[]).find(p=>p.id===planId),workshop=(data.workshops||[]).find(w=>w.id===plan?.workshop_id);
+        section.dataset.ipPlanId=planId;
+        if(!section.querySelector('[data-ip-evidence-footer]'))section.insertAdjacentHTML('beforeend',evidenceFooterHtml(month,planId,workshop?.name||section.querySelector('.ip-plan-head h3')?.textContent||'Oficina'));
+      });
+    }else{
+      const planIds=[...new Set(forms.map(f=>lessons.get(f.dataset.ipLessonForm)?.plan_id).filter(Boolean))];
+      if(planIds.length===1){
+        host.dataset.ipPlanId=planIds[0];
+        evidenceRoot.insertAdjacentHTML('beforebegin',evidenceFooterHtml(month,planIds[0],'Oficina'));
+      }
+    }
     evidenceRoot.remove();
   }
-  const forms=[...host.querySelectorAll('[data-ip-lesson-form]')];
   for(const form of forms){
     const row=lessons.get(form.dataset.ipLessonForm);if(!row)continue;
     form._ipSavedFields=normalized(row);form._ipSavedLesson=row;
