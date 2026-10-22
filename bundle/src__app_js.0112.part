@@ -1,10 +1,20 @@
-/* LABPOCA_WORKSHOP_CLASSIFICATION_20261022 */
+/* LABPOCA_WORKSHOP_FORM_GUARD_20261022 */
 (()=>{
-let timer=null;const p=()=>new URLSearchParams((location.hash.split('?')[1]||'')),month=()=>p().get('month')||new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit'}).format(new Date());
-async function enhance(){const f=document.querySelector('#workshop-device-form');if(!f||f.dataset.lpClassified==='1'||!window.CRJLabpoca)return;f.dataset.lpClassified='1';const loc=f.querySelector('[name=location_type]');if(loc&&!loc.querySelector('[value="LABStudio"]')){const o=document.createElement('option');o.value='LABStudio';o.textContent='LABStudio';const before=loc.querySelector('[value="Sala de computadores"]');loc.insertBefore(o,before||null)}
-let current=null;try{const c=await window.CRJLabpoca.db(),q=await c.rpc('list_workshops_for_month',{p_month:month()+'-01'}),initial=String(f.querySelector('[name=name]')?.value||'').trim();current=(q.data||[]).find(x=>String(x.name||'').trim()===initial)||null}catch{}
-const box=document.createElement('div');box.className='lp-card';box.dataset.lpWorkshopClass='1';box.style.border='2px solid #9bcabc';box.style.background='#f5fbf8';box.innerHTML=`<div><b>Essa oficina é um LABPOCA?</b><br><small class="lp-muted">Se sim, ela passa a integrar os resultados mensais do LABPOCA/LABSTUDIO.</small></div><div class="form-grid" style="margin-top:10px"><div class="field"><label>Integra o LABPOCA?</label><select class="input" name="is_labpoca"><option value="false">Não</option><option value="true">Sim</option></select></div><div class="field" data-lp-area><label>Qual categoria?</label><select class="input" name="labpoca_area"><option value="">Selecione</option><option value="estetica">Estética (LABPOCA)</option><option value="audiovisual">Audiovisual (LABSTUDIO)</option></select></div></div>`;
-const devices=f.querySelector('[data-wd-device-box]');devices?.insertAdjacentElement('beforebegin',box);const yes=box.querySelector('[name=is_labpoca]'),area=box.querySelector('[name=labpoca_area]'),generic=f.querySelector('[name="methodology_devices"][value="labpoca"]');if(generic){const label=generic.closest('label');if(label)label.style.display='none'}yes.value=(current?.is_labpoca===true||String(current?.is_labpoca)==='true')?'true':'false';area.value=current?.labpoca_area||'';
-const sync=()=>{const on=yes.value==='true';box.querySelector('[data-lp-area]').style.display=on?'block':'none';area.required=on;if(!on)area.value='';if(generic&&!generic.disabled){generic.checked=on;generic.dispatchEvent(new Event('change',{bubbles:true}))}if(on&&loc&&!loc.value)loc.value=area.value==='audiovisual'?'LABStudio':area.value==='estetica'?'LABPoca':''};yes.onchange=sync;area.onchange=sync;sync()}
-function schedule(){clearTimeout(timer);timer=setTimeout(()=>enhance().catch(()=>{}),40)}new MutationObserver(schedule).observe(document.documentElement,{childList:true,subtree:true});document.addEventListener('click',schedule,true);window.addEventListener('hashchange',schedule);schedule();
+let timer=null;
+async function enhance(){
+  const f=document.querySelector('#workshop-device-form');
+  if(!f||f.dataset.lpGuarded==='1')return;
+  f.dataset.lpGuarded='1';
+  const loc=f.querySelector('[name=location_type]');
+  if(loc&&!loc.querySelector('[value="LABStudio"]')){
+    const o=document.createElement('option');o.value='LABStudio';o.textContent='LABStudio';
+    const before=loc.querySelector('[value="Sala de computadores"]');loc.insertBefore(o,before||null);
+  }
+  const generic=f.querySelector('[name="methodology_devices"][value="labpoca"]');
+  if(generic){const label=generic.closest('label');if(label)label.style.display='none'}
+  f.querySelector('[data-lp-workshop-class]')?.remove();
+}
+function schedule(){clearTimeout(timer);timer=setTimeout(()=>enhance().catch(()=>{}),40)}
+new MutationObserver(schedule).observe(document.documentElement,{childList:true,subtree:true});
+document.addEventListener('click',schedule,true);window.addEventListener('hashchange',schedule);schedule();
 })();
