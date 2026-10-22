@@ -93,7 +93,8 @@ const ROUTE_FEATURES={
   equipe:{critical:['instructor_management'],deferred:[]},
   'equipe-permissoes':{critical:['instructor_management'],deferred:[]},
   jhonatao:{critical:['jhonatao_multimodal','jhonatao_live'],deferred:[]},
-  'calendario-geral':{critical:['general_calendar'],deferred:[]}
+  'calendario-geral':{critical:['general_calendar'],deferred:[]},
+  'mostra-profissoes':{critical:['meta4_3_ui'],deferred:[]}
 };
 
 function featureSet(route){
@@ -161,8 +162,6 @@ async function loadForRoute(route,{prefetch=false}={}){
     critical.forEach(prefetchModule);
     return;
   }
-  // O hash muda antes de o núcleo terminar a página. A montagem é o sinal
-  // definitivo; importação antecipada executava boot() e perdia a renderização.
   if(!routeShellReady()||routeName()!==route)return;
   const seq=++routeSeq,isCurrent=captureRoute();
   const currentHash=location.hash;
