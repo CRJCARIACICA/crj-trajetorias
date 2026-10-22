@@ -1,92 +1,489 @@
 
 /* GRUPO_GESTOR_EVIDENCIAS_RELATORIA_20261022
  * Coordenação de Articulação > Grupo Gestor
- * - cada reunião planejada ganha lista oficial de presença (Anexo 2) com PDF/DOCX;
- * - reunião concluída pode validar a lista e gerar evidência rastreável;
- * - nova área de Relatoria mensal importa reuniões/deliberações e gera evidência baixável.
+ * - lista oficial de presença para cada reunião planejada;
+ * - validação da lista e evidência PDF/DOCX/impressão;
+ * - relatoria mensal com reuniões/deliberações importadas e campos analíticos.
  */
 (()=>{
-  const VERSION='20261022-governance-reporting1';
   let apiPromise=null,configPromise=null,observer=null,timer=null,lastMeetingId=null,reportRenderKey='';
-  const esc=(v='')=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const monthNow=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit'}).format(new Date());
+
+  const esc=(v='')=>String(v??'').replace(/[&<>"']/g,c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+  const monthNow=()=>new Intl.DateTimeFormat('en-CA',{
+    timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit'
+  }).format(new Date());
   const params=()=>new URLSearchParams((location.hash.split('?')[1]||''));
-  const routeActive=()=>String(location.hash||'').split('?')[0]==='#coordenacao-articulacao'&&(params().get('view')||'grupo')==='grupo';
+  const routeActive=()=>String(location.hash||'').split('?')[0]==='#coordenacao-articulacao'
+    &&(params().get('view')||'grupo')==='grupo';
   const task=()=>params().get('task')||'composicao';
   const reportMonth=()=>params().get('month')||monthNow();
-  const api=()=>apiPromise||(apiPromise=import(`./api.js?v=20261016-hours1&${VERSION}`).catch(()=>import('./api.js?v=20261016-hours1')));
+  const api=()=>apiPromise||(apiPromise=import('./api.js?v=20261016-hours1'));
   const cfg=()=>configPromise||(configPromise=import('./config.js'));
-  async function client(){const m=await api();if(m.apiMode()!=='live')throw new Error('Banco ainda não conectado.');return m.supabaseClient()}
-  function toast(message,type='success'){
-    const el=document.createElement('div');el.className=`pill ${type}`;el.textContent=message;
-    Object.assign(el.style,{position:'fixed',right:'20px',bottom:'20px',zIndex:'2147483640',padding:'12px 16px',boxShadow:'0 10px 35px rgba(0,0,0,.2)'});
-    document.body.appendChild(el);setTimeout(()=>el.remove(),3600);
+
+  async function client(){
+    const m=await api();
+    if(m.apiMode()!=='live')throw new Error('Banco ainda não conectado.');
+    return m.supabaseClient();
   }
-  function ensureStyle(){if(document.querySelector('#gov-reporting-style'))return;const s=document.createElement('style');s.id='gov-reporting-style';s.textContent=`
-    .gov-evidence-box{margin-top:12px;border:1px solid #bcdad0;background:#f7fcfa;border-radius:14px;padding:13px}.gov-evidence-box h4{margin:0 0 4px}.gov-evidence-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.gov-report-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.gov-report-readonly{white-space:pre-wrap;max-height:280px;overflow:auto;border:1px solid #e0e8e5;border-radius:10px;background:#f8fbfa;padding:11px;font-size:12px}.gov-report-host{display:grid;gap:12px}.gov-report-host textarea{min-height:110px}.gov-status{display:inline-flex;padding:4px 8px;border-radius:999px;font-size:10px;background:#eef5f2}.gov-status.ok{background:#e7f7ee;color:#17633f}.gov-status.warn{background:#fff3d4;color:#755100}@media(max-width:760px){.gov-report-grid{grid-template-columns:1fr}}
-  `;document.head.appendChild(s)}
+
+  function toast(message,type='success'){
+    const el=document.createElement('div');
+    el.className=`pill ${type}`;
+    el.textContent=message;
+    Object.assign(el.style,{
+      position:'fixed',right:'20px',bottom:'20px',zIndex:'2147483640',
+      padding:'12px 16px',boxShadow:'0 10px 35px rgba(0,0,0,.2)'
+    });
+    document.body.appendChild(el);
+    setTimeout(()=>el.remove(),3600);
+  }
+
+  function ensureStyle(){
+    if(document.querySelector('#gov-reporting-style'))return;
+    const s=document.createElement('style');
+    s.id='gov-reporting-style';
+    s.textContent=`
+      .gov-evidence-box{margin-top:12px;border:1px solid #bcdad0;background:#f7fcfa;border-radius:14px;padding:13px}
+      .gov-evidence-box h4{margin:0 0 4px}
+      .gov-evidence-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+      .gov-report-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+      .gov-report-readonly{white-space:pre-wrap;max-height:280px;overflow:auto;border:1px solid #e0e8e5;border-radius:10px;background:#f8fbfa;padding:11px;font-size:12px}
+      .gov-report-host{display:grid;gap:12px}
+      .gov-report-host textarea{min-height:110px}
+      .gov-status{display:inline-flex;padding:4px 8px;border-radius:999px;font-size:10px;background:#eef5f2}
+      .gov-status.ok{background:#e7f7ee;color:#17633f}
+      .gov-status.warn{background:#fff3d4;color:#755100}
+      @media(max-width:760px){.gov-report-grid{grid-template-columns:1fr}}
+    `;
+    document.head.appendChild(s);
+  }
 
   async function exportSubmission(id,format='pdf',print=false){
     if(!id)throw new Error('Evidência ainda não foi gerada.');
-    if(window.CRJEvidenceExports&&!print){await window.CRJEvidenceExports.download(id,format);return}
-    if(window.CRJEvidenceExports&&print){await window.CRJEvidenceExports.print(id);return}
-    const [db,{CONFIG}]=await Promise.all([client(),cfg()]);const {data:{session}}=await db.auth.getSession();if(!session)throw new Error('Sessão expirada.');
-    const res=await fetch(`${CONFIG.supabaseUrl}/functions/v1/crj-export-document`,{method:'POST',headers:{Authorization:`Bearer ${session.access_token}`,'Content-Type':'application/json',apikey:CONFIG.supabasePublishableKey},body:JSON.stringify({submission_id:id,format})});
-    if(!res.ok){let msg='Falha ao gerar evidência.';try{msg=(await res.json()).error||msg}catch{}throw new Error(msg)}
-    const blob=await res.blob(),url=URL.createObjectURL(blob);
-    if(print){const w=window.open(url,'_blank');if(!w)throw new Error('Libere pop-ups para imprimir.');setTimeout(()=>URL.revokeObjectURL(url),60000);return}
-    const cd=res.headers.get('content-disposition')||'',name=(cd.match(/filename="([^"]+)"/i)||[])[1]||`grupo-gestor.${format}`;const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);
+    if(window.CRJEvidenceExports&&!print){
+      await window.CRJEvidenceExports.download(id,format);
+      return;
+    }
+    if(window.CRJEvidenceExports&&print){
+      await window.CRJEvidenceExports.print(id);
+      return;
+    }
+
+    const [db,{CONFIG}]=await Promise.all([client(),cfg()]);
+    const {data:{session}}=await db.auth.getSession();
+    if(!session)throw new Error('Sessão expirada.');
+
+    const res=await fetch(`${CONFIG.supabaseUrl}/functions/v1/crj-export-document`,{
+      method:'POST',
+      headers:{
+        Authorization:`Bearer ${session.access_token}`,
+        'Content-Type':'application/json',
+        apikey:CONFIG.supabasePublishableKey
+      },
+      body:JSON.stringify({submission_id:id,format})
+    });
+
+    if(!res.ok){
+      let msg='Falha ao gerar evidência.';
+      try{msg=(await res.json()).error||msg}catch{}
+      throw new Error(msg);
+    }
+
+    const blob=await res.blob();
+    const url=URL.createObjectURL(blob);
+
+    if(print){
+      const w=window.open(url,'_blank');
+      if(!w)throw new Error('Libere pop-ups para imprimir.');
+      setTimeout(()=>URL.revokeObjectURL(url),60000);
+      return;
+    }
+
+    const cd=res.headers.get('content-disposition')||'';
+    const name=(cd.match(/filename="([^"]+)"/i)||[])[1]||`grupo-gestor.${format}`;
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),10000);
   }
 
-  function rememberMeetingClick(e){const b=e.target.closest?.('[data-mw-open-meeting]');if(b?.dataset?.mwOpenMeeting)lastMeetingId=b.dataset.mwOpenMeeting}
+  function rememberMeetingClick(e){
+    const b=e.target.closest?.('[data-mw-open-meeting]');
+    if(b?.dataset?.mwOpenMeeting)lastMeetingId=b.dataset.mwOpenMeeting;
+  }
 
   async function enhanceMeetingModal(){
-    if(!lastMeetingId)return;const modal=document.querySelector('.mw-modal');if(!modal||modal.querySelector('[data-gov-attendance-evidence]'))return;
-    const title=String(modal.querySelector('.mw-modal-head')?.textContent||'');if(!title.includes('Reunião do Grupo Gestor'))return;
-    const box=document.createElement('div');box.className='gov-evidence-box';box.dataset.govAttendanceEvidence='1';box.innerHTML='<h4>Lista de presença oficial</h4><div class="mw-muted">Carregando evidências da reunião…</div>';modal.querySelector('.mw-modal-body')?.appendChild(box);
+    if(!lastMeetingId)return;
+
+    const modal=document.querySelector('.mw-modal');
+    if(!modal||modal.querySelector('[data-gov-attendance-evidence]'))return;
+
+    const title=String(modal.querySelector('.mw-modal-head')?.textContent||'');
+    if(!title.includes('Reunião do Grupo Gestor'))return;
+
+    const box=document.createElement('div');
+    box.className='gov-evidence-box';
+    box.dataset.govAttendanceEvidence='1';
+    box.innerHTML='<h4>Lista de presença oficial</h4><div class="mw-muted">Carregando evidências da reunião…</div>';
+    modal.querySelector('.mw-modal-body')?.appendChild(box);
+
     try{
-      const db=await client();const q=await db.from('governance_meetings').select('id,status,attendance_roster_submission_id,attendance_submission_id,attendance_validated_at').eq('id',lastMeetingId).single();if(q.error)throw q.error;const mt=q.data;
-      const render=()=>{box.innerHTML=`<div class="mw-head"><div><h4>Lista de presença oficial</h4><div class="mw-muted">Usa o mesmo documento institucional da Lista de Presença e Contato (Anexo 2). A lista planejada traz a composição atual; a evidência validada considera somente as presenças marcadas e salvas.</div></div>${mt.attendance_submission_id?'<span class="gov-status ok">EVIDÊNCIA VALIDADA</span>':'<span class="gov-status warn">AGUARDANDO VALIDAÇÃO</span>'}</div><div class="gov-evidence-actions"><button type="button" class="btn secondary" data-gov-roster-pdf>Baixar lista planejada PDF</button><button type="button" class="btn secondary" data-gov-roster-docx>Baixar lista planejada DOCX</button>${mt.attendance_submission_id?'<button type="button" class="btn secondary" data-gov-final-pdf>Baixar evidência PDF</button><button type="button" class="btn secondary" data-gov-final-docx>Baixar evidência DOCX</button><button type="button" class="btn secondary" data-gov-final-print>Imprimir evidência</button>':'<button type="button" class="btn primary" data-gov-validate-attendance>Validar lista e gerar evidência</button>'}</div>${mt.attendance_validated_at?`<div class="mw-muted" style="margin-top:7px">Validada em ${esc(new Date(mt.attendance_validated_at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}))}.</div>`:''}`}
-      ;
-        const busy=async(btn,fn)=>{const old=btn.textContent;btn.disabled=true;btn.textContent='Gerando…';try{await fn()}catch(err){toast(err?.message||String(err),'danger')}finally{btn.disabled=false;btn.textContent=old}};
-        box.querySelector('[data-gov-roster-pdf]')?.addEventListener('click',e=>busy(e.currentTarget,async()=>{const r=await db.rpc('governance_generate_attendance_evidence',{p_meeting_id:lastMeetingId,p_final:false});if(r.error)throw r.error;const row=Array.isArray(r.data)?r.data[0]:r.data;mt.attendance_roster_submission_id=row?.submission_id;await exportSubmission(row?.submission_id,'pdf')}));
-        box.querySelector('[data-gov-roster-docx]')?.addEventListener('click',e=>busy(e.currentTarget,async()=>{const r=await db.rpc('governance_generate_attendance_evidence',{p_meeting_id:lastMeetingId,p_final:false});if(r.error)throw r.error;const row=Array.isArray(r.data)?r.data[0]:r.data;mt.attendance_roster_submission_id=row?.submission_id;await exportSubmission(row?.submission_id,'docx')}));
-        box.querySelector('[data-gov-validate-attendance]')?.addEventListener('click',e=>busy(e.currentTarget,async()=>{const r=await db.rpc('governance_generate_attendance_evidence',{p_meeting_id:lastMeetingId,p_final:true});if(r.error)throw r.error;const row=Array.isArray(r.data)?r.data[0]:r.data;mt.attendance_submission_id=row?.submission_id;mt.attendance_validated_at=new Date().toISOString();toast(`Lista validada com ${row?.participant_count||0} presença(s).`);render()}));
-        box.querySelector('[data-gov-final-pdf]')?.addEventListener('click',e=>busy(e.currentTarget,()=>exportSubmission(mt.attendance_submission_id,'pdf')));
-        box.querySelector('[data-gov-final-docx]')?.addEventListener('click',e=>busy(e.currentTarget,()=>exportSubmission(mt.attendance_submission_id,'docx')));
-        box.querySelector('[data-gov-final-print]')?.addEventListener('click',e=>busy(e.currentTarget,()=>exportSubmission(mt.attendance_submission_id,'pdf',true)));
-      };render();
-    }catch(err){box.innerHTML=`<h4>Lista de presença oficial</h4><div class="mw-muted">${esc(err?.message||String(err))}</div>`}
+      const db=await client();
+      const q=await db.from('governance_meetings')
+        .select('id,status,attendance_roster_submission_id,attendance_submission_id,attendance_validated_at')
+        .eq('id',lastMeetingId)
+        .single();
+      if(q.error)throw q.error;
+      const mt=q.data;
+
+      const busy=async(btn,fn)=>{
+        const old=btn.textContent;
+        btn.disabled=true;
+        btn.textContent='Gerando…';
+        try{await fn()}
+        catch(err){toast(err?.message||String(err),'danger')}
+        finally{btn.disabled=false;btn.textContent=old}
+      };
+
+      const render=()=>{
+        const badge=mt.attendance_submission_id
+          ?'<span class="gov-status ok">EVIDÊNCIA VALIDADA</span>'
+          :'<span class="gov-status warn">AGUARDANDO VALIDAÇÃO</span>';
+        const finalActions=mt.attendance_submission_id
+          ?'<button type="button" class="btn secondary" data-gov-final-pdf>Baixar evidência PDF</button><button type="button" class="btn secondary" data-gov-final-docx>Baixar evidência DOCX</button><button type="button" class="btn secondary" data-gov-final-print>Imprimir evidência</button>'
+          :'<button type="button" class="btn primary" data-gov-validate-attendance>Validar lista e gerar evidência</button>';
+        const validated=mt.attendance_validated_at
+          ?`<div class="mw-muted" style="margin-top:7px">Validada em ${esc(new Date(mt.attendance_validated_at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}))}.</div>`
+          :'';
+
+        box.innerHTML=`
+          <div class="mw-head">
+            <div>
+              <h4>Lista de presença oficial</h4>
+              <div class="mw-muted">Usa o mesmo documento institucional da Lista de Presença e Contato (Anexo 2). A lista planejada traz a composição atual; a evidência validada considera somente as presenças marcadas e salvas.</div>
+            </div>
+            ${badge}
+          </div>
+          <div class="gov-evidence-actions">
+            <button type="button" class="btn secondary" data-gov-roster-pdf>Baixar lista planejada PDF</button>
+            <button type="button" class="btn secondary" data-gov-roster-docx>Baixar lista planejada DOCX</button>
+            ${finalActions}
+          </div>
+          ${validated}
+        `;
+
+        box.querySelector('[data-gov-roster-pdf]')?.addEventListener('click',e=>busy(e.currentTarget,async()=>{
+          const r=await db.rpc('governance_generate_attendance_evidence',{p_meeting_id:lastMeetingId,p_final:false});
+          if(r.error)throw r.error;
+          const row=Array.isArray(r.data)?r.data[0]:r.data;
+          mt.attendance_roster_submission_id=row?.submission_id;
+          await exportSubmission(row?.submission_id,'pdf');
+        }));
+
+        box.querySelector('[data-gov-roster-docx]')?.addEventListener('click',e=>busy(e.currentTarget,async()=>{
+          const r=await db.rpc('governance_generate_attendance_evidence',{p_meeting_id:lastMeetingId,p_final:false});
+          if(r.error)throw r.error;
+          const row=Array.isArray(r.data)?r.data[0]:r.data;
+          mt.attendance_roster_submission_id=row?.submission_id;
+          await exportSubmission(row?.submission_id,'docx');
+        }));
+
+        box.querySelector('[data-gov-validate-attendance]')?.addEventListener('click',e=>busy(e.currentTarget,async()=>{
+          const r=await db.rpc('governance_generate_attendance_evidence',{p_meeting_id:lastMeetingId,p_final:true});
+          if(r.error)throw r.error;
+          const row=Array.isArray(r.data)?r.data[0]:r.data;
+          mt.attendance_submission_id=row?.submission_id;
+          mt.attendance_validated_at=new Date().toISOString();
+          toast(`Lista validada com ${row?.participant_count||0} presença(s).`);
+          render();
+        }));
+
+        box.querySelector('[data-gov-final-pdf]')?.addEventListener('click',e=>busy(
+          e.currentTarget,()=>exportSubmission(mt.attendance_submission_id,'pdf')
+        ));
+        box.querySelector('[data-gov-final-docx]')?.addEventListener('click',e=>busy(
+          e.currentTarget,()=>exportSubmission(mt.attendance_submission_id,'docx')
+        ));
+        box.querySelector('[data-gov-final-print]')?.addEventListener('click',e=>busy(
+          e.currentTarget,()=>exportSubmission(mt.attendance_submission_id,'pdf',true)
+        ));
+      };
+
+      render();
+    }catch(err){
+      box.innerHTML=`<h4>Lista de presença oficial</h4><div class="mw-muted">${esc(err?.message||String(err))}</div>`;
+    }
   }
 
-  function formatMeeting(m){const status={completed:'Concluída',scheduled:'Agendada',cancelled:'Cancelada'}[m.status]||m.status;let t=`${new Date(m.meeting_date+'T12:00:00-03:00').toLocaleDateString('pt-BR')} · ${m.title||'Reunião'} · ${status}`;if(m.agenda)t+=`\nPauta: ${m.agenda}`;if(m.minutes_summary)t+=`\nRegistro/ata: ${m.minutes_summary}`;return t}
-  async function activeGroup(db){const q=await db.from('governance_groups').select('*').eq('active',true).order('created_at',{ascending:false}).limit(1).maybeSingle();if(q.error)throw q.error;return q.data}
+  function formatMeeting(m){
+    const status={completed:'Concluída',scheduled:'Agendada',cancelled:'Cancelada'}[m.status]||m.status;
+    let t=`${new Date(m.meeting_date+'T12:00:00-03:00').toLocaleDateString('pt-BR')} · ${m.title||'Reunião'} · ${status}`;
+    if(m.agenda)t+=`\nPauta: ${m.agenda}`;
+    if(m.minutes_summary)t+=`\nRegistro/ata: ${m.minutes_summary}`;
+    return t;
+  }
+
+  async function activeGroup(db){
+    const q=await db.from('governance_groups')
+      .select('*').eq('active',true)
+      .order('created_at',{ascending:false})
+      .limit(1).maybeSingle();
+    if(q.error)throw q.error;
+    return q.data;
+  }
 
   async function renderReport(host,force=false){
-    const m=reportMonth(),key=`${m}:${location.hash}`;if(!force&&reportRenderKey===key&&host.dataset.ready==='1')return;reportRenderKey=key;host.dataset.ready='0';host.innerHTML='<div class="mw-card"><div class="mw-empty">Carregando relatoria mensal…</div></div>';
+    const m=reportMonth();
+    const key=`${m}:${location.hash}`;
+    if(!force&&reportRenderKey===key&&host.dataset.ready==='1')return;
+
+    reportRenderKey=key;
+    host.dataset.ready='0';
+    host.innerHTML='<div class="mw-card"><div class="mw-empty">Carregando relatoria mensal…</div></div>';
+
     try{
-      const db=await client(),group=await activeGroup(db);if(!group){host.innerHTML='<div class="mw-empty">Cadastre o Grupo Gestor antes de preencher a relatoria.</div>';return}
-      const [y,mo]=m.split('-').map(Number),next=new Date(Date.UTC(y,mo,1)).toISOString().slice(0,10),start=`${m}-01`;
-      const [mq,rq]=await Promise.all([db.from('governance_meetings').select('*').eq('group_id',group.id).gte('meeting_date',start).lt('meeting_date',next).order('meeting_date').order('start_time'),db.from('governance_monthly_reports').select('*').eq('group_id',group.id).eq('reference_month',start).maybeSingle()]);if(mq.error)throw mq.error;if(rq.error)throw rq.error;
-      const meetings=mq.data||[],report=rq.data||{},liveMeetings=meetings.length?meetings.map(formatMeeting).join('\n\n'):'Nenhuma reunião registrada nesta competência.',liveDeliberations=meetings.filter(x=>x.status==='completed'&&String(x.minutes_summary||'').trim()).map(x=>`${new Date(x.meeting_date+'T12:00:00-03:00').toLocaleDateString('pt-BR')} · ${x.minutes_summary}`).join('\n\n')||'Nenhuma deliberação registrada nas atas/resumos das reuniões.';
+      const db=await client();
+      const group=await activeGroup(db);
+      if(!group){
+        host.innerHTML='<div class="mw-empty">Cadastre o Grupo Gestor antes de preencher a relatoria.</div>';
+        return;
+      }
+
+      const [y,mo]=m.split('-').map(Number);
+      const next=new Date(Date.UTC(y,mo,1)).toISOString().slice(0,10);
+      const start=`${m}-01`;
+
+      const [mq,rq]=await Promise.all([
+        db.from('governance_meetings').select('*')
+          .eq('group_id',group.id).gte('meeting_date',start).lt('meeting_date',next)
+          .order('meeting_date').order('start_time'),
+        db.from('governance_monthly_reports').select('*')
+          .eq('group_id',group.id).eq('reference_month',start).maybeSingle()
+      ]);
+      if(mq.error)throw mq.error;
+      if(rq.error)throw rq.error;
+
+      const meetings=mq.data||[];
+      const report=rq.data||{};
+      const liveMeetings=meetings.length
+        ?meetings.map(formatMeeting).join('\n\n')
+        :'Nenhuma reunião registrada nesta competência.';
+      const deliberationRows=meetings
+        .filter(x=>x.status==='completed'&&String(x.minutes_summary||'').trim())
+        .map(x=>`${new Date(x.meeting_date+'T12:00:00-03:00').toLocaleDateString('pt-BR')} · ${x.minutes_summary}`);
+      const liveDeliberations=deliberationRows.join('\n\n')||'Nenhuma deliberação registrada nas atas/resumos das reuniões.';
       const meetingLinks=[...new Set(meetings.map(x=>String(x.evidence_url||'').trim()).filter(Boolean))];
-      host.innerHTML=`<div class="mw-head"><div><h3>Relatoria mensal do Grupo Gestor</h3><div class="mw-muted">As reuniões, pautas, atas/resumos e deliberações são importadas automaticamente do que foi produzido no próprio Grupo Gestor.</div></div><div class="mw-actions"><input class="input" type="month" min="2025-10" max="2027-03" value="${esc(m)}" data-gov-report-month><button class="btn secondary" type="button" data-gov-report-refresh>Atualizar do banco</button></div></div><div class="mw-kpis"><div class="mw-kpi"><span>Reuniões</span><b>${meetings.length}</b></div><div class="mw-kpi"><span>Concluídas</span><b>${meetings.filter(x=>x.status==='completed').length}</b></div><div class="mw-kpi"><span>Deliberações registradas</span><b>${meetings.filter(x=>x.status==='completed'&&String(x.minutes_summary||'').trim()).length}</b></div><div class="mw-kpi"><span>Relatoria</span><b style="font-size:14px">${report.status==='complete'?'Concluída':report.id?'Rascunho':'Pendente'}</b></div></div><div class="gov-report-grid"><div class="mw-card"><h4>Reuniões importadas</h4><div class="mw-muted" style="margin-bottom:8px">Atualizadas diretamente das reuniões da competência.</div><div class="gov-report-readonly">${esc(liveMeetings)}</div></div><div class="mw-card"><h4>Deliberações importadas</h4><div class="mw-muted" style="margin-bottom:8px">Usa os resumos/atas das reuniões concluídas.</div><div class="gov-report-readonly">${esc(liveDeliberations)}</div></div></div><form data-gov-report-form class="mw-card mw-form-grid"><div class="mw-field full"><label>Pontos positivos</label><textarea class="input" name="positive_points">${esc(report.positive_points||'')}</textarea></div><div class="mw-field full"><label>Pontos negativos</label><textarea class="input" name="negative_points">${esc(report.negative_points||'')}</textarea></div><div class="mw-field full"><label>Observações</label><textarea class="input" name="observations">${esc(report.observations||'')}</textarea></div><div class="mw-field full"><label>Links de evidências</label><textarea class="input" name="evidence_links" placeholder="Um link por linha">${esc(report.evidence_links||meetingLinks.join('\n'))}</textarea><span class="mw-muted">Links das próprias reuniões também são incorporados automaticamente ao salvar.</span></div><div class="mw-field full"><div class="mw-actions"><button type="button" class="btn secondary" data-gov-save-draft>Salvar rascunho</button><button type="button" class="btn primary" data-gov-finalize-report>Finalizar e gerar evidência</button>${report.submission_id?`<button type="button" class="btn secondary" data-gov-report-pdf>Baixar PDF</button><button type="button" class="btn secondary" data-gov-report-docx>Baixar DOCX</button><button type="button" class="btn secondary" data-gov-report-print>Imprimir</button>`:''}</div></div></form>`;
-      const goMonth=e=>{const q=new URLSearchParams(params());q.set('view','grupo');q.set('task','relatoria');q.set('month',e.target.value);location.hash=`coordenacao-articulacao?${q}`};host.querySelector('[data-gov-report-month]')?.addEventListener('change',goMonth);
-      host.querySelector('[data-gov-report-refresh]')?.addEventListener('click',()=>{reportRenderKey='';renderReport(host,true)});
-      const save=async(finalize,button)=>{const old=button.textContent;button.disabled=true;button.textContent=finalize?'Finalizando…':'Salvando…';try{const f=host.querySelector('[data-gov-report-form]'),fd=new FormData(f);const r=await db.rpc('governance_save_monthly_report',{p_group_id:group.id,p_reference_month:start,p_positive_points:String(fd.get('positive_points')||''),p_negative_points:String(fd.get('negative_points')||''),p_observations:String(fd.get('observations')||''),p_evidence_links:String(fd.get('evidence_links')||''),p_finalize:finalize});if(r.error)throw r.error;const row=Array.isArray(r.data)?r.data[0]:r.data;toast(finalize?'Relatoria finalizada e evidência gerada.':'Rascunho da relatoria salvo.');reportRenderKey='';await renderReport(host,true);if(finalize&&row?.submission_id)await exportSubmission(row.submission_id,'pdf')}catch(err){toast(err?.message||String(err),'danger')}finally{button.disabled=false;button.textContent=old}};
-      host.querySelector('[data-gov-save-draft]')?.addEventListener('click',e=>save(false,e.currentTarget));host.querySelector('[data-gov-finalize-report]')?.addEventListener('click',e=>save(true,e.currentTarget));
-      host.querySelector('[data-gov-report-pdf]')?.addEventListener('click',()=>exportSubmission(report.submission_id,'pdf').catch(e=>toast(e.message,'danger')));host.querySelector('[data-gov-report-docx]')?.addEventListener('click',()=>exportSubmission(report.submission_id,'docx').catch(e=>toast(e.message,'danger')));host.querySelector('[data-gov-report-print]')?.addEventListener('click',()=>exportSubmission(report.submission_id,'pdf',true).catch(e=>toast(e.message,'danger')));
+
+      host.innerHTML=`
+        <div class="mw-head">
+          <div>
+            <h3>Relatoria mensal do Grupo Gestor</h3>
+            <div class="mw-muted">As reuniões, pautas, atas/resumos e deliberações são importadas automaticamente do que foi produzido no próprio Grupo Gestor.</div>
+          </div>
+          <div class="mw-actions">
+            <input class="input" type="month" min="2025-10" max="2027-03" value="${esc(m)}" data-gov-report-month>
+            <button class="btn secondary" type="button" data-gov-report-refresh>Atualizar do banco</button>
+          </div>
+        </div>
+
+        <div class="mw-kpis">
+          <div class="mw-kpi"><span>Reuniões</span><b>${meetings.length}</b></div>
+          <div class="mw-kpi"><span>Concluídas</span><b>${meetings.filter(x=>x.status==='completed').length}</b></div>
+          <div class="mw-kpi"><span>Deliberações registradas</span><b>${deliberationRows.length}</b></div>
+          <div class="mw-kpi"><span>Relatoria</span><b style="font-size:14px">${report.status==='complete'?'Concluída':report.id?'Rascunho':'Pendente'}</b></div>
+        </div>
+
+        <div class="gov-report-grid">
+          <div class="mw-card">
+            <h4>Reuniões importadas</h4>
+            <div class="mw-muted" style="margin-bottom:8px">Atualizadas diretamente das reuniões da competência.</div>
+            <div class="gov-report-readonly">${esc(liveMeetings)}</div>
+          </div>
+          <div class="mw-card">
+            <h4>Deliberações importadas</h4>
+            <div class="mw-muted" style="margin-bottom:8px">Usa os resumos/atas das reuniões concluídas.</div>
+            <div class="gov-report-readonly">${esc(liveDeliberations)}</div>
+          </div>
+        </div>
+
+        <form data-gov-report-form class="mw-card mw-form-grid">
+          <div class="mw-field full">
+            <label>Pontos positivos</label>
+            <textarea class="input" name="positive_points">${esc(report.positive_points||'')}</textarea>
+          </div>
+          <div class="mw-field full">
+            <label>Pontos negativos</label>
+            <textarea class="input" name="negative_points">${esc(report.negative_points||'')}</textarea>
+          </div>
+          <div class="mw-field full">
+            <label>Observações</label>
+            <textarea class="input" name="observations">${esc(report.observations||'')}</textarea>
+          </div>
+          <div class="mw-field full">
+            <label>Links de evidências</label>
+            <textarea class="input" name="evidence_links" placeholder="Um link por linha">${esc(report.evidence_links||meetingLinks.join('\n'))}</textarea>
+            <span class="mw-muted">Links das próprias reuniões também são incorporados automaticamente ao salvar.</span>
+          </div>
+          <div class="mw-field full">
+            <div class="mw-actions">
+              <button type="button" class="btn secondary" data-gov-save-draft>Salvar rascunho</button>
+              <button type="button" class="btn primary" data-gov-finalize-report>Finalizar e gerar evidência</button>
+              ${report.submission_id?`
+                <button type="button" class="btn secondary" data-gov-report-pdf>Baixar PDF</button>
+                <button type="button" class="btn secondary" data-gov-report-docx>Baixar DOCX</button>
+                <button type="button" class="btn secondary" data-gov-report-print>Imprimir</button>
+              `:''}
+            </div>
+          </div>
+        </form>
+      `;
+
+      host.querySelector('[data-gov-report-month]')?.addEventListener('change',e=>{
+        const q=new URLSearchParams(params());
+        q.set('view','grupo');
+        q.set('task','relatoria');
+        q.set('month',e.target.value);
+        location.hash=`coordenacao-articulacao?${q}`;
+      });
+
+      host.querySelector('[data-gov-report-refresh]')?.addEventListener('click',()=>{
+        reportRenderKey='';
+        renderReport(host,true);
+      });
+
+      const save=async(finalize,button)=>{
+        const old=button.textContent;
+        button.disabled=true;
+        button.textContent=finalize?'Finalizando…':'Salvando…';
+        try{
+          const f=host.querySelector('[data-gov-report-form]');
+          const fd=new FormData(f);
+          const r=await db.rpc('governance_save_monthly_report',{
+            p_group_id:group.id,
+            p_reference_month:start,
+            p_positive_points:String(fd.get('positive_points')||''),
+            p_negative_points:String(fd.get('negative_points')||''),
+            p_observations:String(fd.get('observations')||''),
+            p_evidence_links:String(fd.get('evidence_links')||''),
+            p_finalize:finalize
+          });
+          if(r.error)throw r.error;
+          const row=Array.isArray(r.data)?r.data[0]:r.data;
+          toast(finalize?'Relatoria finalizada e evidência gerada.':'Rascunho da relatoria salvo.');
+          reportRenderKey='';
+          await renderReport(host,true);
+          if(finalize&&row?.submission_id)await exportSubmission(row.submission_id,'pdf');
+        }catch(err){
+          toast(err?.message||String(err),'danger');
+        }finally{
+          button.disabled=false;
+          button.textContent=old;
+        }
+      };
+
+      host.querySelector('[data-gov-save-draft]')?.addEventListener('click',e=>save(false,e.currentTarget));
+      host.querySelector('[data-gov-finalize-report]')?.addEventListener('click',e=>save(true,e.currentTarget));
+      host.querySelector('[data-gov-report-pdf]')?.addEventListener('click',()=>{
+        exportSubmission(report.submission_id,'pdf').catch(e=>toast(e.message,'danger'));
+      });
+      host.querySelector('[data-gov-report-docx]')?.addEventListener('click',()=>{
+        exportSubmission(report.submission_id,'docx').catch(e=>toast(e.message,'danger'));
+      });
+      host.querySelector('[data-gov-report-print]')?.addEventListener('click',()=>{
+        exportSubmission(report.submission_id,'pdf',true).catch(e=>toast(e.message,'danger'));
+      });
+
       host.dataset.ready='1';
-    }catch(err){host.innerHTML=`<div class="mw-card danger"><b>Não foi possível abrir a relatoria.</b><div class="mw-muted">${esc(err?.message||String(err))}</div></div>`}
+    }catch(err){
+      host.innerHTML=`<div class="mw-card danger"><b>Não foi possível abrir a relatoria.</b><div class="mw-muted">${esc(err?.message||String(err))}</div></div>`;
+    }
   }
 
-  function restoreNormalBody(tabs){const parent=tabs.parentElement;if(!parent)return;parent.querySelectorAll('[data-gov-hidden="1"]').forEach(el=>{el.style.display=el.dataset.govOldDisplay||'';delete el.dataset.govHidden;delete el.dataset.govOldDisplay});parent.querySelector('[data-gov-report-host]')?.remove()}
+  function restoreNormalBody(tabs){
+    const parent=tabs.parentElement;
+    if(!parent)return;
+    parent.querySelectorAll('[data-gov-hidden="1"]').forEach(el=>{
+      el.style.display=el.dataset.govOldDisplay||'';
+      delete el.dataset.govHidden;
+      delete el.dataset.govOldDisplay;
+    });
+    parent.querySelector('[data-gov-report-host]')?.remove();
+  }
+
   function ensureReportTab(){
-    if(!routeActive())return;const tabs=document.querySelector('.content .mw-subtabs');if(!tabs)return;ensureStyle();let b=tabs.querySelector('[data-gov-report-tab]');if(!b){b=document.createElement('button');b.type='button';b.dataset.govReportTab='1';b.textContent='Relatoria mensal';b.addEventListener('click',()=>{const q=new URLSearchParams({view:'grupo',task:'relatoria',month:reportMonth()});location.hash=`coordenacao-articulacao?${q}`});tabs.appendChild(b)}b.classList.toggle('active',task()==='relatoria');if(task()!=='relatoria'){restoreNormalBody(tabs);return}
-    const parent=tabs.parentElement;if(!parent)return;[...parent.children].forEach(el=>{if(el===tabs||el.matches?.('[data-gov-report-host]'))return;const idx=[...parent.children].indexOf(el),tabIdx=[...parent.children].indexOf(tabs);if(idx>tabIdx){if(el.dataset.govHidden!=='1'){el.dataset.govHidden='1';el.dataset.govOldDisplay=el.style.display||''}el.style.display='none'}});let host=parent.querySelector('[data-gov-report-host]');if(!host){host=document.createElement('div');host.className='gov-report-host';host.dataset.govReportHost='1';tabs.insertAdjacentElement('afterend',host)}renderReport(host).catch(e=>{host.innerHTML=`<div class="mw-empty">${esc(e.message)}</div>`})
+    if(!routeActive())return;
+    const tabs=document.querySelector('.content .mw-subtabs');
+    if(!tabs)return;
+    ensureStyle();
+
+    let b=tabs.querySelector('[data-gov-report-tab]');
+    if(!b){
+      b=document.createElement('button');
+      b.type='button';
+      b.dataset.govReportTab='1';
+      b.textContent='Relatoria mensal';
+      b.addEventListener('click',()=>{
+        const q=new URLSearchParams({view:'grupo',task:'relatoria',month:reportMonth()});
+        location.hash=`coordenacao-articulacao?${q}`;
+      });
+      tabs.appendChild(b);
+    }
+
+    b.classList.toggle('active',task()==='relatoria');
+    if(task()!=='relatoria'){
+      restoreNormalBody(tabs);
+      return;
+    }
+
+    const parent=tabs.parentElement;
+    if(!parent)return;
+    const children=[...parent.children];
+    const tabIdx=children.indexOf(tabs);
+
+    children.forEach(el=>{
+      if(el===tabs||el.matches?.('[data-gov-report-host]'))return;
+      if(children.indexOf(el)>tabIdx){
+        if(el.dataset.govHidden!=='1'){
+          el.dataset.govHidden='1';
+          el.dataset.govOldDisplay=el.style.display||'';
+        }
+        el.style.display='none';
+      }
+    });
+
+    let host=parent.querySelector('[data-gov-report-host]');
+    if(!host){
+      host=document.createElement('div');
+      host.className='gov-report-host';
+      host.dataset.govReportHost='1';
+      tabs.insertAdjacentElement('afterend',host);
+    }
+
+    renderReport(host).catch(e=>{
+      host.innerHTML=`<div class="mw-empty">${esc(e.message)}</div>`;
+    });
   }
 
-  function schedule(){clearTimeout(timer);timer=setTimeout(()=>{if(!routeActive())return;ensureReportTab();enhanceMeetingModal().catch(()=>{})},35)}
-  document.addEventListener('click',rememberMeetingClick,true);window.addEventListener('hashchange',()=>{reportRenderKey='';schedule()});window.addEventListener('crj:route-rendered',schedule);window.addEventListener('crj:features-ready',schedule);
-  observer=new MutationObserver(schedule);observer.observe(document.documentElement,{childList:true,subtree:true});schedule();
+  function schedule(){
+    clearTimeout(timer);
+    timer=setTimeout(()=>{
+      if(!routeActive())return;
+      ensureReportTab();
+      enhanceMeetingModal().catch(()=>{});
+    },35);
+  }
+
+  document.addEventListener('click',rememberMeetingClick,true);
+  window.addEventListener('hashchange',()=>{reportRenderKey='';schedule()});
+  window.addEventListener('crj:route-rendered',schedule);
+  window.addEventListener('crj:features-ready',schedule);
+
+  observer=new MutationObserver(schedule);
+  observer.observe(document.documentElement,{childList:true,subtree:true});
+  schedule();
 })();
