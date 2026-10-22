@@ -1,0 +1,14 @@
+-- Meta 3 · Etapa 3.1 — Grupo Gestor formado e atuante
+-- Regra aplicada em produção:
+-- 1. O indicador M3.1_GRUPO_GESTOR é mensal e vale 1 grupo.
+-- 2. O Grupo Gestor precisa estar active=true, status='formalized' e ter formalized_at.
+-- 3. Para cada competência mensal, confirma o indicador se houver pelo menos uma reunião
+--    status='completed' no mês da competência ou nos dois meses imediatamente anteriores.
+-- 4. Assim, uma reunião concluída sustenta a condição de 'atuante' por até três competências:
+--    mês da reunião + dois meses seguintes. Depois disso é necessária nova reunião concluída.
+-- 5. Reunião agendada ou cancelada não confirma o indicador.
+-- 6. A função app_private.meta31_refresh_month() grava/remove automaticamente o evento mensal
+--    source_type='governance_group_monthly_activity'.
+-- 7. Triggers em governance_groups e governance_meetings recalculam automaticamente o período
+--    quando o grupo é formalizado/alterado ou uma reunião é criada, concluída, cancelada ou alterada.
+-- 8. A etapa 3.1 fica confirmada no mês quando M3.1_GRUPO_GESTOR = 1.
