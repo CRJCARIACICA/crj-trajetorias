@@ -38,7 +38,6 @@ function normalizeRestBody(url,body){
       : {...parsed,p_payload:normalizeInitialFormObject(parsed?.p_payload)};
     return JSON.stringify(normalized);
   }catch(error){
-    // Erros reais de validação do campo devem bloquear o envio; JSON não relacionado segue intacto.
     if(error instanceof SyntaxError)return body;
     throw error;
   }
@@ -61,60 +60,39 @@ function installFetchGuard(){
 
 function installGuard(client){
   if(!client||client[INSTALL_FLAG])return;
-
   const originalFrom=client.from.bind(client);
   client.from=function(table){
     const builder=originalFrom(table);
     if(table!=='young_people')return builder;
-
     for(const method of ['insert','update','upsert']){
       if(typeof builder[method]!=='function')continue;
       const original=builder[method].bind(builder);
-      builder[method]=function(values,options){
-        return original(normalizeRows(values),options);
-      };
+      builder[method]=function(values,options){return original(normalizeRows(values),options);};
     }
     return builder;
   };
-
   const originalRpc=client.rpc.bind(client);
   client.rpc=function(fn,args={},options){
-    if(fn==='save_initial_form_document'&&args?.p_payload&&typeof args.p_payload==='object'){
-      args={...args,p_payload:normalizeInitialFormObject(args.p_payload)};
-    }
+    if(fn==='save_initial_form_document'&&args?.p_payload&&typeof args.p_payload==='object')args={...args,p_payload:normalizeInitialFormObject(args.p_payload)};
     return originalRpc(fn,args,options);
   };
-
   Object.defineProperty(client,INSTALL_FLAG,{value:true,configurable:false});
 }
 
 function validateInitialFormInput(){
   const input=document.querySelector('form [name="household_size"]');
-  if(!input)return;
-  input.min='0';
-  input.step='1';
+  if(!input)return;input.min='0';input.step='1';
   const raw=String(input.value??'').trim();
-  if(raw===''){
-    input.setCustomValidity('');
-    return;
-  }
+  if(raw===''){input.setCustomValidity('');return}
   const number=Number(raw);
   input.setCustomValidity(Number.isInteger(number)&&number>=0?'':'Informe a quantidade de pessoas com um número inteiro igual ou maior que zero.');
 }
 
-document.addEventListener('input',event=>{
-  if(event.target?.matches?.('[name="household_size"]'))validateInitialFormInput();
-},true);
-
+document.addEventListener('input',event=>{if(event.target?.matches?.('[name="household_size"]'))validateInitialFormInput();},true);
 document.addEventListener('submit',event=>{
-  const input=event.target?.querySelector?.('[name="household_size"]');
-  if(!input)return;
+  const input=event.target?.querySelector?.('[name="household_size"]');if(!input)return;
   validateInitialFormInput();
-  if(!input.checkValidity()){
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    input.reportValidity();
-  }
+  if(!input.checkValidity()){event.preventDefault();event.stopImmediatePropagation();input.reportValidity();}
 },true);
 
 async function boot(){
@@ -124,6 +102,9 @@ async function boot(){
   installGuard(supabaseClient());
 }
 
-// A proteção de rede entra imediatamente, antes da inicialização do app/Supabase.
 installFetchGuard();
 boot().catch(error=>console.error('Falha ao ativar normalização do Formulário Inicial:',error));
+
+// Classificações e fluxos da Meta 4.3 precisam acompanhar formulários abertos em qualquer área.
+// O carregamento é assíncrono para não bloquear o bootstrap principal.
+import('./meta4_3_ui.js?v=20261022-meta43-1').catch(error=>console.warn('Meta 4.3 UI indisponível:',error));
