@@ -6,6 +6,7 @@ export const MODULE_ROUTES=Object.freeze({
   'documentos-evidencias':{label:'Documentos e Evidências',module:'document_drafts'},
   'controlador-acesso':{label:'Controlador de Acessos',module:'access_controller'},
   'calendario-geral':{label:'Calendário Geral',module:'general_calendar'},
+  'mostra-profissoes':{label:'Mostra Semestral',module:'meta4_3_ui'},
   oficineiro:{label:'Área do Oficineiro',module:'instructor_portal'},
   administrativo:{label:'Área Administrativa',module:'management_workspace'},
   'coordenacao-geral':{label:'Coordenação Geral',module:'management_workspace'},
