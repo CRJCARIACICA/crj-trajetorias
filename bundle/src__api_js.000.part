@@ -1,5 +1,6 @@
 import { CONFIG } from './config.js';
 import { roleLabel } from './permissions.js';
+import { withWorkshopConnectionRetry, workshopConnectionMessage } from './workshop_connection.js?v=20261023-checkin1';
 
 const LS = 'crj_trajetorias_demo_v1';
 let supabase = null;

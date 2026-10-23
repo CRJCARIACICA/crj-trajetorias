@@ -302,8 +302,12 @@ export async function registerWorkshopEnrollment(row){
 }
 export async function openWorkshopCheckin(sessionId){
   if(mode==='mock')throw new Error('Lista virtual requer banco conectado.');
-  const {data,error}=await supabase.rpc('open_workshop_checkin',{p_session_id:sessionId,p_minutes_before:30,p_minutes_after:120});
-  if(error)throw error;return Array.isArray(data)?data[0]:data;
+  try{
+    const {data}=await withWorkshopConnectionRetry(()=>supabase.rpc('open_workshop_checkin',{p_session_id:sessionId,p_minutes_before:30,p_minutes_after:120}));
+    const window=Array.isArray(data)?data[0]:data;
+    if(!window?.public_token)throw new Error('A lista não foi aberta. Tente novamente.');
+    return window;
+  }catch(error){throw new Error(workshopConnectionMessage(error),{cause:error})}
 }
 export async function linkProvisionalToYouth(provisionalId,youthId){
   if(mode==='mock'){const st=mock(),p=(st.provisionalPeople||[]).find(x=>x.id===provisionalId);if(p)p.linked_youth_id=youthId;save(st);return;}

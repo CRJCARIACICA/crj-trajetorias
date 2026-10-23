@@ -6,7 +6,7 @@ import { MODULE_ROUTES, routeName, routeShellReady, captureRoute } from './route
 // quando a área correspondente é realmente aberta. Isso evita dezenas de
 // MutationObservers e consultas Supabase fora do menu em uso.
 
-const VERSION='20261023-mob1';
+const VERSION='20261023-checkin1';
 const modulePreloads=new Set();
 const moduleAttempts=new Map();
 const moduleCache=new Map();

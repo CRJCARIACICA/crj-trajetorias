@@ -1,5 +1,6 @@
 
 import { CONFIG } from './config.js';
+import { withWorkshopConnectionRetry, workshopConnectionMessage } from './workshop_connection.js?v=20261023-checkin1';
 
 const app=document.querySelector('#checkin-app');
 const esc=(v='')=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
@@ -353,17 +354,24 @@ function showSuccess(title,text,state={}){
   setTimeout(()=>{if(app.querySelector('[data-another]'))mainButtons()},4500);
 }
 
-try{
-  if(!token)throw new Error('Link sem identificação da lista.');
-  let mod;
-  try{mod=await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm')}
-  catch{mod=await import('https://esm.sh/@supabase/supabase-js@2.117.2')}
-  db=mod.createClient(CONFIG.supabaseUrl,CONFIG.supabasePublishableKey,{auth:{persistSession:false,autoRefreshToken:false}});
-  const {data,error}=await db.rpc(rpcName('workshop_checkin_context','cfdh_checkin_context'),{p_token:token});
-  if(error)throw error;
-  ctx=Array.isArray(data)?data[0]:data;
-  if(!ctx)throw new Error('A lista não está disponível neste momento.');
-  mainButtons();
-}catch(err){
-  app.innerHTML=notice('danger','Não foi possível abrir a lista.',err.message||String(err));
+async function openCheckin(){
+  app.innerHTML='<div class="notice" role="status">Carregando lista...</div>';
+  try{
+    if(!token)throw new Error('Link sem identificação da lista.');
+    if(!db){
+      let mod;
+      try{mod=await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm')}
+      catch{mod=await import('https://esm.sh/@supabase/supabase-js@2.117.2')}
+      db=mod.createClient(CONFIG.supabaseUrl,CONFIG.supabasePublishableKey,{auth:{persistSession:false,autoRefreshToken:false}});
+    }
+    const {data}=await withWorkshopConnectionRetry(()=>db.rpc(rpcName('workshop_checkin_context','cfdh_checkin_context'),{p_token:token}));
+    ctx=Array.isArray(data)?data[0]:data;
+    if(!ctx)throw new Error('A lista não está disponível neste momento. Peça à equipe para reabrir a lista da aula.');
+    mainButtons();
+  }catch(err){
+    app.innerHTML=notice('danger','Não foi possível abrir a lista.',workshopConnectionMessage(err))+
+      (token?'<button type="button" class="btn primary" data-checkin-retry>Tentar novamente</button>':'');
+    app.querySelector('[data-checkin-retry]')?.addEventListener('click',openCheckin);
+  }
 }
+await openCheckin();
