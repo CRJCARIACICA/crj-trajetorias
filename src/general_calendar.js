@@ -64,6 +64,7 @@ async function safeRowsWith(table,select='*'){
 }
 
 function inferCategory(source,row){
+  if(source==='articulation_mobilization_actions')return 'articulacao';
   const joined=norm([row?.event_type,row?.plan_type,row?.action_type,row?.record_type,row?.resource_type,row?.booking_type,row?.category,row?.title,row?.activity_title,row?.name].filter(Boolean).join(' '));
   if(source==='access_resource_bookings'){
     if(joined.includes('equip')||joined.includes('material'))return 'equipamento';
@@ -78,7 +79,7 @@ function inferCategory(source,row){
   if(joined.includes('passeio')||joined.includes('visita')||joined.includes('intercambio')||joined.includes('intercâmbio'))return 'passeio';
   if(joined.includes('evento')||joined.includes('programacao')||joined.includes('programação')||joined.includes('mostra'))return 'evento';
   if(source==='calendar_events')return 'tecnico';
-  if(source==='articulation_actions'||joined.includes('mobilizacao')||joined.includes('mobilização')||joined.includes('articulacao')||joined.includes('articulação'))return 'articulacao';
+  if(source==='articulation_mobilization_actions'||source==='articulation_actions'||joined.includes('mobilizacao')||joined.includes('mobilização')||joined.includes('articulacao')||joined.includes('articulação'))return 'articulacao';
   if(source==='educator_plans'&&joined.includes('oficina'))return 'oficina';
   return 'outro';
 }
@@ -119,6 +120,7 @@ function routeFor(source,row){
   if(source==='calendar_events')return '#agenda';
   if(source==='access_resource_bookings')return '#controlador-acesso';
   if(source==='cfdh_actions')return '#cfdh';
+  if(source==='articulation_mobilization_actions')return '#planos-mobilizacao?view=plano-geral';
   if(source==='articulation_actions')return '#articulacao';
   if(source==='educator_plans')return '#educador';
   if(source==='joint_actions')return '#lancamento-geral';
@@ -127,6 +129,7 @@ function routeFor(source,row){
 function ownerIds(row){return ['created_by','user_id','educator_user_id','responsible_user_id','owner_id','requested_by','professional_id','oficineiro_user_id'].map(k=>row?.[k]).filter(Boolean).map(String);}
 function canEditSource(source,row,techMap){
   if(!me?.active)return false;
+  if(source==='articulation_mobilization_actions')return false;
   if(PRIVILEGED.has(me.role))return true;
   if(ownerIds(row).includes(String(me.id)))return true;
   if(source==='calendar_events'&&TECH_ROLES.has(me.role)&&(techMap.get(row.id)||[]).includes(me.id))return true;
@@ -190,22 +193,24 @@ async function attachMethodology(events){
   }
 }
 
+async function publishedMobilizations(){try{return await client().from('articulation_mobilization_actions').select('*,articulation_monthly_mobilization_plans!inner(status)').eq('articulation_monthly_mobilization_plans.status','published').eq('cancelled',false).then(q=>{if(q.error)throw q.error;return q.data||[]})}catch(e){console.warn('Mobilizações no calendário:',e);return []}}
+
 async function loadMonth(month,force=false){
   if(!force&&cached.month===month&&Date.now()-cached.loadedAt<30000)return cached;
   if(apiMode()!=='live')return {month,events:[],profile:null,loadedAt:Date.now()};
   await resolveProfile();
-  const [calendarEvents,techLinks,workshopCalendar,technicalPlans,educatorPlans,cfdhActions,articulationActions,resourceBookings,jointActions]=await Promise.all([
+  const [calendarEvents,techLinks,workshopCalendar,technicalPlans,educatorPlans,cfdhActions,articulationActions,resourceBookings,jointActions,mobilizationActions]=await Promise.all([
     safeRows('calendar_events'),safeRowsWith('calendar_event_technicians','event_id,technician_user_id'),safeRowsWith('workshop_calendar','*,workshops(id,name,workshop_type,schedule_mode,location_type,location_other,oficineiro_user_id,educator_user_id)'),
-    safeRows('technical_action_plans'),safeRows('educator_plans'),safeRows('cfdh_actions'),safeRows('articulation_actions'),safeRows('access_resource_bookings'),safeRows('joint_actions')
+    safeRows('technical_action_plans'),safeRows('educator_plans'),safeRows('cfdh_actions'),safeRows('articulation_actions'),safeRows('access_resource_bookings'),safeRows('joint_actions'),publishedMobilizations()
   ]);
   const monthlyWorkshops=new Map((await listWorkshops(month)).map(w=>[w.id,w]));
   for(const entry of workshopCalendar){const config=monthlyWorkshops.get(entry.workshop_id);if(config)entry.workshops=config;}
   const techMap=new Map();for(const x of techLinks){const a=techMap.get(x.event_id)||[];a.push(x.technician_user_id);techMap.set(x.event_id,a)}
   const sourceRows=[
     ['calendar_events',calendarEvents],['workshop_calendar',workshopCalendar],['technical_action_plans',technicalPlans],['educator_plans',educatorPlans],
-    ['cfdh_actions',cfdhActions],['articulation_actions',articulationActions],['access_resource_bookings',resourceBookings],['joint_actions',jointActions]
+    ['cfdh_actions',cfdhActions],['articulation_actions',articulationActions],['access_resource_bookings',resourceBookings],['joint_actions',jointActions],['articulation_mobilization_actions',mobilizationActions]
   ];
-  let events=[];for(const [source,rows] of sourceRows)for(const row of rows){const ev=normalizeEvent(source,row,techMap);if(ev&&inMonth(ev,month))events.push(ev)}
+  let events=[];for(const [source,rows] of sourceRows)for(const row of rows){if(source==='articulation_mobilization_actions'&&row.cancelled)continue;const ev=normalizeEvent(source,row,techMap);if(ev&&inMonth(ev,month))events.push(ev)}
   events=dedupe(events);await attachMethodology(events);
   cached={month,events,profile:me,loadedAt:Date.now()};return cached;
 }

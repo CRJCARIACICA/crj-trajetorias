@@ -11,7 +11,7 @@ let me=null,renderTimer=null,lastKey='',modalCleanup=null;
 const esc=(v='')=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rootRoute=()=>String(location.hash||'#dashboard').split('?')[0].replace(/^#/,'').split('/')[0];
 const params=()=>new URLSearchParams((location.hash.split('?')[1]||''));
-const defaultView=()=>me?.role==='coordenacao_articulacao'?'grupo':'documentos';
+const defaultView=()=>me?.role==='coordenacao_articulacao'?'mobilizacao':'documentos';
 const view=()=>params().get('view')||defaultView();
 const groupTask=()=>params().get('task')||'composicao';
 const monthNow=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit'}).format(new Date());
@@ -51,8 +51,8 @@ async function profile(){
 
 function tabs(){
   const items=me.role==='administrativo'?[['documentos','Documentos metodológicos']]:
-    me.role==='coordenacao_geral'?[['documentos','Documentos metodológicos'],['equipes','Equipes']]:
-    [['grupo','Grupo Gestor']];
+    me.role==='coordenacao_geral'?[['documentos','Documentos metodológicos'],['equipes','Equipes'],['mobilizacao','Mobilizações']]:
+    [['mobilizacao','Mobilizações'],['grupo','Grupo Gestor']];
   return `<div class="mw-tabs">${items.map(([k,l])=>`<button type="button" class="${view()===k?'active':''}" data-mw-view="${k}">${esc(l)}</button>`).join('')}</div>`;
 }
 function groupTabs(){const t=groupTask();const items=[['composicao','Composição e formalização'],['reunioes','Definir reuniões'],['calendario','Calendário do mês']];return `<div class="mw-subtabs">${items.map(([k,l])=>`<button type="button" class="${t===k?'active':''}" data-mw-group-task="${k}">${esc(l)}</button>`).join('')}</div>`}
@@ -189,7 +189,7 @@ function printMeeting(mt,d,att){const members=new Map(d.people.map(p=>[p.id,p]))
 function showModal(title,body,actions=[]){closeModal();const bg=document.createElement('div');bg.className='mw-modal-bg';bg.innerHTML=`<div class="mw-modal"><div class="mw-modal-head"><b>${esc(title)}</b><button class="mw-close" type="button" data-mw-close>×</button></div><div class="mw-modal-body">${body}</div><div class="mw-modal-actions"></div></div>`;document.body.appendChild(bg);bg.querySelector('[data-mw-close]').onclick=closeModal;bg.addEventListener('click',e=>{if(e.target===bg)closeModal()});const bar=bg.querySelector('.mw-modal-actions');actions.forEach(a=>{const b=document.createElement('button');b.type='button';b.className=`btn ${a.primary?'primary':'secondary'}`;b.textContent=a.label;b.onclick=async()=>{b.disabled=true;try{await a.onClick()}catch(err){toast(err?.message||String(err),'danger');b.disabled=false}};bar.appendChild(b)});modalCleanup=()=>bg.remove()}
 function closeModal(){if(modalCleanup){modalCleanup();modalCleanup=null}}
 
-async function content(){if(view()==='documentos'&&canEditDocs())return renderDocuments();if(view()==='equipes'&&isCoordGeral())return renderTeams();if(view()==='grupo'&&isCoordArt())return renderGroupArea();return '<div class="mw-empty">Área sem permissão para este perfil.</div>'}
+async function content(){if(view()==='mobilizacao'&&(isCoordArt()||isCoordGeral()))return '<div data-mob-coordination-host></div>';if(view()==='documentos'&&canEditDocs())return renderDocuments();if(view()==='equipes'&&isCoordGeral())return renderTeams();if(view()==='grupo'&&isCoordArt())return renderGroupArea();return '<div class="mw-empty">Área sem permissão para este perfil.</div>'}
 
 async function render(force=false){
   if(!ROUTES.has(rootRoute()))return;
@@ -197,11 +197,11 @@ async function render(force=false){
   const isCurrent=captureRoute(host);
   if(!me)me=await profile();if(!isCurrent())return;
   if(!me?.active||!allowedRoute()){host.innerHTML='<div class="notice danger">Seu perfil não possui acesso a esta área.</div>';return}
-  if(isCoordArt()&&view()!=='grupo'){routeGroup('composicao');return}
+  if(isCoordArt()&&!['grupo','mobilizacao'].includes(view())){routeTo('mobilizacao');return}if(isCoordArt()&&!params().get('view')){routeTo('mobilizacao');return}
   const key=`${rootRoute()}:${location.hash}:${me.id}`;if(!force&&lastKey===key&&document.querySelector('[data-management-workspace]'))return;lastKey=key;
   injectStyle();
   host.innerHTML=`<div class="mw-shell" data-management-workspace>${header()}<div data-mw-body><div class="mw-empty">Carregando…</div></div></div>`;
-  const body=host.querySelector('[data-mw-body]'),html=await content();if(!isCurrent())return;body.innerHTML=html;bind();
+  const body=host.querySelector('[data-mw-body]'),html=await content();if(!isCurrent())return;body.innerHTML=html;bind();if(view()==='mobilizacao'&&(isCoordArt()||isCoordGeral())){const {mountMobilization}=await import('./mobilization_governance.js?v=20261023-mob1');if(isCurrent())await mountMobilization(body.querySelector('[data-mob-coordination-host]'),me,{coordination:true});}
 }
 function scheduleRender(force=false){clearTimeout(renderTimer);renderTimer=setTimeout(()=>render(force).catch(err=>{console.error('Área de gestão:',err);toast(err?.message||String(err),'danger')}),30)}
 

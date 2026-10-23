@@ -209,7 +209,65 @@ function trajectorySpec(payload) {
   };
 }
 
+function mobilizationSpec(slug, p) {
+  if (slug === "relatorio-mobilizacao-acao") return {
+    readableRows: true,
+    title: "RELATÓRIO DE MOBILIZAÇÃO",
+    subtitle: p.action_name || "",
+    filename: "Relatorio_Mobilizacao_" + safeName(p.action_name),
+    sections: [{rows: [
+      ["Nome da ação", p.action_name], ["Data da execução", brDate(p.executed_date)],
+      ["Local", p.location], ["Tipo da mobilização", p.mobilization_type],
+      ["Responsável pelo relato", p.responsible_name], ["Ações divulgadas", array(p.requested_actions).join("; ")],
+      ["Pontos positivos", p.positives], ["Pontos negativos / dificuldades", p.negatives],
+      ["Observações", p.observations], ["Situação", p.report_status === "finalized" ? "Relatório finalizado" : "Rascunho editável"]
+    ]}]
+  };
+  if (slug === "plano-mobilizacao") return {
+    readableRows: true,
+    title: "PLANO DE MOBILIZAÇÃO",
+    subtitle: p.activity_title || p.mobilization_goal || "",
+    filename: "Plano_Mobilizacao_" + safeName(p.activity_title),
+    sections: [{rows: [
+      ["Ação / atividade solicitada", p.activity_title], ["Tipo da ação", p.activity_type],
+      ["Solicitado por / função", [p.requester_name,p.requester_role].filter(Boolean).join(" · ")],
+      ["Ação metodológica", p.methodological_action], ["Data da atividade", brDate(p.activity_planned_date)],
+      ["Objetivo da mobilização", p.mobilization_goal], ["Público prioritário", p.target_audience],
+      ["Territórios", array(p.territories).join(", ")], ["Estratégias / canais", array(p.strategies).join("; ")],
+      ["Meta de alcance", p.reach_target ?? ""], ["Meta de participação", p.attendance_target ?? ""],
+      ["Mensagem principal", p.main_message], ["Locais", p.places], ["Parceiros", p.partners],
+      ["Recursos necessários", p.materials], ["Responsáveis", p.responsible_text],
+      ["Etapas e cronograma", p.schedule_text], ["Prazo", brDate(p.mobilization_deadline)], ["Observações", p.notes]
+    ]}]
+  };
+  const actions = array(p.actions);
+  return {
+    readableRows: true,
+    title: "PLANO GERAL DE MOBILIZAÇÃO",
+    subtitle: p.title || "",
+    filename: "Plano_Geral_Mobilizacao_" + safeName(p.reference_month) + "_r" + s(p.revision),
+    sections: [
+      {rows: [
+        ["Competência", s(p.reference_month).slice(0,7)], ["Coordenação responsável", p.coordinator_name],
+        ["Situação documental", `${p.status === "published" ? "Publicado para a equipe" : "Rascunho"} · revisão ${p.revision}`],
+        ["Objetivo e prioridades", p.objective], ["Orientações gerais", p.coverage_notes], ["Mobilizações organizadas", actions.length]
+      ]},
+      ...actions.map((a,i)=>({title: `MOBILIZAÇÃO ${i+1} · ${a.title || ""}`, rows: [
+        ["Data / horário", `${brDate(a.scheduled_date)} · ${time5(a.start_time)} às ${time5(a.end_time)}`],
+        ["Tipo da ação", a.action_type], ["Meio de comunicação acionado", a.channel], ["Local / território", [a.location,a.territory].filter(Boolean).join(" · ")],
+        ["Articulador de referência", a.reference_name], ["Colaboradores que acompanham", array(a.collaborator_names).join(", ")],
+        ["Ações solicitadas a mobilizar", array(a.requested_actions).join("; ")], ["Objetivo da mobilização", a.objective],
+        ["1. Etapas antes do dia da mobilização", a.preparation_steps], ["Prazo de preparação", brDate(a.preparation_deadline)],
+        ["Recursos necessários", a.resources], ["Documentos a preparar antes", a.documents_before],
+        ["2. Etapas da execução / tarefas dos colaboradores", a.execution_steps],
+        ["3. Documentos e registros a gerar depois", a.documents_after], ["Orientações complementares", a.notes]
+      ]}))
+    ]
+  };
+}
+
 function submissionSpec(submission) {
+  if (["plano-geral-mobilizacao","plano-mobilizacao","relatorio-mobilizacao-acao"].includes(submission.form_slug)) return mobilizationSpec(submission.form_slug, submission.payload || {});
   if (submission.form_slug === "lista-presenca-contato") return attendanceSpec(submission.payload || {});
   if (submission.form_slug === "trajetoria-jovem") return trajectorySpec(submission.payload || {});
   const title = FORM_TITLES[submission.form_slug] || humanKey(submission.form_slug || "evidencia");
@@ -400,14 +458,38 @@ async function makePdf(spec, header) {
   };
   const ensure = (height) => { if (y - height < 34) addPage(true); };
   const drawRow = (label, value) => {
+    if (spec.readableRows) {
+      const labels = wrapText(label, 31), lines = wrapText(value, 100);
+      const labelWidth = 180;
+      let offset = 0;
+      do {
+        ensure(Math.max(38,12+labels.length*11));
+        const capacity = Math.max(1,Math.floor((y-34-12)/11));
+        const chunk = lines.slice(offset,offset+capacity);
+        const h = Math.max(26,12+Math.max(labels.length,chunk.length)*11);
+        page.drawRectangle({x:margin,y:y-h,width:labelWidth,height:h,borderWidth:.45,borderColor:rgb(0,0,0)});
+        page.drawRectangle({x:margin+labelWidth,y:y-h,width:tableWidth-labelWidth,height:h,borderWidth:.45,borderColor:rgb(0,0,0)});
+        labels.forEach((line,i)=>page.drawText(line,{x:margin+5,y:y-13-i*11,size:8.3,font:bold,maxWidth:labelWidth-10}));
+        chunk.forEach((line,i)=>page.drawText(line,{x:margin+labelWidth+6,y:y-13-i*11,size:9,font,maxWidth:tableWidth-labelWidth-12}));
+        y-=h;offset+=chunk.length;
+        if(offset<lines.length)addPage(true);
+      } while(offset<lines.length);
+      return;
+    }
     const lines = wrapText(value, 115);
-    const h = Math.max(24, 18 + lines.length * 8);
-    ensure(h);
-    page.drawRectangle({ x: margin, y: y - h, width: tableWidth, height: h, borderWidth: .45, borderColor: rgb(0, 0, 0) });
-    page.drawText(pdfSafe(label), { x: margin + 5, y: y - 11, size: 6.5, font: bold, maxWidth: tableWidth - 10 });
-    let ty = y - 21;
-    for (const line of lines) { page.drawText(line, { x: margin + 5, y: ty, size: 6.2, font, maxWidth: tableWidth - 10 }); ty -= 8; }
-    y -= h;
+    let offset = 0;
+    do {
+      ensure(34);
+      const capacity = Math.max(1, Math.floor((y - 34 - 18) / 8));
+      const chunk = lines.slice(offset, offset + capacity);
+      const h = Math.max(26, 18 + chunk.length * 8);
+      page.drawRectangle({ x: margin, y: y - h, width: tableWidth, height: h, borderWidth: .45, borderColor: rgb(0, 0, 0) });
+      page.drawText(pdfSafe(label + (offset ? " (continuação)" : "")), { x: margin + 5, y: y - 11, size: 6.5, font: bold, maxWidth: tableWidth - 10 });
+      let ty = y - 21;
+      for (const line of chunk) { page.drawText(line, { x: margin + 5, y: ty, size: 6.2, font, maxWidth: tableWidth - 10 }); ty -= 8; }
+      y -= h; offset += chunk.length;
+      if (offset < lines.length) addPage(true);
+    } while (offset < lines.length);
   };
   const drawTable = (table) => {
     const cols = Math.max(1, table.heads.length);
@@ -469,7 +551,7 @@ function docCell(text, boldText = false) {
 async function makeDocx(spec, header) {
   const children = [
     new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 80 }, children: [new ImageRun({ data: header.bytes, type: header.type, transformation: { width: 320, height: 56 } })] }),
-    para(spec.title, true, 18, AlignmentType.CENTER)
+    para(spec.title, true, spec.readableRows ? 24 : 18, AlignmentType.CENTER)
   ];
   if (spec.subtitle) children.push(para(spec.subtitle, false, 11, AlignmentType.CENTER));
   for (const section of spec.sections) {
@@ -479,7 +561,7 @@ async function makeDocx(spec, header) {
         width: { size: 100, type: WidthType.PERCENTAGE },
         rows: [new TableRow({ children: [new TableCell({
           borders: { top: border, bottom: border, left: border, right: border },
-          children: [new Paragraph({ children: [new TextRun({ text: s(row[0]) + ": ", bold: true, size: 10 }), new TextRun({ text: s(row[1]), size: 10 })] })]
+          children: [new Paragraph({ children: [new TextRun({ text: s(row[0]) + ": ", bold: true, size: spec.readableRows ? 18 : 10 }), new TextRun({ text: s(row[1]), size: spec.readableRows ? 18 : 10 })] })]
         })] })]
       }));
     }
@@ -570,8 +652,16 @@ Deno.serve(async (req) => {
     const header = await loadHeader(settingsClient);
     let spec;
     if (s(body.submission_id)) {
-      const q = await userClient.from("methodology_form_submissions").select("id,form_slug,payload,submitted_at").eq("id", s(body.submission_id)).single();
+      const q = await userClient.from("methodology_form_submissions").select("id,form_slug,payload,submitted_at,source_type,source_id").eq("id", s(body.submission_id)).single();
       if (q.error || !q.data) throw new Error("Evidência não encontrada ou sem permissão.");
+      if (q.data.source_type === "articulation_mobilization_plan_versions") {
+        const version = await userClient.from("articulation_mobilization_plan_versions").select("snapshot").eq("id",q.data.source_id).single();
+        if (version.error || !version.data) throw new Error("Versão do plano não encontrada ou sem permissão.");
+        q.data.payload = version.data.snapshot;
+      } else if (q.data.source_type === "articulation_mobilization_executions") {
+        const execution = await userClient.from("articulation_mobilization_executions").select("id").eq("id",q.data.source_id).single();
+        if (execution.error || !execution.data) throw new Error("Relatório não encontrado ou sem permissão.");
+      }
       spec = submissionSpec(q.data);
     } else if (s(body.plan_id)) {
       spec = await workshopPlanSpec(userClient, s(body.plan_id));

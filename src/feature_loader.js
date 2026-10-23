@@ -6,7 +6,7 @@ import { MODULE_ROUTES, routeName, routeShellReady, captureRoute } from './route
 // quando a área correspondente é realmente aberta. Isso evita dezenas de
 // MutationObservers e consultas Supabase fora do menu em uso.
 
-const VERSION='20261021-instructor-planning-fix1';
+const VERSION='20261023-mob1';
 const modulePreloads=new Set();
 const moduleAttempts=new Map();
 const moduleCache=new Map();
@@ -254,6 +254,7 @@ async function ensureUtilityNav(){
   const profile=await currentProfile();
   if(!profile)return;
   insertCalendarNav(nav,profile);
+  if(profile.active!==false&&profile.role&&profile.role!=='pendente'&&!nav.querySelector('a[href="#planos-mobilizacao"]')){const link=document.createElement('a');link.href='#planos-mobilizacao';link.innerHTML='<span>◫</span><span>Planos de Mobilização</span>';nav.insertBefore(link,nav.querySelector('.sep')||null);}
   insertAccessNav(nav,profile);
   insertManagementNav(nav,profile);
 }
