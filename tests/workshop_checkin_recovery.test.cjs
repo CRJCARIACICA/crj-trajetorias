@@ -97,6 +97,18 @@ test('a double click while opening calls the service once',async()=>{
   assert.equal(h.button.disabled,false);
 });
 
+test('the participant shortcut opens the same guided attendance list',async()=>{
+  const calls=[];
+  const h=environment(async(name,args)=>{calls.push({name,args});return {data:[{public_token:'list-7'}]}});
+  h.button.dataset.addWorkshopParticipant='session-7';
+  await h.run('openWorkshopCheckinDialogV2(document.querySelector("[data-open-checkin]"),true)');
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].args.p_session_id,'session-7');
+  assert.match(h.context.app.textContent,/Fluxo individual obrigatório/);
+  assert.match(h.context.app.textContent,/Abrir fluxo individual/);
+  assert.equal(h.button.disabled,false);
+});
+
 test('an empty RPC result cannot generate a link with an undefined token',async()=>{
   const h=environment(async()=>({data:[]}));
   await h.run('openWorkshopCheckinDialogV2(document.querySelector("[data-open-checkin]"))');
