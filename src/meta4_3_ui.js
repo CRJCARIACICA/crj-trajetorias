@@ -3,8 +3,12 @@ import { captureRoute } from './route_lifecycle.js?v=20261020-navigation1';
 
 const TZ='America/Sao_Paulo';
 const SHOWCASE_ROUTE='mostra-profissoes';
+const INSTALL_FLAG=Symbol.for('crj.meta43Ui');
+const SHOWCASE_NAV_SELECTOR='[data-meta43-showcase-nav],a[href="#mostra-profissoes"]';
+const showcaseNavStates=new WeakMap();
 const SUPPORTED_ART_SOURCES=new Set(['calendar_events','educator_plans','articulation_actions','joint_actions','cfdh_actions']);
 let me=null,observer=null,scheduled=false,workshopEditId=null,lastCalendarRef=null;
+let showcaseView=null;
 const bound=new WeakSet();
 
 const c=()=>apiMode()==='live'?supabaseClient():null;
@@ -142,36 +146,63 @@ async function injectCalendarArtToggle(){
 async function showcaseRequired(month=monthKey()){
   if(!c())return null;const q=await c().from('goal_stage_schedule').select('reference_month,contract_month,source_label').eq('stage_code','4.5').eq('reference_month',`${month}-01`).maybeSingle();if(q.error)throw q.error;return q.data||null;
 }
-async function ensureShowcaseNav(){
-  const nav=document.querySelector('.sidebar .nav');if(!nav)return;const user=await profile();const existing=nav.querySelector('[data-meta43-showcase-nav]');
-  if(!user?.active){existing?.remove();return}
-  const required=await showcaseRequired();if(!required){existing?.remove();return}
-  if(existing){existing.classList.toggle('active',route()===SHOWCASE_ROUTE);return}
-  const a=document.createElement('a');a.dataset.meta43ShowcaseNav='1';a.href='#mostra-profissoes';a.className=route()===SHOWCASE_ROUTE?'active':'';a.innerHTML='<span>★</span><span>Mostra Semestral</span>';
-  const cal=nav.querySelector('[data-general-calendar-link]');if(cal)cal.insertAdjacentElement('afterend',a);else{const sep=nav.querySelector('.sep');nav.insertBefore(a,sep||null)}
+function reconcileShowcaseNav(nav,visible){
+  // A existência do item deve ser conferida depois das consultas assíncronas.
+  const [existing,...duplicates]=nav.querySelectorAll(SHOWCASE_NAV_SELECTOR);
+  duplicates.forEach(node=>node.remove());
+  if(!visible){existing?.remove();return}
+  let a=existing;
+  if(!a){
+    a=document.createElement('a');a.dataset.meta43ShowcaseNav='1';a.href='#mostra-profissoes';a.innerHTML='<span>★</span><span>Mostra Semestral</span>';
+    const cal=nav.querySelector('[data-general-calendar-link]');if(cal)cal.insertAdjacentElement('afterend',a);else{const sep=nav.querySelector('.sep');nav.insertBefore(a,sep||null)}
+  }
+  a.classList.toggle('active',route()===SHOWCASE_ROUTE);
 }
-async function renderShowcase(){
-  if(route()!==SHOWCASE_ROUTE)return;const host=document.querySelector('.content');if(!host)return;const still=captureRoute(host);injectStyle();
-  host.innerHTML='<div class="card"><div class="empty">Carregando Mostra Semestral…</div></div>';
+function ensureShowcaseNav(){
+  const nav=document.querySelector('.sidebar .nav');if(!nav)return;
+  const month=monthKey();let state=showcaseNavStates.get(nav);
+  if(!state||state.month!==month){state={month,checkedAt:0,visible:false,pending:null};showcaseNavStates.set(nav,state)}
+  if(state.pending)return state.pending;
+  // Alterações de HTML não precisam consultar o cronograma novamente.
+  if(state.checkedAt&&Date.now()-state.checkedAt<60000){reconcileShowcaseNav(nav,state.visible);return}
+  state.pending=(async()=>{
+    const user=await profile(),required=user?.active?await showcaseRequired(month):null;
+    if(!nav.isConnected||document.querySelector('.sidebar .nav')!==nav||showcaseNavStates.get(nav)!==state||monthKey()!==month)return;
+    state.visible=Boolean(required);state.checkedAt=Date.now();
+    reconcileShowcaseNav(nav,state.visible);
+  })().finally(()=>{state.pending=null});
+  return state.pending;
+}
+async function renderShowcase({force=false}={}){
+  if(route()!==SHOWCASE_ROUTE)return;const host=document.querySelector('.content');if(!host)return;
+  const hash=location.hash;
+  if(!force&&showcaseView?.host===host&&showcaseView.hash===hash&&showcaseView.view.isConnected&&host.contains(showcaseView.view))return;
+  const view=document.createElement('div');view.dataset.meta43ShowcaseView='1';
+  const current={host,hash,view};showcaseView=current;
+  const currentRoute=captureRoute(host),still=()=>showcaseView===current&&currentRoute()&&view.isConnected&&host.contains(view);
+  injectStyle();host.replaceChildren(view);
+  view.innerHTML='<div class="card"><div class="empty">Carregando Mostra Semestral…</div></div>';
   try{
     const user=await profile(),required=await showcaseRequired();if(!still())return;
-    if(!user?.active){host.innerHTML='<div class="notice danger">Acesso indisponível.</div>';return}
-    if(!required){host.innerHTML=`<div class="m43-showcase"><div class="m43-hero"><h2>Mostra Semestral</h2><p>Este menu só fica disponível nos meses em que a Mostra de Profissões é requisito do cronograma físico.</p></div><div class="notice info">Não há Mostra Semestral exigível em ${esc(monthKey())}.</div></div>`;return}
-    const month=required.reference_month.slice(0,7);const q=await c().from('professional_showcases').select('*').eq('reference_month',required.reference_month).maybeSingle();if(q.error)throw q.error;const row=q.data||{};
-    host.innerHTML=`<div class="m43-showcase"><div class="m43-hero"><h2>Mostra Semestral · ${esc(month)}</h2><p>Requisito ativo apenas nesta competência. Quando marcada como realizada dentro do mês, a mesma ocorrência alimenta a Etapa 4.5 e contribui uma única vez para a síntese da Etapa 4.3.</p></div><div class="m43-kpis"><div class="m43-kpi"><small>Competência</small><b>${esc(month)}</b></div><div class="m43-kpi"><small>Status</small><b>${esc(row.status||'planejada')}</b></div><div class="m43-kpi"><small>Participantes</small><b>${Number(row.participants_count||0)}</b></div></div><form class="m43-card" data-showcase-form><div class="m43-grid"><div class="m43-field"><label>Título</label><input class="input" name="title" value="${esc(row.title||'Mostra de Profissões e Mercado de Trabalho')}" required></div><div class="m43-field"><label>Status</label><select name="status"><option value="planejada">Planejada</option><option value="realizada">Realizada</option><option value="cancelada">Cancelada</option></select></div><div class="m43-field"><label>Data de execução</label><input class="input" type="date" name="scheduled_date" min="${month}-01" max="${month}-${new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).getDate()}" value="${esc(row.scheduled_date||'')}"></div><div class="m43-field"><label>Nº de participantes</label><input class="input" type="number" min="0" max="60" name="participants_count" value="${Number(row.participants_count||0)}"></div></div><div class="m43-field" style="margin-top:10px"><label>Referência/evidência</label><input class="input" name="evidence_ref" value="${esc(row.evidence_ref||'')}" placeholder="Relatório, documento, pasta ou referência da evidência"></div><div class="m43-field" style="margin-top:10px"><label>Observações</label><textarea name="notes">${esc(row.notes||'')}</textarea></div><div class="m43-actions"><button class="btn primary" type="submit">Salvar Mostra Semestral</button></div></form></div>`;
-    const form=host.querySelector('[data-showcase-form]');form.querySelector('[name="status"]').value=row.status||'planejada';form.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(form),status=fd.get('status'),date=fd.get('scheduled_date')||null;if(status==='realizada'&&!date){toast('Informe a data de execução para marcar a mostra como realizada.','danger');return}if(date&&String(date).slice(0,7)!==month){toast('A Mostra só pode contabilizar dentro do mês de execução previsto.','danger');return}const payload={reference_month:required.reference_month,title:String(fd.get('title')||'').trim(),scheduled_date:date,status,participants_count:Number(fd.get('participants_count')||0),evidence_ref:String(fd.get('evidence_ref')||'').trim()||null,notes:String(fd.get('notes')||'').trim()||null,updated_by:user.id,updated_at:new Date().toISOString()};if(!row.id){payload.created_by=user.id}const save=await c().from('professional_showcases').upsert(payload,{onConflict:'reference_month'});if(save.error){toast(save.error.message,'danger');return}toast('Mostra Semestral salva.');await renderShowcase()});
-  }catch(err){if(still())host.innerHTML=`<div class="notice danger"><b>Não foi possível abrir a Mostra Semestral.</b><br>${esc(err.message||err)}</div>`}
+    if(!user?.active){view.innerHTML='<div class="notice danger">Acesso indisponível.</div>';return}
+    if(!required){view.innerHTML=`<div class="m43-showcase"><div class="m43-hero"><h2>Mostra Semestral</h2><p>Este menu só fica disponível nos meses em que a Mostra de Profissões é requisito do cronograma físico.</p></div><div class="notice info">Não há Mostra Semestral exigível em ${esc(monthKey())}.</div></div>`;return}
+    const month=required.reference_month.slice(0,7);const q=await c().from('professional_showcases').select('*').eq('reference_month',required.reference_month).maybeSingle();if(!still())return;if(q.error)throw q.error;const row=q.data||{};
+    view.innerHTML=`<div class="m43-showcase"><div class="m43-hero"><h2>Mostra Semestral · ${esc(month)}</h2><p>Requisito ativo apenas nesta competência. Quando marcada como realizada dentro do mês, a mesma ocorrência alimenta a Etapa 4.5 e contribui uma única vez para a síntese da Etapa 4.3.</p></div><div class="m43-kpis"><div class="m43-kpi"><small>Competência</small><b>${esc(month)}</b></div><div class="m43-kpi"><small>Status</small><b>${esc(row.status||'planejada')}</b></div><div class="m43-kpi"><small>Participantes</small><b>${Number(row.participants_count||0)}</b></div></div><form class="m43-card" data-showcase-form><div class="m43-grid"><div class="m43-field"><label>Título</label><input class="input" name="title" value="${esc(row.title||'Mostra de Profissões e Mercado de Trabalho')}" required></div><div class="m43-field"><label>Status</label><select name="status"><option value="planejada">Planejada</option><option value="realizada">Realizada</option><option value="cancelada">Cancelada</option></select></div><div class="m43-field"><label>Data de execução</label><input class="input" type="date" name="scheduled_date" min="${month}-01" max="${month}-${new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).getDate()}" value="${esc(row.scheduled_date||'')}"></div><div class="m43-field"><label>Nº de participantes</label><input class="input" type="number" min="0" max="60" name="participants_count" value="${Number(row.participants_count||0)}"></div></div><div class="m43-field" style="margin-top:10px"><label>Referência/evidência</label><input class="input" name="evidence_ref" value="${esc(row.evidence_ref||'')}" placeholder="Relatório, documento, pasta ou referência da evidência"></div><div class="m43-field" style="margin-top:10px"><label>Observações</label><textarea name="notes">${esc(row.notes||'')}</textarea></div><div class="m43-actions"><button class="btn primary" type="submit">Salvar Mostra Semestral</button></div></form></div>`;
+    const form=view.querySelector('[data-showcase-form]');form.querySelector('[name="status"]').value=row.status||'planejada';form.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(form),status=fd.get('status'),date=fd.get('scheduled_date')||null;if(status==='realizada'&&!date){toast('Informe a data de execução para marcar a mostra como realizada.','danger');return}if(date&&String(date).slice(0,7)!==month){toast('A Mostra só pode contabilizar dentro do mês de execução previsto.','danger');return}const payload={reference_month:required.reference_month,title:String(fd.get('title')||'').trim(),scheduled_date:date,status,participants_count:Number(fd.get('participants_count')||0),evidence_ref:String(fd.get('evidence_ref')||'').trim()||null,notes:String(fd.get('notes')||'').trim()||null,updated_by:user.id,updated_at:new Date().toISOString()};if(!row.id){payload.created_by=user.id}const save=await c().from('professional_showcases').upsert(payload,{onConflict:'reference_month'});if(save.error){toast(save.error.message,'danger');return}toast('Mostra Semestral salva.');await renderShowcase({force:true})});
+  }catch(err){if(still())view.innerHTML=`<div class="notice danger"><b>Não foi possível abrir a Mostra Semestral.</b><br>${esc(err.message||err)}</div>`}
 }
 
 function scan(){
   injectStyle();bindWorkshopForm(currentWorkshopForm());bindBookingForm(document.querySelector('#ac-booking-form'));
   if(route()==='cfdh')bindCfdhLinks().catch(()=>{});
   if(route()==='calendario-geral')injectCalendarArtToggle().catch(()=>{});
-  ensureShowcaseNav().catch(()=>{});
-  if(route()===SHOWCASE_ROUTE)renderShowcase().catch(()=>{});
+  Promise.resolve(ensureShowcaseNav()).catch(()=>{});
+  if(route()===SHOWCASE_ROUTE)renderShowcase().catch(()=>{});else showcaseView=null;
 }
 function schedule(){if(scheduled)return;scheduled=true;queueMicrotask(()=>{scheduled=false;scan()})}
 
+function boot(){
+if(window[INSTALL_FLAG])return;window[INSTALL_FLAG]=true;
 document.addEventListener('click',e=>{
   const edit=e.target.closest?.('[data-edit-workshop]');if(edit)workshopEditId=edit.dataset.editWorkshop||null;
   if(e.target.closest?.('[data-action="new-workshop"]'))workshopEditId=null;
@@ -182,6 +213,8 @@ document.addEventListener('submit',captureBookingSubmit,true);
 window.addEventListener('hashchange',()=>{lastCalendarRef=null;schedule()});
 window.addEventListener('crj:route-rendered',schedule);
 window.addEventListener('crj:features-ready',schedule);
-window.addEventListener('focus',schedule);
+window.addEventListener('focus',()=>{const state=showcaseNavStates.get(document.querySelector('.sidebar .nav'));if(state)state.checkedAt=0;schedule()});
 observer=new MutationObserver(schedule);observer.observe(document.body,{subtree:true,childList:true});
 schedule();
+}
+boot();
