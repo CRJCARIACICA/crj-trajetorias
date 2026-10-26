@@ -1,27 +1,9 @@
   const r=route(), youthId=r.parts[0]==='jovem'?r.parts[1]:null;
-  document.querySelector('[data-action="new-service"]')?.addEventListener('click',()=>{
-    if(technicalWriter()){
-      modal('Classificar atendimento técnico',`<form id="technical-service-router" class="stack">
-        <div class="notice">Todo atendimento da Equipe Técnica deve ser vinculado a uma abertura metodológica.</div>
-        <div class="field"><label>Tipo de atendimento</label><select name="technical_type" required>
-          <option value="">Selecione</option>
-          <option value="pvida">PVida</option>
-          <option value="ptrampo">PTrampo</option>
-          <option value="outras-demandas">Outro atendimento / demanda — gera Anexo 5</option>
-        </select></div>
-        <button class="btn primary">Abrir formulário</button>
-      </form>`);
-      document.querySelector('#technical-service-router').addEventListener('submit',e=>{
-        e.preventDefault();
-        const type=new FormData(e.target).get('technical_type');
-        if(!type)return;
-        document.querySelector('#modal').remove();
-        nav(`formulario/${type}/${youthId}`);
-      });
-      return;
-    }
-    modal('Novo atendimento',`<form id="service-form" class="stack"><input type="hidden" name="youth_id" value="${youthId}"><div class="field"><label>Data</label><input class="input" type="date" name="date" value="${new Date().toISOString().slice(0,10)}" required></div><div class="field"><label>Categoria</label><select name="category"><option>Acolhimento</option><option>Trabalho e renda</option><option>Educação</option><option>Saúde</option><option>Direitos</option><option>Benefício</option><option>Outro</option></select></div><div class="field"><label>Descrição</label><textarea name="description" required></textarea></div><div class="field"><label>Situação</label><select name="status"><option>realizado</option><option>encaminhado</option><option>pendente</option></select></div><button class="btn primary">Salvar atendimento</button></form>`);
-    document.querySelector('#service-form').addEventListener('submit',async e=>{e.preventDefault();await createService(parseForm(e.target));document.querySelector('#modal').remove();toast('Atendimento registrado');render();});
+  document.querySelector('[data-action="new-service"]')?.addEventListener('click',async()=>{
+    try{
+      const {openTechnicalService}=await import('./technical_service_flow.js?v=20261026-technical-service1');
+      await openTechnicalService({initialYouthId:youthId,returnYouthId:youthId});
+    }catch(err){toast(err.message||'Não foi possível abrir o atendimento. Tente novamente.','danger')}
   });
   document.querySelector('[data-action="new-followup"]')?.addEventListener('click',()=>{modal('Novo acompanhamento',`<form id="followup-form" class="stack"><input type="hidden" name="youth_id" value="${youthId}"><div class="field"><label>Data</label><input class="input" type="date" name="date" value="${new Date().toISOString().slice(0,10)}" required></div><div class="field"><label>Tipo</label><select name="followup_type"><option>PVida</option><option>PTrampo</option><option>Outras Demandas</option><option>Escuta técnica</option></select></div><div class="field"><label>Duração (horas)</label><input class="input" type="number" step="0.25" name="duration_hours" value="1"></div><div class="field"><label>Resumo técnico</label><textarea name="summary" required></textarea></div><button class="btn primary">Salvar acompanhamento</button></form>`);document.querySelector('#followup-form').addEventListener('submit',async e=>{e.preventDefault();await createFollowup(parseForm(e.target));document.querySelector('#modal').remove();toast('Acompanhamento registrado');render();});});
   document.querySelector('[data-action="new-youth-form"]')?.addEventListener('click',()=>{modal('Adicionar formulário',`<div class="grid two">${FORMS.filter(f=>f.slug!=='formulario-inicial').map(f=>`<button class="btn" data-modal-nav="formulario/${f.slug}/${youthId}">${esc(f.annex)} — ${esc(f.title)}</button>`).join('')}</div>`);document.querySelectorAll('[data-modal-nav]').forEach(b=>b.addEventListener('click',()=>{document.querySelector('#modal').remove();nav(b.dataset.modalNav)}));});

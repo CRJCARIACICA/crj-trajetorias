@@ -104,6 +104,11 @@ export function canFillForm(role, formSlug){
 }
 export function roleLabel(role){ return ROLES[role] || role || 'Sem perfil'; }
 
+// Abertura e gravação técnica exigem o perfil ativo confirmado pelo banco.
+export function canRegisterTechnicalService(profile){
+  return profile?.active===true&&['coordenacao_geral','assistente_social','psicologo','terapeuta_ocupacional'].includes(profile.role);
+}
+
 // Ajuste visual/operacional da área do Controlador. A versão anterior observava qualquer
 // mutação do DOM e, ao atualizar o próprio KPI, disparava novas consultas em cascata.
 // Agora a decoração é local e a leitura de "presentes agora" usa intervalo controlado.

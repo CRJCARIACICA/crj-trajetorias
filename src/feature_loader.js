@@ -7,7 +7,7 @@ import { MODULE_ROUTES, routeName, routeShellReady, captureRoute } from './route
 // MutationObservers e consultas Supabase fora do menu em uso.
 
 const VERSION='20261023-checkin1';
-const MODULE_VERSIONS={meta4_3_ui:'20261024-showcase1'};
+const MODULE_VERSIONS={meta4_3_ui:'20261024-showcase1',technical_service_flow:'20261026-technical-service1',youth_profile_enhancements:'20261026-technical-service1'};
 const modulePreloads=new Set();
 const moduleAttempts=new Map();
 const moduleCache=new Map();

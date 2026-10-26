@@ -1,7 +1,6 @@
 import { apiMode, supabaseClient, getSession } from './api.js?v=20261004-2';
-import { canFillForm } from './permissions.js?v=20261005-3';
+import { canFillForm, canRegisterTechnicalService } from './permissions.js?v=20261026-technical-service1';
 
-const TECH_ROLES=new Set(['coordenacao_geral','assistente_social','psicologo','terapeuta_ocupacional']);
 const FORM_OPTIONS=[
   ['acompanhamento','Anexo 3','Acompanhamento'],
   ['pvida','Anexo 4','PVida'],
@@ -20,31 +19,21 @@ const TECH_INFO={
   ptrampo:{title:'PTrampo',items:['Meta 2 · Etapa 2.1 — atendimento realizado','Meta 4 · Etapa 4.1 e Meta 6 · Etapa 6.4 — jovens e atividades de PTrampo']},
   'outras-demandas':{title:'Outras Demandas',items:['Meta 2 · Etapa 2.1 — atendimento realizado','Meta 6 · Etapa 6.2 — acompanhamentos de outras demandas']},
 };
-let me=null,timer=null;
+let me=null,timer=null,profileSequence=0;
 const esc=(v='')=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function c(){if(apiMode()!=='live')throw new Error('Banco ainda não conectado.');return supabaseClient()}
 function routeParts(){return (location.hash||'#dashboard').split('?')[0].replace(/^#/,'').split('/')}
 function youthId(){const p=routeParts();return p[0]==='jovem'?p[1]||null:null}
 function formRoute(){const p=routeParts();return p[0]==='formulario'?{slug:p[1]||'',youthId:p[2]||null}:null}
-function isTech(){return me?.active!==false&&TECH_ROLES.has(String(me?.role||''))}
+function isTech(){return canRegisterTechnicalService(me)}
 
 async function ready(){
-  for(let i=0;i<100;i++){
-    if(apiMode()==='live'){
-      try{
-        const session=await getSession();
-        if(session?.user){
-          const {data:profile,error}=await c().from('profiles').select('id,display_name,role,team,active').eq('id',session.user.id).maybeSingle();
-          if(error)console.warn('Não foi possível resolver o perfil funcional do colaborador:',error);
-          me={...session.user,...(profile||{})};
-          return true;
-        }
-      }catch{}
-    }
-    await sleep(120);
-  }
-  return false;
+  const seq=++profileSequence;
+  me=null;
+  const session=await getSession();
+  if(seq!==profileSequence)return false;
+  me=session?.user||null;
+  return !!me;
 }
 function style(){if(document.querySelector('#youth-enh-style'))return;const s=document.createElement('style');s.id='youth-enh-style';s.textContent=`
 .workshop-enrolled{border-color:#36a878!important;background:#e9f8f0!important;color:#17633f!important;box-shadow:0 0 0 3px rgba(54,168,120,.12),0 0 18px rgba(54,168,120,.18)!important;cursor:default!important;opacity:1!important}.workshop-enrolled::before{content:'●';color:#25a66f;margin-right:7px}.youth-method-card{border:1px solid #cee5dc;background:#f4fbf8;border-radius:13px;padding:13px;margin:12px 0}.youth-method-card .method-chip{display:inline-block;padding:5px 8px;border-radius:999px;background:#e2f3ec;margin:4px 5px 0 0;font-size:12px}.delete-youth-btn{border-color:#e9bcbc!important;color:#963939!important}.doc-state{display:inline-flex;margin-top:5px}
@@ -62,7 +51,7 @@ async function decorateYouth(){
   const head=document.querySelector('.content .page-head');if(!head)return;
   const actions=head.querySelector(':scope > .actions');
   const service=document.querySelector('[data-action="new-service"]');
-  if(service){if(!isTech())service.remove();else service.textContent='+ Atendimento técnico'}
+  if(service){if(!isTech())service.remove();else if(service.textContent!=='+ Atendimento técnico')service.textContent='+ Atendimento técnico'}
   if(actions&&canFillForm(me.role,'formulario-inicial')&&!actions.querySelector('[data-delete-youth]')){
     const b=document.createElement('button');b.type='button';b.className='btn delete-youth-btn';b.dataset.deleteYouth=id;b.textContent='Excluir cadastro';b.onclick=async()=>{
       if(!confirm('Excluir este cadastro? Ele ficará disponível para restauração por 24 horas.'))return;
@@ -89,12 +78,11 @@ function decorateTechnicalForm(){
   const card=form.querySelector('.methodology-form-editor');if(!card)return;const meta=TECH_INFO[info.slug];const box=document.createElement('div');box.dataset.technicalQuality='1';box.className='youth-method-card';box.innerHTML=`<b>${esc(meta.title)} · vínculo com Plano de Trabalho</b><div>${meta.items.map(x=>`<span class="method-chip" title="Este vínculo só soma o indicador quando o atendimento/acompanhamento correspondente é efetivamente registrado no fluxo técnico.">${esc(x)}</span>`).join('')}</div><p class="muted" style="margin:8px 0 12px">O anexo é a evidência qualitativa. A pontuação não é duplicada pelo documento: o número entra pelo atendimento/acompanhamento executado.</p><div class="form-grid"><div class="field"><label>Modalidade do atendimento</label><select name="_service_modality"><option value="">Selecione</option><option value="presencial">Presencial</option><option value="remoto">Remoto</option><option value="visita_domiciliar">Visita domiciliar</option><option value="acao_externa">Ação externa</option><option value="outro">Outro</option></select></div><div class="field"><label>Resultado / situação ao final</label><textarea name="_outcome"></textarea></div><div class="field"><label>Encaminhamentos realizados</label><textarea name="_referrals"></textarea></div><div class="field"><label>Referência de evidência</label><input class="input" name="_evidence_ref" placeholder="Documento, ata, protocolo, registro..."></div></div>`;const firstSection=card.querySelector('.section');if(firstSection)firstSection.before(box);else card.prepend(box)
 }
 
-function protectTechnicalButton(e){const b=e.target.closest?.('[data-action="new-service"]');if(!b||isTech())return;e.preventDefault();e.stopImmediatePropagation();alert('O registro de Atendimento é exclusivo da Equipe Técnica.')}
-function interceptFormsButton(e){const b=e.target.closest?.('[data-action="new-youth-form"]');if(!b)return;const id=youthId();if(!id)return;e.preventDefault();e.stopImmediatePropagation();openFormsModal(id)}
-document.addEventListener('click',protectTechnicalButton,true);
+async function interceptFormsButton(e){const b=e.target.closest?.('[data-action="new-youth-form"]');if(!b)return;const id=youthId();if(!id)return;e.preventDefault();e.stopImmediatePropagation();try{if(await ready())openFormsModal(id)}catch(err){alert(err.message||'Não foi possível carregar o perfil. Tente novamente.')}}
 document.addEventListener('click',interceptFormsButton,true);
 
 async function apply(){if(!me||me.active===false)return;style();ensureBackButton();hideDeletedRows();decorateTechnicalForm();await decorateYouth()}
 function schedule(){clearTimeout(timer);timer=setTimeout(()=>apply().catch(console.warn),80)}
-async function boot(){if(!(await ready()))return;new MutationObserver(schedule).observe(document.body,{subtree:true,childList:true});window.addEventListener('hashchange',schedule);schedule()}
+async function refreshAndSchedule(){try{if(await ready())schedule()}catch(err){console.warn('Não foi possível atualizar o perfil funcional:',err)}}
+function boot(){new MutationObserver(schedule).observe(document.body,{subtree:true,childList:true});window.addEventListener('hashchange',refreshAndSchedule);window.addEventListener('crj:features-ready',refreshAndSchedule);refreshAndSchedule()}
 boot();

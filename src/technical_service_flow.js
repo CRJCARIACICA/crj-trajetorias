@@ -1,6 +1,6 @@
-import { apiMode, supabaseClient, createTechnicalService } from './api.js?v=20261004-2';
+import { apiMode, supabaseClient, getSession, createTechnicalService } from './api.js?v=20261004-2';
+import { canRegisterTechnicalService } from './permissions.js?v=20261026-technical-service1';
 
-const WRITE_ROLES=new Set(['coordenacao_geral','assistente_social','psicologo','terapeuta_ocupacional']);
 const TECH_ROLES=new Set(['assistente_social','psicologo','terapeuta_ocupacional']);
 const PROGRAMS={
   atendimento:'Atendimento técnico',
@@ -18,14 +18,14 @@ const ROLE_LABELS={
 let me=null;
 let opening=false;
 let autoKey='';
-let observer=null;
+let autoTimer=null;
 
 const esc=(v='')=>String(v??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]));
 const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
 const digits=v=>String(v||'').replace(/\D/g,'');
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 function c(){if(apiMode()!=='live')throw new Error('Banco ainda não conectado.');return supabaseClient()}
-function canWrite(){return !!me?.active&&WRITE_ROLES.has(String(me.role||''))}
+function canWrite(){return canRegisterTechnicalService(me)}
 function route(){const raw=(location.hash||'#dashboard').slice(1),[path,q='']=raw.split('?');return {parts:path.split('/').filter(Boolean),params:new URLSearchParams(q)}}
 function currentYouthId(){const r=route();return r.parts[0]==='jovem'?r.parts[1]||'':''}
 function technicalRoute(){return route().parts[0]==='equipe-tecnica'}
@@ -33,12 +33,10 @@ function monthParam(){return route().params.get('month')||today().slice(0,7)}
 function toast(message,type='success'){const e=document.createElement('div');e.className=`pill ${type}`;e.textContent=message;Object.assign(e.style,{position:'fixed',right:'20px',bottom:'20px',zIndex:'2147483646',padding:'12px 16px',boxShadow:'0 10px 35px rgba(0,0,0,.2)'});document.body.appendChild(e);setTimeout(()=>e.remove(),3400)}
 
 async function resolveProfile(){
-  if(apiMode()!=='live')return null;
-  const client=c(),{data:{user}}=await client.auth.getUser();
-  if(!user)return null;
-  const {data,error}=await client.from('profiles').select('id,display_name,role,team,active').eq('id',user.id).maybeSingle();
-  if(error)throw error;
-  me=data||null;
+  // getSession consulta profiles; nunca reutilizar a função de outra sessão.
+  me=null;
+  const session=await getSession();
+  me=session?.user||null;
   return me;
 }
 
@@ -92,13 +90,15 @@ function clearNewServiceParams(){
   history.replaceState(null,'','#equipe-tecnica'+(q?'?'+q:''));
 }
 
-async function openService({initialYouthId='',returnYouthId='',initialProgram='' }={}){
-  if(opening||document.querySelector('#technical-service-flow-modal'))return;
+export async function openTechnicalService({initialYouthId='',returnYouthId='',initialProgram='' }={}){
+  if(opening||document.querySelector('#technical-service-flow-modal'))return false;
   opening=true;
+  const entryHash=location.hash;
   try{
-    if(!me)await resolveProfile();
+    await resolveProfile();
     if(!canWrite())throw new Error('Seu perfil não possui permissão para abrir atendimento da Equipe Técnica.');
     const {youth,techs}=await loadPeopleAndTeam();
+    if(location.hash!==entryHash)return false;
     const byId=new Map(youth.map(y=>[y.id,y]));
     const selected=new Set();
     if(initialYouthId&&byId.has(initialYouthId))selected.add(initialYouthId);
@@ -145,45 +145,29 @@ async function openService({initialYouthId='',returnYouthId='',initialProgram=''
       try{
         await createTechnicalService({service_date:fd.get('service_date'),service_type:fd.get('service_type'),program_type:fd.get('program_type'),youth_ids:ys,professional_ids:ps,reason:String(fd.get('reason')||'').trim(),summary:String(fd.get('summary')||'').trim(),status:fd.get('status')||'realizado'});
         bg.remove();toast('Atendimento técnico registrado e vinculado à trajetória.');
-        if(returnYouthId&&ys.includes(returnYouthId)){location.hash='jovem/'+returnYouthId;return}
+        if(returnYouthId&&ys.includes(returnYouthId)&&currentYouthId()!==returnYouthId){location.hash='jovem/'+returnYouthId;return}
         window.dispatchEvent(new HashChangeEvent('hashchange'));
       }catch(err){toast(err.message||String(err),'danger');submit.disabled=false;submit.textContent=label}
     });
-  }catch(err){toast(err.message||String(err),'danger')}
+    return true;
+  }catch(err){toast(err.message||String(err),'danger');return false}
   finally{opening=false}
-}
-
-async function interceptClick(event){
-  const youthButton=event.target.closest?.('[data-action="new-service"]');
-  if(youthButton){
-    const id=currentYouthId();if(!id)return;
-    event.preventDefault();event.stopImmediatePropagation();
-    try{if(!me)await resolveProfile();if(!canWrite())throw new Error('Seu perfil não possui permissão para abrir atendimento da Equipe Técnica.');
-      const p=new URLSearchParams();p.set('view','painel');p.set('month',today().slice(0,7));p.set('new','service');p.set('youth',id);p.set('return_youth',id);location.hash='equipe-tecnica?'+p.toString();
-    }catch(err){toast(err.message||String(err),'danger')}
-    return;
-  }
-  const areaButton=event.target.closest?.('[data-new-technical-service]');
-  if(areaButton){
-    event.preventDefault();event.stopImmediatePropagation();
-    try{if(!me)await resolveProfile();if(!canWrite())return;await openService()}catch(err){toast(err.message||String(err),'danger')}
-  }
 }
 
 async function autoOpen(){
   if(!technicalRoute())return;
   const r=route();if(r.params.get('new')!=='service')return;
-  const key=location.hash;if(autoKey===key)return;autoKey=key;
-  await openService({initialYouthId:r.params.get('youth')||'',returnYouthId:r.params.get('return_youth')||'',initialProgram:r.params.get('program')||''});
+  const key=location.hash;if(autoKey===key)return;
+  const opened=await openTechnicalService({initialYouthId:r.params.get('youth')||'',returnYouthId:r.params.get('return_youth')||'',initialProgram:r.params.get('program')||''});
+  if(opened)autoKey=key;
 }
-function scheduleAuto(){setTimeout(()=>autoOpen().catch(err=>toast(err.message||String(err),'danger')),100)}
+function scheduleAuto(){clearTimeout(autoTimer);autoTimer=setTimeout(()=>autoOpen().catch(err=>toast(err.message||String(err),'danger')),100)}
 
-async function boot(){
+function boot(){
   injectStyle();
-  try{await resolveProfile()}catch(err){console.warn('Não foi possível carregar o perfil para o fluxo técnico:',err)}
-  document.addEventListener('click',interceptClick,true);
   window.addEventListener('hashchange',()=>{autoKey='';scheduleAuto()});
-  observer=new MutationObserver(()=>{if(technicalRoute())scheduleAuto()});observer.observe(document.body,{childList:true,subtree:true});
+  window.addEventListener('crj:route-rendered',scheduleAuto);
+  window.addEventListener('crj:features-ready',scheduleAuto);
   scheduleAuto();
 }
 boot();
