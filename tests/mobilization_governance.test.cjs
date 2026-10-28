@@ -96,3 +96,17 @@ test('PDF preserva até o final de etapas longas ao continuar em outra página',
  const c=renderer(),texts=[],pages=[];c.PDFDocument={create:async()=>({embedFont:async()=>({}),embedPng:async()=>({scale:()=>({width:300,height:50})}),addPage(){const p={getHeight:()=>595.28,drawImage(){},drawRectangle(){},drawText:(t,o)=>{assert(o.y>=0);texts.push(t)}};pages.push(p);return p},getPages:()=>pages,getPageCount:()=>pages.length,save:async()=>Buffer.from('%PDF-test')})};c.StandardFonts={Helvetica:1,HelveticaBold:2};c.rgb=()=>({});c.fixture={readableRows:true,title:'Plano de mobilização',sections:[{rows:[['Etapas','etapa '.repeat(3000)+'FIM_DAS_ETAPAS']]}]};
  await vm.runInContext('makePdf(fixture,{type:"png",bytes:new Uint8Array([1])})',c);assert(pages.length>1);assert(texts.some(t=>t.includes('FIM_DAS_ETAPAS')));
 });
+test('solicitação negada não compõe cobertura e não aparece para nova seleção',()=>{
+ const s=ui('#coordenacao-articulacao?view=mobilizacao&section=estrategias'),d=data();
+ d.requests=[{id:'pending',source_title:'Pendente',status:'solicitado',planned_date:'2026-11-10'},{id:'denied',source_title:'Recusada',status:'negado',planned_date:'2026-11-10'}];d.individualPlans=[];
+ s.ctx.fixture={host:s.document.querySelector('.content'),me:{id:'coord',role:'coordenacao_articulacao'},month:'2026-11',data:d,coordination:true};
+ s.ctx.existing={id:'strategy',title:'Estratégia',request_ids:['denied'],revision:1,review_status:'approved'};
+ assert.deepEqual([...s.eval("requestScope(fixture.data.requests,[],[],fixture.month).map(r=>r.id)")],['pending']);
+ s.eval('context=fixture; editStrategy(fixture,existing)');assert(s.document.querySelector('[name="request_ids"][value="pending"]'));assert.equal(s.document.querySelector('[name="request_ids"][value="denied"]'),null);
+});
+test('solicitante consegue ver o motivo da recusa no plano compartilhado',()=>{
+ const s=ui('#planos-mobilizacao?view=plano-geral'),d=data();d.actions=[];d.scope=[];
+ d.requests=[{id:'own',source_title:'Minha oficina',status:'negado',requested_by:'educator',rejection_reason:'A equipe não estará disponível.'},{id:'other',source_title:'Outra oficina',status:'negado',requested_by:'other',rejection_reason:'Outro motivo'}];
+ s.ctx.fixture={host:s.document.querySelector('.content'),me:{id:'educator',role:'educador'},month:'2026-11',data:d,coordination:false};s.eval('render(fixture)');
+ const page=s.document.querySelector('.content').textContent;assert.match(page,/Minhas solicitações negadas \(1\)/);assert.match(page,/Minha oficina.*A equipe não estará disponível/);assert.doesNotMatch(page,/Outra oficina/);
+});

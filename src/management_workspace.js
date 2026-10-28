@@ -209,7 +209,7 @@ async function render(force=false){
   const key=`${rootRoute()}:${location.hash}:${me.id}`;if(!force&&lastKey===key&&document.querySelector('[data-management-workspace]'))return;lastKey=key;
   injectStyle();
   host.innerHTML=`<div class="mw-shell" data-management-workspace>${header()}<div data-mw-body><div class="mw-empty">Carregando…</div></div></div>`;
-  const body=host.querySelector('[data-mw-body]'),html=await content();if(!isCurrent())return;body.innerHTML=html;bind();if(view()==='mobilizacao'&&(isCoordArt()||isCoordGeral())){const {mountMobilization}=await import('./mobilization_governance.js?v=20261028-shared1');if(isCurrent())await mountMobilization(body.querySelector('[data-mob-coordination-host]'),me,{coordination:true});}
+  const body=host.querySelector('[data-mw-body]'),html=await content();if(!isCurrent())return;body.innerHTML=html;bind();if(view()==='mobilizacao'&&(isCoordArt()||isCoordGeral())){const {mountMobilization}=await import('./mobilization_governance.js?v=20261028-denial1');if(isCurrent())await mountMobilization(body.querySelector('[data-mob-coordination-host]'),me,{coordination:true});}
 }
 function scheduleRender(force=false){clearTimeout(renderTimer);renderTimer=setTimeout(()=>render(force).catch(err=>{console.error('Área de gestão:',err);toast(err?.message||String(err),'danger')}),30)}
 
