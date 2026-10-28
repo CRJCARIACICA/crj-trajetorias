@@ -11,16 +11,16 @@ update public.profiles set role='coordenacao_articulacao',active=true,display_na
 update public.profiles set role='articulador',active=true,display_name='TESTE ART' where id=(select articulator from denial_test);
 update public.profiles set role='educador',active=true,display_name='TESTE SOLICITANTE' where id=(select requester from denial_test);
 insert into public.articulation_mobilization_requests(id,source_type,source_title,requested_by,planned_date,status)
-select req_denied,'oficina','TESTE NEGADA',requester,'2043-02-20','solicitado' from denial_test
-union all select req_other,'oficina','TESTE OUTRA',requester,'2043-03-20','solicitado' from denial_test
-union all select req_planned,'oficina','TESTE JÁ RESPONDIDA',requester,'2043-03-20','solicitado' from denial_test
-union all select req_scheduled,'oficina','TESTE ORGANIZADA',requester,'2043-03-20','solicitado' from denial_test;
+select req_denied,'oficina','TESTE NEGADA',requester,'2043-02-20'::date,'solicitado' from denial_test
+union all select req_other,'oficina','TESTE OUTRA',requester,'2043-03-20'::date,'solicitado' from denial_test
+union all select req_planned,'oficina','TESTE JÁ RESPONDIDA',requester,'2043-03-20'::date,'solicitado' from denial_test
+union all select req_scheduled,'oficina','TESTE ORGANIZADA',requester,'2043-03-20'::date,'solicitado' from denial_test;
 insert into public.articulation_mobilization_plans(id,request_id,articulator_user_id,mobilization_goal,status)
 select existing_plan,req_planned,articulator,'Resposta anterior','planejado' from denial_test;
 select set_config('request.jwt.claim.sub',(select articulator::text from denial_test),true);
 insert into public.articulation_mobilization_strategies(id,reference_month,title,channel,request_ids,reference_user_id,review_status,created_by)
-select linked_strategy,'2043-03-01','TESTE VINCULADA','WhatsApp',array[req_denied,req_other],articulator,'submitted',articulator from denial_test
-union all select standalone_strategy,'2043-02-01','TESTE AUTÔNOMA','WhatsApp',array[]::uuid[],articulator,'approved',articulator from denial_test;
+select linked_strategy,'2043-03-01'::date,'TESTE VINCULADA','WhatsApp',array[req_denied,req_other],articulator,'submitted',articulator from denial_test
+union all select standalone_strategy,'2043-02-01'::date,'TESTE AUTÔNOMA','WhatsApp',array[]::uuid[],articulator,'approved',articulator from denial_test;
 insert into public.articulation_monthly_mobilization_plans(id,reference_month,title,objective,created_by)
 select month_plan,'2043-02-01','TESTE PLANO','Divulgação',coordinator from denial_test;
 insert into public.articulation_mobilization_actions(id,monthly_plan_id,title,action_type,channel,location,scheduled_date,start_time,end_time,reference_user_id,strategy_ids,request_ids,objective,preparation_steps,execution_steps,resources,documents_before,documents_after,preparation_deadline,created_by)
