@@ -51,21 +51,17 @@ $$;
 revoke all on function app_private.is_reference_educator(uuid),app_private.is_reference_articulator(uuid) from public, anon;
 grant execute on function app_private.is_reference_educator(uuid),app_private.is_reference_articulator(uuid) to authenticated;
 
-drop policy if exists educator_articulator_select on public.educator_articulator_assignments;
 create policy educator_articulator_select on public.educator_articulator_assignments for select to authenticated
 using (app_private.can_monitor_articulation() or educator_user_id = (select auth.uid()));
-drop policy if exists educator_articulator_insert on public.educator_articulator_assignments;
 create policy educator_articulator_insert on public.educator_articulator_assignments for insert to authenticated
 with check ((app_private.is_active_staff() and app_private.has_any_role(array['coordenacao_geral']))
   and app_private.is_reference_educator(educator_user_id)
   and app_private.is_reference_articulator(articulator_user_id));
-drop policy if exists educator_articulator_update on public.educator_articulator_assignments;
 create policy educator_articulator_update on public.educator_articulator_assignments for update to authenticated
 using ((app_private.is_active_staff() and app_private.has_any_role(array['coordenacao_geral'])))
 with check ((app_private.is_active_staff() and app_private.has_any_role(array['coordenacao_geral']))
   and app_private.is_reference_educator(educator_user_id)
   and app_private.is_reference_articulator(articulator_user_id));
-drop policy if exists educator_articulator_delete on public.educator_articulator_assignments;
 create policy educator_articulator_delete on public.educator_articulator_assignments for delete to authenticated
 using ((app_private.is_active_staff() and app_private.has_any_role(array['coordenacao_geral'])));
 
