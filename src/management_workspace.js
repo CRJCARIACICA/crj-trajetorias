@@ -93,17 +93,23 @@ function docModal(){
 
 async function renderTeams(){
   const m=params().get('month')||monthNow();
-  const [rq,cq,pq,done]=await Promise.all([
+  const [rq,cq,pq,done,assignmentQ]=await Promise.all([
     c().from('staff_plan_requirements').select('*').eq('active',true).order('role_label'),
     c().from('staff_monthly_checklists').select('*').eq('reference_month',monthStart(m)).maybeSingle(),
     c().from('profiles').select('id,display_name,role,team,active').order('display_name'),
-    pointCompletion('M1.2_EQUIPE_PERCENTUAL',100)
-  ]);for(const q of [rq,cq,pq])if(q.error)throw q.error;
+    pointCompletion('M1.2_EQUIPE_PERCENTUAL',100),
+    c().from('educator_articulator_assignments').select('educator_user_id,articulator_user_id')
+  ]);for(const q of [rq,cq,pq,assignmentQ])if(q.error)throw q.error;
   const reqs=rq.data||[],check=cq.data,profiles=pq.data||[];let items=[];
   if(check){const iq=await c().from('staff_monthly_checklist_items').select('*').eq('checklist_id',check.id).order('created_at');if(iq.error)throw iq.error;items=iq.data||[]}
   const reqMap=new Map(reqs.map(x=>[x.id,x]));const filled=items.filter(x=>x.contracted&&(x.profile_id||String(x.external_name||'').trim())).length;const pct=items.length?Math.round(filled/items.length*10000)/100:0;
   const fulfilled=Boolean(done);
-  return `${fulfilled?`<div class="mw-banner"><b>Etapa 1.2 cumprida em ${esc(titleMonth(done.event_date))}.</b><div class="mw-muted">Não é necessário preencher novamente a competência atual. Use o seletor apenas para consultar, corrigir ou registrar outra competência histórica.</div></div>`:''}<div class="mw-head"><div><h3>Equipe mínima · comprovação por competência</h3><div class="mw-muted">O checklist é associado ao mês em que a equipe mínima foi comprovada. Ao atingir 100% em uma competência, M1.2 permanece cumprida naquele mês.</div></div><label class="mw-field"><span class="mw-muted">Competência</span><input class="input" type="month" min="2025-10" max="2027-03" value="${esc(m)}" data-mw-team-month></label></div>
+  const assignments=new Map();
+  for(const a of assignmentQ.data||[]){if(!assignments.has(a.educator_user_id))assignments.set(a.educator_user_id,new Set());assignments.get(a.educator_user_id).add(a.articulator_user_id)}
+  const educators=profiles.filter(p=>p.active&&p.role==='educador');
+  const articulators=profiles.filter(p=>p.active&&p.role!=='pendente'&&(['articulador','coordenacao_articulacao'].includes(p.role)||String(p.team||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes('articula')));
+  const references=`<section class="mw-card"><div class="mw-head"><div><h3>Articuladores de referência dos educadores</h3><p class="mw-muted">Selecione um ou mais articuladores para apoiar cada educador. As oficinas ligadas ao educador aparecem no monitoramento de cada referência.</p></div></div>${educators.map(p=>{const selected=assignments.get(p.id)||new Set();const hidden=[...selected].filter(id=>!articulators.some(a=>a.id===id)).length;return `<div class="mw-row" data-mw-art-reference="${esc(p.id)}"><div><b>${esc(p.display_name)}</b><div class="mw-muted">Educador(a)</div>${hidden?`<div class="mw-muted">${hidden} referência(s) inativa(s) serão removidas ao salvar.</div>`:''}</div><div><div class="mw-actions" role="group" aria-label="Articuladores de referência de ${esc(p.display_name)}">${articulators.map(a=>`<label class="pill"><input type="checkbox" data-mw-reference-select value="${esc(a.id)}" ${selected.has(a.id)?'checked':''}> ${esc(a.display_name)}</label>`).join('')||'<span class="mw-muted">Nenhum articulador ativo disponível.</span>'}</div><button style="margin-top:9px" class="btn secondary" type="button" data-mw-save-art-reference>Salvar referências</button></div></div>`}).join('')||'<div class="mw-empty">Nenhum educador ativo encontrado na equipe.</div>'}</section>`;
+  return `${references}${fulfilled?`<div class="mw-banner"><b>Etapa 1.2 cumprida em ${esc(titleMonth(done.event_date))}.</b><div class="mw-muted">Não é necessário preencher novamente a competência atual. Use o seletor apenas para consultar, corrigir ou registrar outra competência histórica.</div></div>`:''}<div class="mw-head"><div><h3>Equipe mínima · comprovação por competência</h3><div class="mw-muted">O checklist é associado ao mês em que a equipe mínima foi comprovada. Ao atingir 100% em uma competência, M1.2 permanece cumprida naquele mês.</div></div><label class="mw-field"><span class="mw-muted">Competência</span><input class="input" type="month" min="2025-10" max="2027-03" value="${esc(m)}" data-mw-team-month></label></div>
   <div class="mw-kpis"><div class="mw-kpi"><span>Vagas previstas</span><b>${items.length||reqs.reduce((s,x)=>s+Number(x.expected_quantity||0),0)}</b></div><div class="mw-kpi"><span>Vagas confirmadas</span><b>${filled}</b></div><div class="mw-kpi"><span>Percentual desta competência</span><b>${pct}%</b><div class="mw-progress"><i style="width:${Math.min(100,pct)}%"></i></div></div><div class="mw-kpi"><span>Status da etapa</span><b style="font-size:15px">${fulfilled?`CUMPRIDA · ${esc(String(done.event_date).slice(0,7))}`:(check?.status==='completed'?'COMPETÊNCIA CONCLUÍDA':'PENDENTE')}</b></div></div>
   ${!reqs.length?`<div class="mw-card warn"><h3>Configure a equipe mínima prevista no Plano de Trabalho</h3><p class="mw-muted">Cadastre exatamente as vagas previstas no Termo de Colaboração.</p><form data-mw-req-form class="mw-form-grid"><div class="mw-field"><label>Cargo/função prevista</label><input class="input" name="role_label" required></div><div class="mw-field"><label>Quantidade mínima</label><input class="input" type="number" min="1" step="1" name="expected_quantity" value="1" required></div><div class="mw-field full"><label>Observação</label><input class="input" name="notes"></div></form><div class="mw-actions"><button class="btn primary" data-mw-add-req>Adicionar requisito</button></div></div>`:`<div class="mw-card"><div class="mw-head"><div><h3>Composição prevista</h3><div class="mw-muted">Referência usada para montar os checklists de cada competência.</div></div><button class="btn secondary" data-mw-manage-req>+ Adicionar cargo previsto</button></div>${reqs.map(r=>`<div class="mw-row"><div><b>${esc(r.role_label)}</b><div class="mw-muted">${r.expected_quantity} vaga(s) · ${esc(r.notes||'')}</div></div></div>`).join('')}</div>`}
   ${reqs.length&&!check?`<div class="mw-card"><div class="mw-empty">Não existe checklist para ${esc(titleMonth(monthStart(m)))}.${fulfilled?'<br>A etapa já está cumprida; um novo checklist só é necessário se houver correção ou nova comprovação histórica.':''}</div><button class="btn secondary" data-mw-create-checklist>${fulfilled?'Criar checklist nesta competência (opcional)':'Criar checklist desta competência'}</button></div>`:''}
@@ -201,7 +207,7 @@ async function render(force=false){
   const key=`${rootRoute()}:${location.hash}:${me.id}`;if(!force&&lastKey===key&&document.querySelector('[data-management-workspace]'))return;lastKey=key;
   injectStyle();
   host.innerHTML=`<div class="mw-shell" data-management-workspace>${header()}<div data-mw-body><div class="mw-empty">Carregando…</div></div></div>`;
-  const body=host.querySelector('[data-mw-body]'),html=await content();if(!isCurrent())return;body.innerHTML=html;bind();if(view()==='mobilizacao'&&(isCoordArt()||isCoordGeral())){const {mountMobilization}=await import('./mobilization_governance.js?v=20261023-mob1');if(isCurrent())await mountMobilization(body.querySelector('[data-mob-coordination-host]'),me,{coordination:true});}
+  const body=host.querySelector('[data-mw-body]'),html=await content();if(!isCurrent())return;body.innerHTML=html;bind();if(view()==='mobilizacao'&&(isCoordArt()||isCoordGeral())){const {mountMobilization}=await import('./mobilization_governance.js?v=20261028-monitor1');if(isCurrent())await mountMobilization(body.querySelector('[data-mob-coordination-host]'),me,{coordination:true});}
 }
 function scheduleRender(force=false){clearTimeout(renderTimer);renderTimer=setTimeout(()=>render(force).catch(err=>{console.error('Área de gestão:',err);toast(err?.message||String(err),'danger')}),30)}
 
@@ -210,6 +216,14 @@ function bind(){
   document.querySelectorAll('[data-mw-group-task]').forEach(b=>b.onclick=()=>routeGroup(b.dataset.mwGroupTask,{month:params().get('month')||monthNow()}));
   document.querySelector('[data-mw-new-doc]')?.addEventListener('click',docModal);
   document.querySelector('[data-mw-team-month]')?.addEventListener('change',e=>routeTo('equipes',{month:e.target.value}));
+  document.querySelectorAll('[data-mw-save-art-reference]').forEach(button=>button.addEventListener('click',async()=>{
+    const row=button.closest('[data-mw-art-reference]'),educator=row.dataset.mwArtReference,articulators=[...row.querySelectorAll('[data-mw-reference-select]:checked')].map(input=>input.value);
+    button.disabled=true;
+    try {
+      const {error}=await c().rpc('save_educator_articulator_assignments',{p_educator:educator,p_articulators:articulators});if(error)throw error;
+      toast('Referências de mobilização salvas.');scheduleRender(true);
+    } catch(error){toast(error?.message||String(error),'danger');} finally{button.disabled=false;}
+  }));
   document.querySelector('[data-mw-meeting-month]')?.addEventListener('change',e=>routeGroup('reunioes',{month:e.target.value}));
   document.querySelector('[data-mw-calendar-month]')?.addEventListener('change',e=>routeGroup('calendario',{month:e.target.value}));
   document.querySelector('[data-mw-add-req]')?.addEventListener('click',async()=>{const f=document.querySelector('[data-mw-req-form]');if(!f.reportValidity())return;const fd=new FormData(f),label=String(fd.get('role_label')).trim(),qty=Number(fd.get('expected_quantity'));const roleKey=label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');const {error}=await c().from('staff_plan_requirements').insert({role_key:roleKey,role_label:label,expected_quantity:qty,notes:String(fd.get('notes')||''),created_by:me.id,updated_by:me.id});if(error)throw error;toast('Requisito adicionado.');scheduleRender(true)});
