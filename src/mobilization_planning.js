@@ -27,7 +27,7 @@ export function calendarProblem(action,specialDays=[],busy=[]){
   return conflict?'Conflito de colaborador com '+(conflict.title||'outro compromisso')+'.':null;
 }
 export function requestScope(requests,plans,strategies,month){
-  return requests.filter(r=>!['cancelado','relatorio_finalizado','concluido'].includes(r.status)&&(
+  return requests.filter(r=>!['cancelado','relatorio_finalizado','concluido','dispensado','negado'].includes(r.status)&&(
     r.planned_date?.slice(0,7)===month||plans.some(p=>p.request_id===r.id&&p.mobilization_deadline?.slice(0,7)===month)||strategies.some(s=>s.reference_month?.slice(0,7)===month&&(s.request_ids||[]).includes(r.id))));
 }
 export function coverageFor(requests,actions){
