@@ -59,6 +59,32 @@ test('falha no salvamento mantém formulário e rascunho para tentar novamente',
  const form=s.document.querySelector('#mob-modal form'),b=form.querySelector('[type="submit"]');await form.onsubmit({preventDefault(){},submitter:b});
  assert.equal(form.querySelector('[name="objective"]').value,'Texto preservado');assert.match(form.querySelector('[data-mob-form-error]').textContent,/Conflito de edição/);assert.equal(b.disabled,false);assert.equal(s.storage.size,1);assert(s.document.querySelector('#mob-modal'));
 });
+test('estratégia identifica solicitações pendentes e preserva as que já têm resposta',()=>{
+ const s=ui('#coordenacao-articulacao?view=mobilizacao&section=estrategias'),d=data();
+ d.requests=[{id:'r1',source_title:'Oficina A',status:'planejado',planned_date:'2026-11-10'},{id:'r2',source_title:'Oficina B',status:'solicitado',planned_date:'2026-11-11'},{id:'r3',source_title:'Encerrada',status:'concluido'}];
+ d.individualPlans=[{id:'p1',request_id:'r1',status:'planejado'}];
+ s.ctx.fixture={host:s.document.querySelector('.content'),me:{id:'coord',role:'coordenacao_articulacao'},month:'2026-11',data:d,coordination:true};
+ s.ctx.existing={id:'strategy1',title:'Estratégia',source_plan_id:'p1',request_ids:['r1'],revision:1,review_status:'approved'};
+ s.eval('context=fixture; editStrategy(fixture,existing)');const modal=s.document.querySelector('#mob-modal');
+ assert.match(modal.textContent,/solicitações pendentes selecionadas recebem uma resposta/);assert.match(modal.textContent,/Oficina A.*Já respondida/);assert.match(modal.textContent,/Oficina B.*Aguardando resposta/);assert.doesNotMatch(modal.textContent,/Encerrada/);
+ assert(modal.querySelector('input[name="request_ids"][value="r1"]'));assert(modal.querySelector('input[name="request_ids"][value="r2"]'));
+});
+test('salvar estratégia envia todas as solicitações selecionadas numa única operação',async()=>{
+ const s=ui('#coordenacao-articulacao?view=mobilizacao&section=estrategias'),d=data(),calls=[];
+ d.requests=[{id:'r1',source_title:'Oficina A',status:'planejado',planned_date:'2026-11-10'},{id:'r2',source_title:'Oficina B',status:'solicitado',planned_date:'2026-11-11'}];
+ d.individualPlans=[{id:'p1',request_id:'r1',status:'planejado'}];s.ctx.fixture={host:s.document.querySelector('.content'),me:{id:'coord',role:'coordenacao_articulacao'},month:'2026-11',data:d,coordination:true};
+ s.ctx.existing={id:'strategy1',title:'Estratégia',source_plan_id:'p1',request_ids:['r1'],revision:4,review_status:'approved'};
+ s.ctx.supabaseClient=()=>({rpc:async(name,args)=>{calls.push({name,args});return {data:{ok:true}}}});
+ s.eval('reload=async()=>{}; context=fixture; editStrategy(fixture,existing)');const form=s.document.querySelector('#mob-modal form');
+ for(const input of form.querySelectorAll('input[name="request_ids"]')){input.checked=true;input.setAttribute('checked','')}
+ const btn=form.querySelector('[type="submit"]');await form.onsubmit({preventDefault(){},submitter:btn});
+ assert.equal(calls.length,1);assert.equal(calls[0].name,'mobilization_command');assert.equal(calls[0].args.p_command,'save_strategy');assert.deepEqual([...calls[0].args.p_payload.request_ids],['r1','r2']);assert.equal(calls[0].args.p_payload.expected_revision,4);
+});
+test('plano geral distingue solicitação respondida de mobilização organizada',()=>{
+ const s=ui(),d=data();d.requests=[{id:'r',source_title:'Oficina',planned_date:'2026-11-10',status:'planejado'}];d.scope=d.requests;d.individualPlans=[{request_id:'r',status:'planejado'}];d.actions=[];d.strategies=[strategy('a',{request_ids:['r']})];
+ s.ctx.fixture={host:s.document.querySelector('.content'),me:{id:'coord',role:'coordenacao_articulacao'},month:'2026-11',data:d,coordination:false};
+ s.eval('render(fixture)');const page=s.document.querySelector('.content').textContent;assert.match(page,/Respondida · aguardando organização/);assert.match(page,/Estratégias vinculadas às solicitações/);assert.match(page,/Oficina/);
+});
 function renderer(){const ctx=vm.createContext({Intl,Date,Map,Set,console,Uint8Array,DataView,atob,BorderStyle:{SINGLE:1},AlignmentType:{LEFT:1,CENTER:2},Deno:{serve:()=>{}}});const source=read('supabase/functions/crj-export-document-safe/index.ts').replace(/^import[\s\S]*?from\s+["'][^"']+["'];?\s*/gm,'');vm.runInContext(source,ctx);return ctx;}
 test('evidência mensal e relatório incluem etapas, nomes e documentos sem expor IDs internos',()=>{
  const c=renderer();c.fixture={title:'Mês',reference_month:'2026-11-01',coordinator_name:'Coordenação',status:'published',revision:2,actions:[{title:'WhatsApp',reference_name:'Referência',collaborator_names:['Educador'],requested_actions:['Jiu-jitsu','PVida'],preparation_steps:'ANTES',execution_steps:'DURANTE',documents_after:'DEPOIS',resources:'RECURSO',documents_before:'FORMULÁRIO'}]};
