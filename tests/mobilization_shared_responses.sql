@@ -10,14 +10,14 @@ update public.profiles set role='coordenacao_articulacao',active=true,display_na
 update public.profiles set role='articulador',active=true,display_name='TESTE ART' where id=(select articulator from shared_mob_test);
 update public.profiles set role='educador',active=true,display_name='TESTE EDU' where id=(select educator from shared_mob_test);
 insert into public.articulation_mobilization_requests(id,source_type,source_title,requested_by,planned_date,target_audience,territories,expected_participants,status)
-select req_original,'oficina','TESTE A',educator,'2043-02-20','Público A',array['A'],20,'planejado' from shared_mob_test
-union all select req_pending,'oficina','TESTE B',educator,'2043-02-15','Público B',array['Bairro B'],12,'solicitado' from shared_mob_test
-union all select req_answered,'oficina','TESTE C',educator,'2043-02-16','Público C',array['C'],9,'solicitado' from shared_mob_test;
+select req_original,'oficina','TESTE A',educator,'2043-02-20'::date,'Público A',array['A'],20,'planejado' from shared_mob_test
+union all select req_pending,'oficina','TESTE B',educator,'2043-02-15'::date,'Público B',array['Bairro B'],12,'solicitado' from shared_mob_test
+union all select req_answered,'oficina','TESTE C',educator,'2043-02-16'::date,'Público C',array['C'],9,'solicitado' from shared_mob_test;
 insert into public.articulation_mobilization_plans(id,request_id,articulator_user_id,mobilization_goal,strategies,main_message,materials,mobilization_deadline,status)
-select source_plan,req_original,articulator,'Objetivo original',array['WhatsApp'],'Mensagem comum','Cartazes','2043-02-18','planejado' from shared_mob_test
-union all select existing_plan,req_answered,articulator,'Resposta manual preservada',array['Escolas'],'Mensagem própria','Panfletos','2043-02-14','planejado' from shared_mob_test;
+select source_plan,req_original,articulator,'Objetivo original',array['WhatsApp'],'Mensagem comum','Cartazes','2043-02-18'::date,'planejado' from shared_mob_test
+union all select existing_plan,req_answered,articulator,'Resposta manual preservada',array['Escolas'],'Mensagem própria','Panfletos','2043-02-14'::date,'planejado' from shared_mob_test;
 insert into public.articulation_mobilization_strategies(id,reference_month,source_plan_id,source_strategy,title,channel,objective,request_ids,reference_user_id,collaborator_ids,deadline,execution_steps,resources,review_status,created_by)
-select strategy,'2043-02-01',source_plan,'WhatsApp','TESTE COMPARTILHADA','WhatsApp','Objetivo comum',array[req_original],articulator,array[educator],'2043-02-18','Divulgar programação','Celular','approved',coordinator from shared_mob_test;
+select strategy,'2043-02-01',source_plan,'WhatsApp','TESTE COMPARTILHADA','WhatsApp','Objetivo comum',array[req_original],articulator,array[educator],'2043-02-18'::date,'Divulgar programação','Celular','approved',coordinator from shared_mob_test;
 insert into public.articulation_monthly_mobilization_plans(id,reference_month,title,status,created_by)
 select month_plan,'2043-02-01','TESTE PLANO','published',coordinator from shared_mob_test;
 insert into public.articulation_mobilization_actions(id,monthly_plan_id,title,action_type,channel,location,scheduled_date,start_time,end_time,reference_user_id,strategy_ids,request_ids,created_by)
@@ -33,7 +33,7 @@ begin
    'request_ids',jsonb_build_array(c.req_original,c.req_pending,c.req_answered),'review_status','approved'));
  select * into p from public.articulation_mobilization_plans where request_id=c.req_pending;
  if p.id is null or p.shared_strategy_id<>c.strategy or p.mobilization_goal<>'Objetivo comum' or p.main_message<>'Mensagem comum' or p.materials<>'Celular' then raise exception 'A resposta compartilhada não recebeu dados comuns.';end if;
- if p.target_audience<>'Público B' or p.territories<>array['Bairro B'] or p.attendance_target<>12 or p.mobilization_deadline<>'2043-02-15' then raise exception 'Dados próprios da solicitação não foram preservados.';end if;
+ if p.target_audience<>'Público B' or p.territories<>array['Bairro B'] or p.attendance_target<>12 or p.mobilization_deadline<>'2043-02-15'::date then raise exception 'Dados próprios da solicitação não foram preservados.';end if;
  if (select status from public.articulation_mobilization_requests where id=c.req_pending)<>'planejado' then raise exception 'A solicitação não foi marcada como respondida.';end if;
  if (select mobilization_goal from public.articulation_mobilization_plans where id=c.existing_plan)<>'Resposta manual preservada' then raise exception 'Uma resposta anterior foi substituída.';end if;
  if not (select request_ids @> array[c.req_original,c.req_pending,c.req_answered] from public.articulation_mobilization_actions where id=c.action) then raise exception 'Ação organizada não recebeu as solicitações.';end if;
