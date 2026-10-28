@@ -22,46 +22,65 @@ returns boolean language sql stable security definer set search_path = '' as $$
     select 1 from public.profiles p where p.id = auth.uid() and p.active
       and p.role::text <> 'pendente'
       and (p.role::text in ('articulador','coordenacao_articulacao','coordenacao_geral')
+        or app_private.developer_total_mode()
         or translate(lower(coalesce(p.team,'')), 'áàâãéêíóôõúç', 'aaaaeeiooouc') like '%articula%')
   )
 $$;
 revoke all on function app_private.can_monitor_articulation() from public, anon;
 grant execute on function app_private.can_monitor_articulation() to authenticated;
 
+-- O desenvolvedor pode assumir outra função temporariamente. Sua função base
+-- continua elegível para os vínculos da equipe enquanto a prévia estiver ativa.
+create or replace function app_private.is_reference_educator(p_user uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select auth.uid() is not null and exists (
+    select 1 from public.profiles p left join app_private.developer_accounts d on d.user_id=p.id
+    where p.id=p_user and p.active and (p.role::text='educador' or (p.developer_preview_enabled and d.enabled and d.base_role::text='educador'))
+  )
+$$;
+create or replace function app_private.is_reference_articulator(p_user uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select auth.uid() is not null and exists (
+    select 1 from public.profiles p left join app_private.developer_accounts d on d.user_id=p.id
+    where p.id=p_user and p.active and p.role::text<>'pendente'
+      and (p.role::text in ('articulador','coordenacao_articulacao')
+        or translate(lower(coalesce(p.team,'')), 'áàâãéêíóôõúç', 'aaaaeeiooouc') like '%articula%'
+        or (p.developer_preview_enabled and d.enabled and d.base_role::text in ('articulador','coordenacao_articulacao')))
+  )
+$$;
+revoke all on function app_private.is_reference_educator(uuid),app_private.is_reference_articulator(uuid) from public, anon;
+grant execute on function app_private.is_reference_educator(uuid),app_private.is_reference_articulator(uuid) to authenticated;
+
 drop policy if exists educator_articulator_select on public.educator_articulator_assignments;
 create policy educator_articulator_select on public.educator_articulator_assignments for select to authenticated
 using (app_private.can_monitor_articulation() or educator_user_id = (select auth.uid()));
 drop policy if exists educator_articulator_insert on public.educator_articulator_assignments;
 create policy educator_articulator_insert on public.educator_articulator_assignments for insert to authenticated
-with check (app_private."current_role"() = 'coordenacao_geral'
-  and exists(select 1 from public.profiles p where p.id=educator_user_id and p.active and p.role::text='educador')
-  and exists(select 1 from public.profiles p where p.id=articulator_user_id and p.active and p.role::text <> 'pendente'
-    and (p.role::text in ('articulador','coordenacao_articulacao') or translate(lower(coalesce(p.team,'')), 'áàâãéêíóôõúç', 'aaaaeeiooouc') like '%articula%')));
+with check ((app_private.is_active_staff() and app_private.has_any_role(array['coordenacao_geral']))
+  and app_private.is_reference_educator(educator_user_id)
+  and app_private.is_reference_articulator(articulator_user_id));
 drop policy if exists educator_articulator_update on public.educator_articulator_assignments;
 create policy educator_articulator_update on public.educator_articulator_assignments for update to authenticated
-using (app_private."current_role"() = 'coordenacao_geral')
-with check (app_private."current_role"() = 'coordenacao_geral'
-  and exists(select 1 from public.profiles p where p.id=educator_user_id and p.active and p.role::text='educador')
-  and exists(select 1 from public.profiles p where p.id=articulator_user_id and p.active and p.role::text <> 'pendente'
-    and (p.role::text in ('articulador','coordenacao_articulacao') or translate(lower(coalesce(p.team,'')), 'áàâãéêíóôõúç', 'aaaaeeiooouc') like '%articula%')));
+using ((app_private.is_active_staff() and app_private.has_any_role(array['coordenacao_geral'])))
+with check ((app_private.is_active_staff() and app_private.has_any_role(array['coordenacao_geral']))
+  and app_private.is_reference_educator(educator_user_id)
+  and app_private.is_reference_articulator(articulator_user_id));
 drop policy if exists educator_articulator_delete on public.educator_articulator_assignments;
 create policy educator_articulator_delete on public.educator_articulator_assignments for delete to authenticated
-using (app_private."current_role"() = 'coordenacao_geral');
+using ((app_private.is_active_staff() and app_private.has_any_role(array['coordenacao_geral'])));
 
 -- Salva todas as referências do educador na mesma transação, aplicando RLS.
 create or replace function public.save_educator_articulator_assignments(p_educator uuid,p_articulators uuid[])
 returns void language plpgsql security invoker set search_path = '' as $$
 declare v_articulators uuid[] := coalesce(p_articulators, '{}'::uuid[]);
 begin
-  if auth.uid() is null or app_private."current_role"() is distinct from 'coordenacao_geral' then
+  if auth.uid() is null or not app_private.is_active_staff() or not app_private.has_any_role(array['coordenacao_geral']) then
     raise exception 'Somente a Coordenação Geral pode alterar as referências.' using errcode='42501';
   end if;
-  if not exists(select 1 from public.profiles p where p.id=p_educator and p.active and p.role::text='educador') then
+  if not app_private.is_reference_educator(p_educator) then
     raise exception 'Educador ativo não encontrado.' using errcode='22023';
   end if;
-  if exists(select 1 from unnest(v_articulators) x(id) where x.id is null or not exists(
-    select 1 from public.profiles p where p.id=x.id and p.active and p.role::text <> 'pendente'
-      and (p.role::text in ('articulador','coordenacao_articulacao') or translate(lower(coalesce(p.team,'')), 'áàâãéêíóôõúç', 'aaaaeeiooouc') like '%articula%'))) then
+  if exists(select 1 from unnest(v_articulators) x(id) where x.id is null or not app_private.is_reference_articulator(x.id)) then
     raise exception 'Selecione somente articuladores ativos.' using errcode='22023';
   end if;
   delete from public.educator_articulator_assignments a where a.educator_user_id=p_educator and not (a.articulator_user_id=any(v_articulators));

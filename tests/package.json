@@ -1,1 +1,1 @@
-{"name":"crj-interface-tests","private":true,"scripts":{"test":"node --test *.test.cjs"},"devDependencies":{"linkedom":"0.18.12"}}
+{"name":"crj-interface-tests","private":true,"scripts":{"test":"node --test *.test.cjs"},"devDependencies":{"@electric-sql/pglite":"0.5.13","linkedom":"0.18.12"}}
