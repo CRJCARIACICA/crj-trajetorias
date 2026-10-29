@@ -82,6 +82,7 @@ async function loadData(month){
 }
 
 function metrics(data){
+  data={...data,services:data.services.filter(x=>x.status!=='cancelado')};
   const byId=new Map(data.services.map(x=>[x.id,x])),fortalece=new Set(),pvida=new Set(),ptrampo=new Set(),others=new Set();
   for(const link of data.serviceYouth){
     const r=byId.get(link.service_id),type=String(r?.program_type||'');if(!r)continue;

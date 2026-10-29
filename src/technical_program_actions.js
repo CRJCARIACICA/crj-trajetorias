@@ -72,16 +72,17 @@ function allMethodology(type,links,catalog){return [...primaryMethodology(type),
 
 async function loadData(m){
   const client=c(),range=monthRange(m);
-  const [plansQ,servicesQ,teamQ,youthQ,workshopsQ,catalogQ,cfdhQ]=await Promise.all([
+  const [plansQ,servicesQ,teamQ,youthQ,workshopsQ,catalogQ,cfdhQ,fortaleceQ]=await Promise.all([
     client.from('technical_action_plans').select('*').eq('plan_month',range.start).in('action_type',['pvida','ptrampo']).order('planned_date',{ascending:true,nullsFirst:false}).order('start_time',{ascending:true,nullsFirst:false}),
     client.from('technical_service_records').select('id,service_date,service_type,program_type,duration_hours,status,source_technical_action_plan_id,source_form_submission_id,reason').gte('service_date',range.start).lt('service_date',range.end).in('program_type',['pvida','ptrampo','outras-demandas']),
     client.from('profiles').select('id,display_name,role,team,active').eq('active',true).order('display_name'),
     client.from('young_people').select('id,full_name,preferred_name,neighborhood,cpf,birth_date,phone,email,status,initial_form_status').eq('status','ativo').order('full_name'),
     client.from('workshops').select('id,name,category,active,workshop_type').eq('active',true).order('name'),
     client.from('methodology_classification_catalog').select('*').order('sort_order'),
-    client.from('educator_plans').select('id,plan_type,activity_title,planned_start,planned_end,status').in('plan_type',['cfdh_estrutural','cfdh_transversal']).gte('planned_start',range.start).lt('planned_start',range.end).order('planned_start')
+    client.from('educator_plans').select('id,plan_type,activity_title,planned_start,planned_end,status').in('plan_type',['cfdh_estrutural','cfdh_transversal']).gte('planned_start',range.start).lt('planned_start',range.end).order('planned_start'),
+    client.from('indicator_events').select('youth_id').eq('indicator_code','M6.2_PVIDA_JOVENS').gte('event_date',range.start).lt('event_date',range.end)
   ]);
-  for(const q of [plansQ,servicesQ,teamQ,youthQ,workshopsQ,catalogQ,cfdhQ])if(q.error)throw q.error;
+  for(const q of [plansQ,servicesQ,teamQ,youthQ,workshopsQ,catalogQ,cfdhQ,fortaleceQ])if(q.error)throw q.error;
   const plans=plansQ.data||[],services=servicesQ.data||[],planIds=plans.map(x=>x.id),serviceIds=services.map(x=>x.id);
   const [profQ,planYouthQ,execQ,serviceYouthQ]=await Promise.all([
     planIds.length?client.from('technical_action_plan_professionals').select('*').in('plan_id',planIds):Promise.resolve({data:[],error:null}),
@@ -92,7 +93,7 @@ async function loadData(m){
   for(const q of [profQ,planYouthQ,execQ,serviceYouthQ])if(q.error)throw q.error;
   const executions=execQ.data||[],execIds=executions.map(x=>x.id);
   const attendanceQ=execIds.length?await client.from('technical_action_attendance').select('*').in('execution_id',execIds):{data:[],error:null};if(attendanceQ.error)throw attendanceQ.error;
-  return {plans,services,team:teamQ.data||[],youth:youthQ.data||[],workshops:workshopsQ.data||[],catalog:catalogQ.data||[],cfdh:cfdhQ.data||[],planProf:profQ.data||[],planYouth:planYouthQ.data||[],executions,attendance:attendanceQ.data||[],serviceYouth:serviceYouthQ.data||[]};
+  return {plans,services,fortaleceEvents:fortaleceQ.data||[],team:teamQ.data||[],youth:youthQ.data||[],workshops:workshopsQ.data||[],catalog:catalogQ.data||[],cfdh:cfdhQ.data||[],planProf:profQ.data||[],planYouth:planYouthQ.data||[],executions,attendance:attendanceQ.data||[],serviceYouth:serviceYouthQ.data||[]};
 }
 
 function metrics(data){
@@ -104,8 +105,9 @@ function metrics(data){
     if(s.program_type==='pvida')pvida.add(l.youth_id);
     if(s.program_type==='ptrampo')ptrampo.add(l.youth_id);
     if(s.program_type==='outras-demandas')others.add(l.youth_id);
-    if(['pvida','ptrampo','outras-demandas'].includes(s.program_type))unique45.add(l.youth_id);
+    if(['pvida','outras-demandas'].includes(s.program_type))unique45.add(l.youth_id);
   }
+  for(const event of data.fortaleceEvents||[])if(event.youth_id)unique45.add(event.youth_id);
   const pvidaHours=liveServices.filter(x=>x.program_type==='pvida').reduce((n,x)=>n+Number(x.duration_hours||0),0);
   const ptrampoExecutions=data.executions.filter(e=>['realizada','parcial'].includes(e.execution_status)&&data.plans.some(p=>p.id===e.plan_id&&p.action_type==='ptrampo'));
   const linkedServices=liveServices.filter(x=>x.source_technical_action_plan_id).length;
@@ -134,7 +136,7 @@ function linkedLayout(data){
 
 function dashboardHtml(m,data){
   const x=metrics(data),pvida=data.plans.filter(p=>p.action_type==='pvida'),ptrampo=data.plans.filter(p=>p.action_type==='ptrampo');
-  return `<section class="tpa-shell" id="technical-program-actions" data-month="${esc(m)}"><div class="tpa-head"><div><h2>PVida e PTrampo · planejamento e execução</h2><div class="tpa-sub">Fluxo integrado: planejamento → execução → lista de presença → trajetória → indicadores. Jovens são deduplicados por ID nos indicadores de pessoas únicas.</div></div><div class="tpa-actions">${canPlan()?'<button class="btn primary" data-tpa-new>+ Planejar PVida / PTrampo</button>':''}<button class="btn" data-tpa-toggle-general>Mostrar planejamento técnico geral</button></div></div><div class="tpa-kpis"><div class="tpa-kpi"><small>PVida · carga mensal</small><b>${x.pvidaHours.toLocaleString('pt-BR')}h / 4h</b><div class="tpa-progress"><i style="width:${pct(x.pvidaHours,4)}%"></i></div><small>${x.pvida} jovem(ns) únicos no PVida</small></div><div class="tpa-kpi"><small>PTrampo · atividades executadas</small><b>${x.ptrampoActivities} / 8</b><div class="tpa-progress"><i style="width:${pct(x.ptrampoActivities,8)}%"></i></div><small>${x.ptrampoServices} registro(s) PTrampo no período</small></div><div class="tpa-kpi"><small>PTrampo · jovens únicos</small><b>${x.ptrampo} / 15</b><div class="tpa-progress"><i style="width:${pct(x.ptrampo,15)}%"></i></div><small>Presença/atendimento deduplicados</small></div><div class="tpa-kpi"><small>Jovens únicos da iniciativa</small><b>${x.unique45} / 45</b><div class="tpa-progress"><i style="width:${pct(x.unique45,45)}%"></i></div><small>PVida + PTrampo + Outras Demandas, sem repetição</small></div><div class="tpa-kpi"><small>Execuções integradas</small><b>${x.linkedServices}</b><small>registro(s) gerados automaticamente a partir das ações planejadas</small></div></div><div class="tpa-columns"><div><div class="tpa-row"><div><h3>PVida</h3><div class="tpa-sub">4 horas mensais de ações vinculadas.</div></div></div>${pvida.map(p=>planCard(p,data)).join('')||'<div class="tpa-empty">Nenhuma ação PVida planejada.</div>'}</div><div><div class="tpa-row"><div><h3>PTrampo</h3><div class="tpa-sub">8 atividades e pelo menos 15 jovens atendidos; os jovens também compõem a leitura de 45 únicos.</div></div></div>${ptrampo.map(p=>planCard(p,data)).join('')||'<div class="tpa-empty">Nenhuma ação PTrampo planejada.</div>'}</div></div><div class="tpa-linked"><div class="tpa-row"><div><h3>Ações ligadas</h3><div class="tpa-sub">Aparecem separadas por categoria, mas continuam sendo a mesma execução principal. A contribuição metodológica é preservada sem gerar dupla contagem.</div></div></div>${linkedLayout(data)}</div></section>`;
+  return `<section class="tpa-shell" id="technical-program-actions" data-month="${esc(m)}"><div class="tpa-head"><div><h2>PVida e PTrampo · planejamento e execução</h2><div class="tpa-sub">Fluxo integrado: planejamento → execução → lista de presença → trajetória → indicadores. Jovens são deduplicados por ID nos indicadores de pessoas únicas.</div></div><div class="tpa-actions">${canPlan()?'<button class="btn primary" data-tpa-new>+ Planejar PVida / PTrampo</button>':''}<button class="btn" data-tpa-toggle-general>Mostrar planejamento técnico geral</button></div></div><div class="tpa-kpis"><div class="tpa-kpi"><small>PVida · carga mensal</small><b>${x.pvidaHours.toLocaleString('pt-BR')}h / 4h</b><div class="tpa-progress"><i style="width:${pct(x.pvidaHours,4)}%"></i></div><small>${x.pvida} jovem(ns) únicos no PVida</small></div><div class="tpa-kpi"><small>PTrampo · atividades executadas</small><b>${x.ptrampoActivities} / 8</b><div class="tpa-progress"><i style="width:${pct(x.ptrampoActivities,8)}%"></i></div><small>${x.ptrampoServices} registro(s) PTrampo no período</small></div><div class="tpa-kpi"><small>PTrampo · jovens únicos</small><b>${x.ptrampo} / 15</b><div class="tpa-progress"><i style="width:${pct(x.ptrampo,15)}%"></i></div><small>Presença/atendimento deduplicados</small></div><div class="tpa-kpi"><small>Fortalece Família · jovens únicos</small><b>${x.unique45} / 45</b><div class="tpa-progress"><i style="width:${pct(x.unique45,45)}%"></i></div><small>PVida + Outras Demandas, sem repetição</small></div><div class="tpa-kpi"><small>Execuções integradas</small><b>${x.linkedServices}</b><small>registro(s) gerados automaticamente a partir das ações planejadas</small></div></div><div class="tpa-columns"><div><div class="tpa-row"><div><h3>PVida</h3><div class="tpa-sub">4 horas mensais de ações vinculadas.</div></div></div>${pvida.map(p=>planCard(p,data)).join('')||'<div class="tpa-empty">Nenhuma ação PVida planejada.</div>'}</div><div><div class="tpa-row"><div><h3>PTrampo</h3><div class="tpa-sub">8 atividades e pelo menos 15 jovens atendidos; indicador acompanhado separadamente.</div></div></div>${ptrampo.map(p=>planCard(p,data)).join('')||'<div class="tpa-empty">Nenhuma ação PTrampo planejada.</div>'}</div></div><div class="tpa-linked"><div class="tpa-row"><div><h3>Ações ligadas</h3><div class="tpa-sub">Aparecem separadas por categoria, mas continuam sendo a mesma execução principal. A contribuição metodológica é preservada sem gerar dupla contagem.</div></div></div>${linkedLayout(data)}</div></section>`;
 }
 
 function adaptOldPanel(){

@@ -39,6 +39,16 @@ export async function createTechnicalService(row){
   const professionalIds=Array.isArray(row.professional_ids)?row.professional_ids:row.professional_ids?[row.professional_ids]:[];
   if(!youthIds.length)throw new Error('Selecione ao menos um jovem atendido.');
   if(!professionalIds.length)throw new Error('Selecione ao menos um técnico responsável.');
+  // O formulário metodológico e as relações do atendimento são gravados numa
+  // única transação no banco; uma falha não deixa atendimento incompleto.
+  if(Array.isArray(row.documents)&&mode!=='mock'){
+    const {data,error}=await supabase.rpc('save_methodological_technical_service',{
+      p_record:{service_date:row.service_date,service_type:row.service_type,program_type:row.program_type,reason:row.reason,summary:row.summary,status:row.status,duration_hours:row.duration_hours},
+      p_youth_ids:youthIds,p_professional_ids:professionalIds,p_documents:row.documents
+    });
+    if(error)throw error;
+    return data;
+  }
   if(mode==='mock'){
     const s=mock();s.technicalServices||=[];
     const rec={id:uid('ts'),service_date:row.service_date||new Date().toISOString().slice(0,10),service_type:row.service_type||'individual',program_type:row.program_type||'atendimento',reason:row.reason||'Atendimento técnico',summary:row.summary||'',status:row.status||'realizado',created_by:s.currentUser.id,created_at:now(),youth_ids:youthIds,professional_ids:professionalIds};

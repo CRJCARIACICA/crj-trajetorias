@@ -7,6 +7,8 @@ const {parseHTML}=require('linkedom');
 const root=path.resolve(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
 const strip=s=>s.replace(/^import .*;\r?\n/gm,'').replace(/\bexport /g,'');
+const formsSource=fs.readdirSync(path.join(root,'bundle')).filter(x=>/^src__forms_js\..*\.part$/.test(x)).sort().map(x=>read('bundle/'+x)).join('');
+const FORM_MAP=vm.runInNewContext(strip(formsSource)+'\nFORM_MAP;');
 const deferred=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve}};
 const settle=async()=>{for(let i=0;i<30;i++)await Promise.resolve()};
 const person={id:'young-1',full_name:'Jovem Teste',preferred_name:'Apelido',neighborhood:'Castelo Branco',cpf:'12345678900',birth_date:'2007-01-01',status:'ativo'};
@@ -15,12 +17,12 @@ const profile=(role='assistente_social',active=true)=>({id:'staff-'+role,display
 function setup({role='assistente_social',hash='#jovem/young-1',session}={}){
   const {window}=parseHTML('<html><head></head><body><div class="content"><div class="page-head"><div class="actions"><button data-action="new-service">+ Atendimento</button><button data-new-technical-service>+ Novo atendimento</button></div></div></div></body></html>');
   let actor=profile(role),loadSession=session||(()=>Promise.resolve({user:actor})),loaded=false,observations=0;
-  const timers=new Map(),saved=[],reads=[],imports=[],alerts=[];let timerId=0;
+  const timers=new Map(),saved=[],created=[],reads=[],imports=[],alerts=[];let timerId=0;
   const location={hash};
   const client={from(table){
     reads.push(table);const filters=[];
-    const q={select(){return q},eq(k,v){filters.push([k,v]);return q},order(){return q},maybeSingle(){return q},then(resolve,reject){
-      const data=(table==='young_people'?[person,{...person,id:'young-2',full_name:'Outro Jovem'}]:table==='profiles'?[actor,profile('psicologo')]:[]).filter(row=>filters.every(([k,v])=>row[k]===v));
+    const q={select(){return q},eq(k,v){filters.push([k,v]);return q},is(){return q},order(){return q},maybeSingle(){return q},then(resolve,reject){
+      const data=(table==='young_people'?[person,{...person,id:'young-2',full_name:'Outro Jovem'}]:table==='profiles'?[actor,profile('psicologo')]:table==='methodology_form_submissions'?[{source_type:'technical_service_records',source_id:'service-old',form_slug:'pvida',youth_id:'young-1',payload:{objectives:'Meta anterior'}}]:[]).filter(row=>filters.every(([k,v])=>row[k]===v));
       return Promise.resolve({data,error:null}).then(resolve,reject);
     }};return q;
   }};
@@ -33,9 +35,10 @@ function setup({role='assistente_social',hash='#jovem/young-1',session}={}){
     HashChangeEvent:window.Event,
     MutationObserver:class{observe(){observations++}disconnect(){}},
     setTimeout(fn){timers.set(++timerId,fn);return timerId},clearTimeout(id){timers.delete(id)},
-    alert:message=>alerts.push(message),confirm:()=>false,
+    alert:message=>alerts.push(message),confirm:()=>false,FORM_MAP,
     apiMode:()=> 'live',supabaseClient:()=>client,getSession:()=>loadSession(),
     createTechnicalService:async row=>{saved.push(row);return {id:'service-1',...row}},
+    createYouth:async payload=>{created.push(payload);return 'young-3'},
     importService:async url=>{imports.push(url);load();return {openTechnicalService:context.openTechnicalService}}
   });
   const permission=read('src/permissions.js').match(/export function canRegisterTechnicalService\(profile\)\{[\s\S]*?\n\}/)[0];
@@ -52,7 +55,7 @@ function setup({role='assistente_social',hash='#jovem/young-1',session}={}){
     source=source.slice(0,source.indexOf('  const dashboard=await listTechnicalTeamDashboard(month);'));
     vm.runInContext(source.replace(/import\(('.*?')\)/g,'importService($1)'),context);
   }
-  return {window,document:window.document,context,location,timers,saved,reads,imports,alerts,load,bindYouth,bindArea,
+  return {window,document:window.document,context,location,timers,saved,created,reads,imports,alerts,load,bindYouth,bindArea,
     get observations(){return observations},
     setActor(p){actor=p},setSession(fn){loadSession=fn},
     eval:code=>vm.runInContext(code,context),
@@ -69,7 +72,7 @@ function select(s,name,value){
   else el.value=value;
 }
 function complete(s){
-  select(s,'program_type','atendimento');select(s,'reason','Orientação de teste');
+  select(s,'program_type','pvida');modal(s).querySelector('[name="program_type"]').dispatchEvent(new s.window.Event('change'));select(s,'reason','Orientação de teste');
   // linkedom representa checked por atributo; o navegador disponibiliza ambos.
   modal(s).querySelector('[name="professional_ids"]').checked=true;
 }
@@ -95,6 +98,58 @@ test('Novo atendimento da Área Técnica carrega o mesmo formulário sem depende
   const search=modal(s).querySelector('[data-tsf-search]');search.value='12345678900';search.dispatchEvent(new s.window.Event('input'));
   s.click('[data-tsf-person="young-1"]');
   assert(modal(s).querySelector('[data-tsf-selected="young-1"]'));
+});
+
+test('apresenta apenas os três tipos e troca as perguntas conforme o anexo',async()=>{
+  const s=setup();await s.open({initialYouthId:'young-1'});
+  const program=modal(s).querySelector('[name="program_type"]');
+  assert.deepEqual([...program.querySelectorAll('option')].map(o=>o.value).filter(Boolean),['pvida','ptrampo','outras-demandas']);
+  select(s,'program_type','ptrampo');program.dispatchEvent(new s.window.Event('change'));
+  assert(modal(s).querySelector('[data-tsf-field="work_desire"]'));
+  assert(modal(s).querySelector('[data-tsf-field="monitor_short"]'));
+  assert(modal(s).querySelector('[data-tsf-field="followup_type"]'));
+  const work=modal(s).querySelector('[data-tsf-field="work_desire"] textarea');work.value='Trabalhar com informática';
+  select(s,'program_type','outras-demandas');program.dispatchEvent(new s.window.Event('change'));
+  assert(modal(s).querySelector('[data-tsf-field="demand"]'));
+  select(s,'program_type','ptrampo');program.dispatchEvent(new s.window.Event('change'));
+  assert.equal(modal(s).querySelector('[data-tsf-field="work_desire"] textarea').value,'Trabalhar com informática');
+});
+
+test('salva resposta do anexo correspondente e o complemento habilitado junto ao atendimento',async()=>{
+  const s=setup();await s.open({initialYouthId:'young-1'});complete(s);
+  modal(s).querySelector('[data-tsf-field="objectives"] textarea').value='Concluir os estudos';
+  modal(s).querySelector('[data-tsf-enable-accompaniment]').checked=true;
+  modal(s).querySelector('[data-tsf-field="mother_education"] select').value='Ensino médio completo';
+  modal(s).querySelector('form').dispatchEvent(new s.window.Event('submit',{cancelable:true}));await settle();
+  assert.equal(s.saved[0].program_type,'pvida');
+  assert.equal(s.saved[0].documents.length,2);
+  assert.equal(s.saved[0].documents[0].payload.objectives,'Concluir os estudos');
+  assert.equal(s.saved[0].documents[0].record_state,'complete');
+  assert.equal(s.saved[0].documents[1].form_slug,'acompanhamento');
+  assert.equal(s.saved[0].documents[1].youth_id,'young-1');
+});
+
+test('cadastra jovem sem sair do atendimento usando o Formulário Inicial',async()=>{
+  const s=setup({hash:'#equipe-tecnica'});await s.open();
+  s.click('[data-tsf-new-person]');
+  const reg=modal(s).querySelector('[data-tsf-registration]');
+  reg.querySelector('[data-tsf-field="full_name"] input').value='Jovem Nova';
+  reg.querySelector('[data-tsf-field="preferred_name"] input').value='Nova';
+  reg.querySelector('[data-tsf-field="birth_date"] input').value='2007-02-03';
+  s.click('[data-tsf-create-person]');await settle();
+  assert.equal(s.created.length,1);assert.equal(s.created[0].full_name,'Jovem Nova');
+  assert(modal(s).querySelector('[data-tsf-selected="young-3"]'));
+});
+
+test('acompanhamento preserva respostas anteriores e grava a evolução na evidência',async()=>{
+  const s=setup();await s.open({initialYouthId:'young-1',initialProgram:'pvida',followupServiceId:'service-old'});
+  assert.equal(modal(s).querySelector('[data-tsf-field="objectives"] textarea').value,'Meta anterior');
+  modal(s).querySelector('[name="reason"]').value='Revisão do plano';
+  modal(s).querySelector('[name="summary"]').value='Avançou na matrícula';
+  modal(s).querySelector('[name="professional_ids"]').checked=true;
+  modal(s).querySelector('form').dispatchEvent(new s.window.Event('submit',{cancelable:true}));await settle();
+  assert.equal(s.saved[0].documents[0].payload._previous_service_id,'service-old');
+  assert.equal(s.saved[0].documents[0].payload._technical_note,'Avançou na matrícula');
 });
 
 test('permissão é atualizada após troca de conta e revogação de perfil, sem reutilizar a sessão anterior',async()=>{

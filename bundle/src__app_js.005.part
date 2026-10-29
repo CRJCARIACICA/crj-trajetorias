@@ -182,7 +182,7 @@ async function pageTechnicalTeam(){
   const head='<div class="page-head"><div><h2>Área da Equipe Técnica</h2><p>Psicologia · Serviço Social · Terapia Ocupacional — atendimentos, jovens únicos e acompanhamento de PVida, PTrampo e outras demandas.</p></div><div class="actions"><button class="btn primary" data-new-technical-service>+ Novo atendimento</button></div></div>'+tabs+'<div class="toolbar"><label class="field month-filter"><span>Período</span><input class="input" type="month" data-technical-month value="'+esc(month)+'"></label></div>';
   if(view==='configuracoes')return head+technicalTargetSettingsCard(s,permitted('document_settings'));
   if(view==='evidencias'){
-    return head+'<div class="card"><div class="page-head compact"><div><h3>Evidência nominal do período</h3><p>Data, jovem, motivo resumido e técnico(s) responsável(is).</p></div><div class="actions"><button class="btn primary" data-technical-print>Imprimir / Salvar PDF</button><button class="btn secondary" data-technical-doc>Baixar DOC</button></div></div><div class="methodology-preview-modal">'+technicalEvidenceHtml(dashboard,month)+'</div></div>';
+    return head+'<div data-technical-service-evidence></div><div class="card"><div class="page-head compact"><div><h3>Evidência nominal do período</h3><p>Data, jovem, motivo resumido e técnico(s) responsável(is).</p></div><div class="actions"><button class="btn primary" data-technical-print>Imprimir / Salvar PDF</button><button class="btn secondary" data-technical-doc>Baixar DOC</button></div></div><div class="methodology-preview-modal">'+technicalEvidenceHtml(dashboard,month)+'</div></div>';
   }
   const totalTarget=s.technical_target_total_services,uniqueTarget=s.technical_target_unique_youth,collectiveTarget=s.technical_target_collective_services;
   return head+
@@ -204,10 +204,12 @@ async function bindTechnicalPage(){
   document.querySelector('[data-technical-month]')?.addEventListener('change',e=>{const view=route().params.get('view')||'painel';nav('equipe-tecnica?view='+view+'&month='+e.target.value)});
   document.querySelector('[data-new-technical-service]')?.addEventListener('click',async()=>{
     try{
-      const {openTechnicalService}=await import('./technical_service_flow.js?v=20261026-technical-service1');
+      const {openTechnicalService}=await import('./technical_service_flow.js?v=20261029-methodology1');
       await openTechnicalService();
     }catch(err){toast(err.message||'Não foi possível abrir o atendimento. Tente novamente.','danger')}
   });
+  const evidenceRoot=document.querySelector('[data-technical-service-evidence]');
+  if(evidenceRoot){import('./technical_service_evidence.js?v=20261029-methodology1').then(m=>m.renderTechnicalServiceEvidence(evidenceRoot,state.user)).catch(err=>{evidenceRoot.textContent='Não foi possível carregar as evidências: '+(err.message||err)});}
   const dashboard=await listTechnicalTeamDashboard(month);applyDocumentSettings(dashboard.settings);
   document.querySelector('[data-technical-print]')?.addEventListener('click',()=>printTechnicalEvidence(dashboard,month));
   document.querySelector('[data-technical-doc]')?.addEventListener('click',()=>downloadTechnicalEvidenceDoc(dashboard,month));
