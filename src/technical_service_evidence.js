@@ -72,7 +72,7 @@ function printRows(rows,filters){
 }
 export async function renderTechnicalServiceEvidence(root,profile=null){
   const filters={mode:'month',month:month(),start:'',end:'',type:'',gender:'',orientation:'',race:''};
-  let all=[],visible=[];
+  let all=[],visible=[],loadVersion=0;
   root.innerHTML=`<div class="tw-card" style="margin:12px 0"><h3>Evidências de atendimentos</h3><p class="tw-note">Filtre os atendimentos e baixe os anexos de cada jovem. Registros anteriores permanecem disponíveis.</p><div class="tsf-evidence-filters" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end"><label>Período<br><select data-ev-mode><option value="month">Mês</option><option value="all">Atendimentos gerais</option><option value="range">Definir período</option></select></label><label data-ev-month-wrap>Mês<br><input type="month" data-ev-month value="${filters.month}"></label><label data-ev-start-wrap hidden>De<br><input type="date" data-ev-start></label><label data-ev-end-wrap hidden>Até<br><input type="date" data-ev-end></label><label>Tipo<br><select data-ev-type><option value="">Todos</option>${Object.entries(labels).map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('')}</select></label><label>Gênero<br><select data-ev-gender><option value="">Todos</option></select></label><label>Orientação sexual<br><select data-ev-orientation><option value="">Todas</option></select></label><label>Raça/cor<br><select data-ev-race><option value="">Todas</option></select></label><button class="btn secondary" type="button" data-ev-print>Imprimir / salvar PDF</button></div><div data-ev-results style="margin-top:12px">Carregando…</div></div>`;
   const el=name=>root.querySelector('[data-ev-'+name+']');
   const draw=()=>{
@@ -82,17 +82,22 @@ export async function renderTechnicalServiceEvidence(root,profile=null){
     el('results').querySelectorAll('[data-ev-follow]').forEach(b=>b.onclick=()=>{const r=visible[Number(b.dataset.evFollow)];openTechnicalService({initialYouthId:r.youth_id,initialProgram:r.program_type,followupServiceId:r.id})});
   };
   const load=async()=>{
+    const version=++loadVersion;
     el('results').textContent='Carregando atendimentos…';
     try{
-      all=await loadEvidence(filters);
+      const result=await loadEvidence({...filters});
+      if(version!==loadVersion)return;
+      all=result;
       for(const [field,key] of [['gender','gender_identity'],['orientation','sexual_orientation'],['race','race']]){
-        const select=el(field),current=filters[field];select.innerHTML='<option value="">Todos</option>'+options(all,key,current);
+        const select=el(field);
+        if(filters[field]&&!all.some(row=>row[key]===filters[field]))filters[field]='';
+        select.innerHTML='<option value="">Todos</option>'+options(all,key,filters[field]);
       }
       draw();
-    }catch(e){el('results').textContent='Não foi possível carregar as evidências: '+(e.message||e)}
+    }catch(e){if(version===loadVersion)el('results').textContent='Não foi possível carregar as evidências: '+(e.message||e)}
   };
-  el('mode').onchange=()=>{filters.mode=el('mode').value;el('month-wrap').hidden=filters.mode!=='month';el('start-wrap').hidden=el('end-wrap').hidden=filters.mode!=='range';if(filters.mode!=='range'||filters.start&&filters.end)load()};
-  for(const key of ['month','start','end'])el(key).onchange=()=>{filters[key]=el(key).value;if(filters.mode!=='range'||filters.start&&filters.end)load()};
+  el('mode').onchange=()=>{filters.mode=el('mode').value;el('month-wrap').hidden=filters.mode!=='month';el('start-wrap').hidden=el('end-wrap').hidden=filters.mode!=='range';if(filters.mode!=='range'||filters.start&&filters.end)load();else{loadVersion++;all=[];visible=[];el('results').textContent='Informe as datas inicial e final.'}};
+  for(const key of ['month','start','end'])el(key).onchange=()=>{filters[key]=el(key).value;if(filters.mode!=='range'||filters.start&&filters.end)load();else{loadVersion++;all=[];visible=[];el('results').textContent='Informe as datas inicial e final.'}};
   for(const key of ['type','gender','orientation','race'])el(key).onchange=()=>{filters[key]=el(key).value;draw()};
   el('print').onclick=()=>{try{printRows(visible,filters)}catch(e){alert(e.message||e)}};
   await load();
