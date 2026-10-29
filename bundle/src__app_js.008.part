@@ -633,8 +633,8 @@ async function bindCfdhShared(){
 
   document.querySelectorAll('[data-cfdh-open-checkin]').forEach(btn=>btn.addEventListener('click',async()=>{
     try{
-      const x=await openCfdhCheckin(btn.dataset.cfdhOpenCheckin),url=new URL('checkin.html',location.href);url.searchParams.set('cfdh',x.public_token);
-      modal('Lista de presença · CFDH','<div class="stack"><div class="notice success"><b>Lista CFDH aberta.</b><br>Somente jovens com pelo menos Formulário Inicial parcial podem participar. Quem ainda não possuir trajetória poderá iniciar o Formulário Inicial parcial e se inscrever no circuito pela própria lista.</div><input class="input" value="'+esc(url.href)+'" readonly data-cfdh-checkin-url><div class="actions"><a class="btn primary" href="'+esc(url.href)+'" target="_blank">Abrir lista</a><button class="btn secondary" data-copy-cfdh-checkin>Copiar link</button></div></div>');
+      const x=await openCfdhCheckin(btn.dataset.cfdhOpenCheckin),url=new URL('checkin.html',location.href);url.searchParams.set(x.linked_workshop?'token':'cfdh',x.public_token);
+      modal('Lista de presença · CFDH','<div class="stack"><div class="notice success"><b>Lista aberta.</b><br>'+(x.linked_workshop?'Este circuito usa a mesma lista da aula de oficina vinculada.':'Quem ainda não possuir trajetória poderá iniciar o Formulário Inicial parcial e se inscrever no circuito pela própria lista.')+'</div><input class="input" value="'+esc(url.href)+'" readonly data-cfdh-checkin-url><div class="actions"><a class="btn primary" href="'+esc(url.href)+'" target="_blank">Abrir lista</a><button class="btn secondary" data-copy-cfdh-checkin>Copiar link</button></div></div>');
       document.querySelector('[data-copy-cfdh-checkin]')?.addEventListener('click',async()=>{await navigator.clipboard.writeText(url.href);toast('Link CFDH copiado')});
     }catch(err){toast(err.message,'danger')}
   }));

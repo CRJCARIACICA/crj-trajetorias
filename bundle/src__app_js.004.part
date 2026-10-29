@@ -86,7 +86,7 @@
 
   document.querySelectorAll('[data-calendar-session]').forEach(btn=>btn.addEventListener('click',async()=>{try{const ws=await listWorkshops(),w=ws.find(x=>x.id===btn.dataset.workshop),entries=await listWorkshopCalendar(null,null,btn.dataset.workshop),entry=entries.find(x=>x.id===btn.dataset.calendarSession);if(w&&entry)await openWorkshopSessionV2(w,entry)}catch(err){toast(err.message,'danger')}}));
   document.querySelectorAll('[data-calendar-cancel]').forEach(btn=>btn.addEventListener('click',async()=>{if(!confirm('Cancelar esta data planejada?'))return;try{await updateWorkshopCalendarEntry(btn.dataset.calendarCancel,{status:'cancelada'});toast('Data cancelada');await render()}catch(err){toast(err.message,'danger')}}));
-  document.querySelector('[data-workshop-month]')?.addEventListener('change',e=>{const view=route().params.get('view')||'calendario';nav('oficinas?view='+view+'&month='+e.target.value)});
+  document.querySelector('[data-workshop-month]')?.addEventListener('change',e=>{const view=route().params.get('view')||'oficinas';nav('oficinas?view='+view+'&month='+e.target.value)});
 
   const openInstructorRecordV2=async(instructorId,record=null)=>{
     const [team,ws]=await Promise.all([listTeam(),listWorkshops()]);

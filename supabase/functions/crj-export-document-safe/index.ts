@@ -384,7 +384,11 @@ async function cfdhReportSpec(client, id) {
       { title: "Ações", table: {
         heads: ["Ação", "Planejada", "Executada", "Situação", "Duração"],
         rows: array(actionsQ.data).map(a => [a.action_number, brDate(a.scheduled_date), brDate(a.actual_date), a.execution_status || "", `${a.actual_duration_hours || 0}h`])
-      } }
+      } },
+      { title: "Execução e observações por ação", rows: array(actionsQ.data).map(a => [
+        `Ação ${a.action_number}${a.title ? ` · ${a.title}` : ""}`,
+        [a.execution_description && `Execução: ${a.execution_description}`, a.execution_notes && `Observações: ${a.execution_notes}`].filter(Boolean).join("\n")
+      ]) }
     ]
   };
 }

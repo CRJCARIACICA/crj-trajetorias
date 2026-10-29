@@ -282,7 +282,9 @@ async function render(){
     if(!isCurrent())return;
     if(p1==='educador') await bindEducatorPageV2();
     if(!isCurrent())return;
-    if(p1==='cfdh') await bindCfdhShared();
+    if(p1==='cfdh'||(p1==='oficinas'&&route().params.get('view')==='cfdh-turma')) await bindCfdhShared();
+    if(!isCurrent())return;
+    if(p1==='oficinas'&&route().params.get('view')==='cfdh-turma') await bindCfdhClassLive();
     if(!isCurrent())return;
     if(p1==='equipe-tecnica') await bindTechnicalPage();
     if(!isCurrent())return;

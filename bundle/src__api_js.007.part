@@ -270,7 +270,7 @@ export async function getCfdhPlanBundle(planId){
   if(mode==='mock'){
     const st=mock(),plan=(st.educatorPlans||[]).find(x=>x.id===planId);
     if(!plan)throw new Error('Planejamento CFDH não encontrado.');
-    return {plan,workshop_ids:[],actions:[],workshops:st.workshops||[],calendar:[],report:(st.educatorReports||[]).find(x=>x.plan_id===planId)||null,evaluations:[],attendance_counts:{},team:st.team||[]};
+    return {plan,workshop_ids:[],actions:[],workshops:st.workshops||[],calendar:[],report:(st.educatorReports||[]).find(x=>x.plan_id===planId)||null,evaluations:[],attendance_counts:{},roster:[],team:st.team||[]};
   }
   const pq=await supabase.from('educator_plans').select('*').eq('id',planId).single();
   if(pq.error)throw pq.error;
@@ -289,17 +289,17 @@ export async function getCfdhPlanBundle(planId){
   ]);
   for(const q of [linksQ,actionsQ,workshopsQ,calendarQ,reportQ,formsQ,teamQ,monthThemeQ])if(q.error)throw q.error;
   let actions=actionsQ.data||[],ids=actions.map(x=>x.id);
-  let attendance=[],responsibles=[];
+  let responsibles=[],roster=[];
   if(ids.length){
-    const [aq,rq]=await Promise.all([
-      supabase.from('cfdh_attendance').select('action_id,youth_id,present').in('action_id',ids).eq('present',true),
-      supabase.from('cfdh_action_responsibles').select('action_id,user_id').in('action_id',ids)
+    const [rq,rosterRows]=await Promise.all([
+      supabase.from('cfdh_action_responsibles').select('action_id,user_id').in('action_id',ids),
+      getCfdhClassRoster(planId)
     ]);
-    if(aq.error)throw aq.error;if(rq.error)throw rq.error;
-    attendance=aq.data||[];responsibles=rq.data||[];
+    if(rq.error)throw rq.error;
+    responsibles=rq.data||[];roster=rosterRows;
   }
   const attendance_counts={},uniqueYouth=new Set(),team=teamQ.data||[],teamMap=new Map(team.map(x=>[x.id,x]));
-  for(const a of attendance){attendance_counts[a.action_id]=(attendance_counts[a.action_id]||0)+1;if(a.youth_id)uniqueYouth.add(a.youth_id)}
+  for(const row of roster){for(const actionId of row.action_ids||[])attendance_counts[actionId]=(attendance_counts[actionId]||0)+1;if((row.action_ids||[]).length)uniqueYouth.add(row.kind+':'+row.person_id)}
   actions=actions.map(a=>{
     const ids=responsibles.filter(x=>x.action_id===a.id).map(x=>x.user_id),profiles=ids.map(id=>teamMap.get(id)).filter(Boolean);
     return {...a,responsible_user_ids:ids,responsible_names:profiles.map(x=>x.display_name),responsible_roles:profiles.map(x=>x.role)};
@@ -320,9 +320,33 @@ export async function getCfdhPlanBundle(planId){
     report:reportQ.data||null,
     evaluations,
     attendance_counts,
+    roster,
     unique_participants:uniqueYouth.size,
     team
   };
+}
+// Ações na mesma aula compartilham a carga horária dos intervalos sobrepostos.
+export function countCfdhExecutedHours(actions,minimumHours=2){
+  const groups=new Map();let independent=0;
+  for(const a of actions||[]){
+    if(!['realizada','parcial'].includes(a.execution_status))continue;
+    const hours=Number(a.actual_duration_hours||0);
+    if(!Number.isFinite(hours)||hours<=0||hours<minimumHours)continue;
+    if(!a.workshop_plan_lesson_id){independent+=hours;continue}
+    const g=groups.get(a.workshop_plan_lesson_id)||{intervals:[],fallback:0};groups.set(a.workshop_plan_lesson_id,g);
+    const date=String(a.actual_date||a.scheduled_date||'').slice(0,10),start=String(a.actual_start||'').slice(0,8),end=String(a.actual_end||'').slice(0,8);
+    const stamp=(d,t)=>Date.parse(d+'T'+(t.length===5?t+':00':t)+'Z');
+    const lo=stamp(date,start),hi=stamp(date,end);
+    if(Number.isFinite(lo)&&Number.isFinite(hi)&&hi>lo)g.intervals.push([lo,Math.min(hi,lo+hours*3600000)]);
+    else g.fallback=Math.max(g.fallback,hours);
+  }
+  for(const g of groups.values()){
+    g.intervals.sort((a,b)=>a[0]-b[0]);let start=null,end=null,milliseconds=0;
+    for(const [lo,hi] of g.intervals){if(start===null){start=lo;end=hi}else if(lo<=end)end=Math.max(end,hi);else{milliseconds+=end-start;start=lo;end=hi}}
+    if(start!==null)milliseconds+=end-start;
+    independent+=Math.max(milliseconds/3600000,g.fallback);
+  }
+  return Number(independent.toFixed(2));
 }
 export async function listCfdhMonthDashboard(month=monthKey()){
   if(mode==='mock')return {plans:[],actions:[],metrics:{planned_hours:0,countable_planned_hours:0,structural_planned_hours:0,transversal_planned_hours:0,executed_hours:0,structural_hours:0,countable_executed_hours:0,pending:0}};
@@ -357,9 +381,9 @@ export async function listCfdhMonthDashboard(month=monthKey()){
       countable_planned_hours:Number(actions.reduce((n,x)=>n+countable(x.planned_duration_hours),0).toFixed(2)),
       structural_planned_hours:Number(actions.filter(x=>plans.find(p=>p.id===x.plan_id)?.plan_type==='cfdh_estrutural').reduce((n,x)=>n+countable(x.planned_duration_hours),0).toFixed(2)),
       transversal_planned_hours:Number(actions.filter(x=>plans.find(p=>p.id===x.plan_id)?.plan_type==='cfdh_transversal').reduce((n,x)=>n+countable(x.planned_duration_hours),0).toFixed(2)),
-      executed_hours:Number(actions.reduce((n,x)=>n+Number(x.actual_duration_hours||0),0).toFixed(2)),
-      countable_executed_hours:Number(actions.reduce((n,x)=>n+countable(x.actual_duration_hours),0).toFixed(2)),
-      structural_hours:Number(actions.filter(x=>plans.find(p=>p.id===x.plan_id)?.plan_type==='cfdh_estrutural').reduce((n,x)=>n+countable(x.actual_duration_hours),0).toFixed(2)),
+      executed_hours:countCfdhExecutedHours(actions,0),
+      countable_executed_hours:countCfdhExecutedHours(actions),
+      structural_hours:countCfdhExecutedHours(actions.filter(x=>plans.find(p=>p.id===x.plan_id)?.plan_type==='cfdh_estrutural')),
       pending
     }
   };
@@ -538,8 +562,23 @@ export async function updateCfdhActionExecution(id,patch){
 }
 export async function openCfdhCheckin(actionId){
   if(mode==='mock')throw new Error('Lista virtual do CFDH requer banco conectado.');
+  const action=await supabase.from('cfdh_actions').select('id,workshop_id,workshop_plan_lesson_id,planning_status,execution_status').eq('id',actionId).single();
+  if(action.error)throw action.error;
+  if(action.data?.planning_status!=='complete')throw new Error('Conclua o planejamento desta ação antes de abrir a lista.');
+  if(action.data?.execution_status==='cancelada')throw new Error('A ação foi cancelada. Atualize a execução antes de abrir a lista.');
+  if(action.data?.workshop_plan_lesson_id){
+    const session=await supabase.from('workshop_sessions').select('id').eq('plan_lesson_id',action.data.workshop_plan_lesson_id).maybeSingle();
+    if(session.error)throw session.error;
+    if(!session.data)throw new Error('Abra primeiro o acompanhamento da aula vinculada na oficina. A ação transversal utilizará a mesma lista dessa aula.');
+    return {...await openWorkshopCheckin(session.data.id),linked_workshop:true};
+  }
   const {data,error}=await supabase.rpc('open_cfdh_checkin',{p_action_id:actionId,p_minutes_before:30,p_minutes_after:120});
-  if(error)throw error;return Array.isArray(data)?data[0]:data;
+  if(error)throw error;return {...(Array.isArray(data)?data[0]:data),linked_workshop:false};
+}
+export async function getCfdhClassRoster(planId){
+  if(mode==='mock')return [];
+  const {data,error}=await supabase.rpc('staff_cfdh_class_roster',{p_plan_id:planId});
+  if(error)throw error;return Array.isArray(data)?data:[];
 }
 export async function getCfdhAttendanceSheet(actionId){
   if(mode==='mock')return null;

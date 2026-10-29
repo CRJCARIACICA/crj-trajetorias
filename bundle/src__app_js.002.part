@@ -376,8 +376,44 @@ function workshopPlanEditorHtml(bundle,workshop,teamMap){
     '</form>';
 }
 
+function cfdhClassRosterHtml(rows,actions){
+  if(!rows.length)return '<div class="empty">Ainda não há participantes inscritos ou presentes no circuito.</div>';
+  return '<div style="overflow-x:auto"><table class="table"><thead><tr><th>Participante</th>'+actions.map(a=>'<th>Ação '+Number(a.action_number)+'<br><small>'+esc(fmtDate(a.scheduled_date))+'</small></th>').join('')+'<th>Presenças</th></tr></thead><tbody>'+rows.map(row=>{
+    const attended=new Set(row.action_ids||[]);
+    return '<tr><td>'+esc(row.display_name||'Participante')+(row.kind==='visitante'?' <small class="muted">· Visitante</small>':'')+'</td>'+actions.map(a=>'<td>'+(attended.has(a.id)?'<span aria-label="Presente">✓ Presente</span>':'<span class="muted">—</span>')+'</td>').join('')+'<td>'+actions.filter(a=>attended.has(a.id)).length+'</td></tr>';
+  }).join('')+'</tbody></table></div>';
+}
+async function pageCfdhWorkshopClass(){
+  const planId=route().params.get('plan')||'',month=route().params.get('month')||currentMonth();
+  if(!permitted('cfdh_shared')&&state.user?.role!=='monitoramento')return '<div class="notice danger">Seu perfil não possui acesso ao acompanhamento dos circuitos CFDH.</div>';
+  if(!planId)return '<div class="notice danger">Selecione um circuito para acompanhar.</div>';
+  const bundle=await getCfdhPlanBundle(planId);
+  const p=bundle.plan,actions=bundle.actions||[],roster=bundle.roster||[];
+  return '<div class="page-head"><div><h2>Turma CFDH · '+esc(p.activity_title||'Circuito Formativo em Direitos Humanos')+'</h2><p>'+esc(cfdhTypeLabel(p.plan_type))+' · '+actions.length+' ação(ões) · acompanhamento nominal do circuito.</p></div><div class="actions"><button class="btn" data-nav="oficinas?view=oficinas&month='+esc(month)+'">Voltar às turmas</button>'+(permitted('cfdh_shared')?'<button class="btn secondary" data-nav="cfdh?month='+esc(month)+'&plan='+esc(planId)+'">Abrir planejamento</button>':'')+'</div></div>'+workshopTabs('oficinas')+
+    '<div class="notice info">Cada ação possui uma lista. Quando o CFDH transversal está vinculado a uma aula de oficina, use a mesma presença dessa aula. As observações da execução integram a relatoria final.</div>'+
+    '<div class="card" data-cfdh-class-roster data-plan-id="'+esc(planId)+'" data-actions="'+esc(JSON.stringify(actions.map(a=>({id:a.id,action_number:a.action_number,scheduled_date:a.scheduled_date}))))+'"><div class="page-head compact"><div><h3>Acompanhamento virtual da turma</h3><p>Presenças por ação, atualizadas automaticamente enquanto esta tela estiver aberta.</p></div><button class="btn" type="button" data-cfdh-roster-refresh>Atualizar lista</button></div><div data-cfdh-roster-table>'+cfdhClassRosterHtml(roster,actions)+'</div></div>'+
+    cfdhOperationsHtml(bundle);
+}
+async function bindCfdhClassLive(){
+  clearInterval(window.__cfdhClassRosterTimer);
+  const root=document.querySelector('[data-cfdh-class-roster]');if(!root)return;
+  const planId=root.dataset.planId,actions=JSON.parse(root.dataset.actions||'[]');
+  let busy=false;
+  const refresh=async(showError=false)=>{
+    if(!root.isConnected){clearInterval(window.__cfdhClassRosterTimer);return}
+    if(busy||(!showError&&document.hidden))return;
+    busy=true;try{
+      const rows=await getCfdhClassRoster(planId);
+      if(root.isConnected){root.querySelector('[data-cfdh-roster-table]').innerHTML=cfdhClassRosterHtml(rows,actions);
+        for(const a of actions){const count=rows.filter(r=>(r.action_ids||[]).includes(a.id)).length;document.querySelectorAll('[data-cfdh-presence-count]').forEach(el=>{if(el.dataset.cfdhPresenceCount===a.id)el.textContent=count+' presença(s)'})}}
+    }catch(err){if(showError)toast(err.message,'danger')}finally{busy=false}
+  };
+  root.querySelector('[data-cfdh-roster-refresh]')?.addEventListener('click',()=>refresh(true));
+  window.__cfdhClassRosterTimer=setInterval(refresh,20000);
+}
 async function pageWorkshops(){
   const view=route().params.get('view')||'oficinas';
+  if(view==='cfdh-turma')return pageCfdhWorkshopClass();
   if(view==='calendario'){
     const month=route().params.get('month')||currentMonth();
     const [yy,mm]=month.split('-').map(Number),start=month+'-01',end=new Date(Date.UTC(yy,mm,1)).toISOString().slice(0,10);
@@ -436,14 +472,17 @@ async function pageWorkshops(){
       }).join('')||'<div class="card empty">Nenhum oficineiro cadastrado ou vinculado a oficinas.</div>'+'</div>';
   }
 
-  const [ws,team]=await Promise.all([listWorkshops(),listTeam()]);
+  const month=route().params.get('month')||currentMonth();
+  const showCfdh=permitted('cfdh_shared')||state.user?.role==='monitoramento';
+  const [ws,team,cfdh]=await Promise.all([listWorkshops(),listTeam(),showCfdh?listCfdhMonthDashboard(month):Promise.resolve(null)]);
   const names=new Map(team.map(x=>[x.id,x.display_name]));
+  const cfdhClasses=showCfdh?'<div class="page-head compact" style="margin-top:24px"><div><h3>Turmas dos circuitos CFDH</h3><p>Cada planejamento aparece aqui automaticamente, com suas ações e presenças.</p></div></div><div class="grid three">'+((cfdh?.plans||[]).map(p=>{const actions=(cfdh.actions||[]).filter(a=>a.plan_id===p.id);return '<div class="card workshop-card"><div class="actions"><span class="pill info">'+esc(cfdhTypeLabel(p.plan_type))+'</span><span class="pill">'+Number(p.cfdh_action_count||actions.length)+' ação(ões)</span></div><h3>'+esc(p.activity_title||'Circuito Formativo em Direitos Humanos')+'</h3><p class="muted">Planejamento '+(p.cfdh_planning_status==='complete'?'concluído':'em elaboração')+'</p><button class="btn primary" data-nav="oficinas?view=cfdh-turma&plan='+esc(p.id)+'&month='+esc(month)+'">Acompanhar turma</button></div>'}).join('')||'<div class="card empty">Nenhum circuito CFDH neste mês.</div>')+'</div>':'';
   return '<div class="page-head"><div><h2>Oficinas e presenças</h2><p>Cadastro, planejamento, execução, calendário, responsáveis e listas de presença.</p></div><div class="actions"><button class="btn primary" data-action="new-workshop">+ Nova oficina '+eduGoalInfo('planejamento_oficina')+'</button></div></div>'+
     workshopTabs(view)+
     '<div class="toolbar"><label class="field month-filter"><span>Competência das oficinas</span><input class="input" type="month" data-workshop-month value="'+esc(route().params.get('month')||currentMonth())+'"></label><span class="muted">Configurações independentes por mês · renovação automática · oficinas retiradas podem ser reincluídas em Configurar mês.</span></div>'+
     '<div class="grid three">'+ws.map(w=>'<div class="card workshop-card"><div class="actions"><span class="pill '+(w.active?'success':'danger')+'">'+(w.active?'Ativa':'Inativa')+'</span><span class="pill info">'+esc(workshopTypeLabel(w.workshop_type))+'</span></div><h3 style="margin-top:12px">'+esc(w.name)+'</h3><p class="muted">'+esc(w.category||'Sem categoria')+'</p>'+
       '<div class="workshop-card-meta"><span><b>Agenda</b>'+esc(workshopScheduleLabel(w))+'</span><span><b>Período</b>'+esc(workshopPeriodLabel(w))+'</span><span><b>Horário</b>'+esc(String(w.start_time||'').slice(0,5))+(w.end_time?'–'+esc(String(w.end_time).slice(0,5)):'Não definido')+'</span><span><b>Local</b>'+esc(workshopLocationLabel(w))+'</span><span><b>Oficineiro(a)</b>'+esc(names.get(w.oficineiro_user_id)||'Não vinculado')+'</span><span><b>Educador(a)</b>'+esc(names.get(w.educator_user_id)||'Não vinculado')+'</span></div>'+
-      '<div class="actions" style="margin-top:14px"><button class="btn primary" data-nav="oficina/'+w.id+'?month='+esc(route().params.get('month')||currentMonth())+'">Acompanhar turma '+eduGoalInfo('acompanhamento_oficina')+'</button><button class="btn" data-edit-workshop="'+w.id+'">Configurar mês</button><button class="btn" data-action="session" data-workshop="'+w.id+'">Registrar aula '+eduGoalInfo('aula')+'</button>'+(w.schedule_mode==='semanal_fixa'?'<button class="btn secondary" data-generate-workshop-calendar="'+w.id+'">Gerar calendário</button>':'')+'</div></div>').join('')||'<div class="card empty">Nenhuma oficina.</div>'+'</div>';
+      '<div class="actions" style="margin-top:14px"><button class="btn primary" data-nav="oficina/'+w.id+'?month='+esc(route().params.get('month')||currentMonth())+'">Acompanhar turma '+eduGoalInfo('acompanhamento_oficina')+'</button><button class="btn" data-edit-workshop="'+w.id+'">Configurar mês</button><button class="btn" data-action="session" data-workshop="'+w.id+'">Registrar aula '+eduGoalInfo('aula')+'</button>'+(w.schedule_mode==='semanal_fixa'?'<button class="btn secondary" data-generate-workshop-calendar="'+w.id+'">Gerar calendário</button>':'')+'</div></div>').join('')+'</div>'+cfdhClasses;
 }
 
 
