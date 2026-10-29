@@ -119,6 +119,7 @@ test('salva resposta do anexo correspondente e o complemento habilitado junto ao
   const s=setup();await s.open({initialYouthId:'young-1'});complete(s);
   modal(s).querySelector('[data-tsf-field="objectives"] textarea').value='Concluir os estudos';
   modal(s).querySelector('[data-tsf-enable-accompaniment]').checked=true;
+  modal(s).querySelector('[data-tsf-complete-accompaniment]').checked=true;
   modal(s).querySelector('[data-tsf-field="mother_education"] select').value='Ensino médio completo';
   modal(s).querySelector('form').dispatchEvent(new s.window.Event('submit',{cancelable:true}));await settle();
   assert.equal(s.saved[0].program_type,'pvida');
@@ -127,6 +128,7 @@ test('salva resposta do anexo correspondente e o complemento habilitado junto ao
   assert.equal(s.saved[0].documents[0].record_state,'complete');
   assert.equal(s.saved[0].documents[1].form_slug,'acompanhamento');
   assert.equal(s.saved[0].documents[1].youth_id,'young-1');
+  assert.equal(s.saved[0].documents[1].record_state,'complete');
 });
 
 test('cadastra jovem sem sair do atendimento usando o Formulário Inicial',async()=>{

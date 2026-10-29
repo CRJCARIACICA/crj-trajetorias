@@ -204,12 +204,12 @@ async function bindTechnicalPage(){
   document.querySelector('[data-technical-month]')?.addEventListener('change',e=>{const view=route().params.get('view')||'painel';nav('equipe-tecnica?view='+view+'&month='+e.target.value)});
   document.querySelector('[data-new-technical-service]')?.addEventListener('click',async()=>{
     try{
-      const {openTechnicalService}=await import('./technical_service_flow.js?v=20261029-methodology1');
+      const {openTechnicalService}=await import('./technical_service_flow.js?v=20261029-methodology2');
       await openTechnicalService();
     }catch(err){toast(err.message||'Não foi possível abrir o atendimento. Tente novamente.','danger')}
   });
   const evidenceRoot=document.querySelector('[data-technical-service-evidence]');
-  if(evidenceRoot){import('./technical_service_evidence.js?v=20261029-methodology1').then(m=>m.renderTechnicalServiceEvidence(evidenceRoot,state.user)).catch(err=>{evidenceRoot.textContent='Não foi possível carregar as evidências: '+(err.message||err)});}
+  if(evidenceRoot){import('./technical_service_evidence.js?v=20261029-methodology2').then(m=>m.renderTechnicalServiceEvidence(evidenceRoot,state.user)).catch(err=>{evidenceRoot.textContent='Não foi possível carregar as evidências: '+(err.message||err)});}
   const dashboard=await listTechnicalTeamDashboard(month);applyDocumentSettings(dashboard.settings);
   document.querySelector('[data-technical-print]')?.addEventListener('click',()=>printTechnicalEvidence(dashboard,month));
   document.querySelector('[data-technical-doc]')?.addEventListener('click',()=>downloadTechnicalEvidenceDoc(dashboard,month));

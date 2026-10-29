@@ -1,6 +1,6 @@
 import { apiMode, supabaseClient } from './api.js?v=20261004-2';
 import { canRegisterTechnicalService } from './permissions.js?v=20261026-technical-service1';
-import { openTechnicalService } from './technical_service_flow.js?v=20261029-methodology1';
+import { openTechnicalService } from './technical_service_flow.js?v=20261029-methodology2';
 import { downloadEvidence } from './evidence_exports.js?v=20261023-checkin1';
 
 const labels={pvida:'PVida',ptrampo:'PTrampo','outras-demandas':'Outras Demandas',atendimento:'Atendimento técnico (anterior)',acompanhamento:'Acompanhamento técnico (anterior)'};

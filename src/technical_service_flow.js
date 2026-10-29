@@ -138,7 +138,7 @@ export async function openTechnicalService({initialYouthId='',returnYouthId='',i
     const program=PROGRAMS[initialProgram]?initialProgram:'';
     let previousDocs=[];
     if(followupServiceId){
-      const previous=await c().from('methodology_form_submissions').select('form_slug,youth_id,payload').eq('source_type','technical_service_records').eq('source_id',followupServiceId).is('deleted_at',null);
+      const previous=await c().from('methodology_form_submissions').select('form_slug,youth_id,payload,record_state').eq('source_type','technical_service_records').eq('source_id',followupServiceId).is('deleted_at',null);
       if(previous.error)throw previous.error;
       previousDocs=previous.data||[];
     }
@@ -156,6 +156,8 @@ export async function openTechnicalService({initialYouthId='',returnYouthId='',i
         drafts.set(key,readAnnex(box,key));
         const enabled=box.querySelector('[data-tsf-enable-accompaniment]');
         if(enabled)drafts.set(key+'::enabled',enabled.checked);
+        const complete=box.querySelector('[data-tsf-complete-accompaniment]');
+        if(complete)drafts.set(key+'::complete',complete.checked);
       });
     };
     const drawDocuments=()=>{
@@ -168,8 +170,9 @@ export async function openTechnicalService({initialYouthId='',returnYouthId='',i
         const values={...identityValues(person),...(drafts.get(key)||{})};
         const av={...identityValues(person),...(drafts.get(ak)||{})};
         if(!av.followup_type?.length)av.followup_type=[PROGRAMS[type]];
-        const active=drafts.get(ak+'::enabled')||previousDocs.some(x=>x.youth_id===id&&x.form_slug==='acompanhamento');
-        return `<section class="tsf-annex" data-tsf-docprefix="${esc(key)}"><h4>${esc(def.annex)} · ${esc(def.title)} — ${esc(person.full_name)}</h4><p class="muted">As perguntas correspondem ao formulário selecionado. Campos complementares podem ser concluídos no acompanhamento.</p>${annexSections(def,values,key)}</section><details class="tsf-annex" data-tsf-docprefix="${esc(ak)}"><summary>Anexo 3 · Formulário de Acompanhamento — ${esc(person.full_name)}</summary><p><label><input type="checkbox" data-tsf-enable-accompaniment ${active?'checked':''}> Salvar este anexo complementar neste atendimento</label></p>${annexSections(acomp,av,ak)}</details>`;
+        const active=drafts.has(ak+'::enabled')?drafts.get(ak+'::enabled'):previousDocs.some(x=>x.youth_id===id&&x.form_slug==='acompanhamento');
+        const complete=drafts.has(ak+'::complete')?drafts.get(ak+'::complete'):previousDocs.some(x=>x.youth_id===id&&x.form_slug==='acompanhamento'&&x.record_state==='complete');
+        return `<section class="tsf-annex" data-tsf-docprefix="${esc(key)}"><h4>${esc(def.annex)} · ${esc(def.title)} — ${esc(person.full_name)}</h4><p class="muted">As perguntas correspondem ao formulário selecionado. Campos complementares podem ser concluídos no acompanhamento.</p>${annexSections(def,values,key)}</section><details class="tsf-annex" data-tsf-docprefix="${esc(ak)}"><summary>Anexo 3 · Formulário de Acompanhamento — ${esc(person.full_name)}</summary><p><label><input type="checkbox" data-tsf-enable-accompaniment ${active?'checked':''}> Salvar este anexo complementar neste atendimento</label> · <label><input type="checkbox" data-tsf-complete-accompaniment ${complete?'checked':''}> Anexo concluído</label></p>${annexSections(acomp,av,ak)}</details>`;
       }).join('');
     };
     const drawSelected=()=>{
@@ -232,7 +235,7 @@ export async function openTechnicalService({initialYouthId='',returnYouthId='',i
           const content=Object.entries(data).some(([k,v])=>!k.startsWith('_')&&!['full_name','preferred_name','birth_date','cpf','reference_person','reference_phone'].includes(k)&&(Array.isArray(v)?v.length>0:v!==''&&v!=null));
           documents.push({youth_id:id,form_slug:type,payload:data,record_state:content?'complete':'draft'});
           const ak=id+'::acompanhamento';
-          if(drafts.get(ak+'::enabled'))documents.push({youth_id:id,form_slug:'acompanhamento',payload:{...identityValues(byId.get(id)),...(drafts.get(ak)||{}),_service_date:String(fd.get('service_date')||''),_duration_hours:String(fd.get('duration_hours')||''),_technical_note:String(fd.get('summary')||'').trim(),_previous_service_id:followupServiceId||null},record_state:'draft'});
+          if(drafts.get(ak+'::enabled'))documents.push({youth_id:id,form_slug:'acompanhamento',payload:{...identityValues(byId.get(id)),...(drafts.get(ak)||{}),_service_date:String(fd.get('service_date')||''),_duration_hours:String(fd.get('duration_hours')||''),_technical_note:String(fd.get('summary')||'').trim(),_previous_service_id:followupServiceId||null},record_state:drafts.get(ak+'::complete')?'complete':'draft'});
         }
         await createTechnicalService({service_date:fd.get('service_date'),service_type:fd.get('service_type'),program_type:type,youth_ids:ys,professional_ids:ps,reason:String(fd.get('reason')||'').trim(),summary:String(fd.get('summary')||'').trim(),status:fd.get('status')||'realizado',duration_hours:fd.get('duration_hours')||null,documents});
         bg.remove();toast('Atendimento técnico registrado e vinculado à trajetória.');

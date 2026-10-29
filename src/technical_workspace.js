@@ -138,7 +138,7 @@ function renderReports(root,data){
 
 function renderEvidence(root,data){
   root.innerHTML=`<div data-technical-service-evidence></div><div class="tw-card"><h3 style="margin-top:0">Evidências · listas geradas</h3><div class="tw-note">A relação de atendimento usa exclusivamente o nome completo cadastrado. Nome preferido/apelido não integra o documento.</div><div class="tw-grid" style="margin-top:10px">${data.submissions.map(s=>{const p=s.payload||{},rows=Array.isArray(p.participants)?p.participants:[];return `<div class="tw-card"><h4>${esc(p.activity||'Lista de presença e contato')}</h4><div class="tw-meta"><span>${esc(fmtDate(p.date))}</span><span>${rows.length} participante(s)</span></div><div class="tw-actions"><button class="btn secondary" data-tw-evidence-preview="${s.id}">Pré-visualizar</button><button class="btn primary" data-crj-evidence-action="pdf" data-evidence-submission-id="${s.id}">Baixar PDF</button><button class="btn" data-crj-evidence-action="print" data-evidence-submission-id="${s.id}">Imprimir</button></div></div>`}).join('')||'<div class="empty">Nenhuma lista gerada neste mês.</div>'}</div></div>`;
-  import('./technical_service_evidence.js?v=20261029-methodology1')
+  import('./technical_service_evidence.js?v=20261029-methodology2')
     .then(m=>m.renderTechnicalServiceEvidence(root.querySelector('[data-technical-service-evidence]'),me))
     .catch(e=>{root.querySelector('[data-technical-service-evidence]').textContent='Não foi possível carregar atendimentos: '+(e.message||e)});
   root.querySelectorAll('[data-tw-evidence-preview]').forEach(b=>b.addEventListener('click',async()=>{
