@@ -43,3 +43,16 @@ test('uma resposta antiga do painel não substitui a aba de planejamento aberta 
  location.hash='#equipe-tecnica?view=evidencias&month=2026-11';window.document.querySelector('.content').innerHTML='<div data-technical-enhancement-host></div><p>Documento de evidência</p>';
  await ctx.api.renderEnhancement();assert.equal(window.document.querySelector('#technical-team-enhancement'),null);assert.match(window.document.querySelector('.content').textContent,/Documento de evidência/);
 });
+
+test('atalhos de metas e da agenda abrem o planejamento técnico',()=>{
+ const goals=read('src/goals_workspace.js');
+ const planRoute=vm.runInNewContext(`(${goals.slice(goals.indexOf('function planRoute('),goals.indexOf('\n\nasync function profile('))})`);
+ assert.equal(planRoute({code:'PVIDA'},'2026-11'),'equipe-tecnica?view=planejamento&month=2026-11');
+ assert.equal(planRoute({code:'PTRAMPO'},'2026-11'),'equipe-tecnica?view=planejamento&month=2026-11');
+ const calendar=read('src/general_calendar.js');
+ const routeFor=vm.runInNewContext(`(${calendar.slice(calendar.indexOf('function routeFor('),calendar.indexOf('\nfunction ownerIds('))})`,{URLSearchParams,first:(row,fields)=>fields.map(k=>row[k]).find(Boolean)});
+ assert.equal(routeFor('technical_action_plans',{}),'#equipe-tecnica?view=planejamento');
+ assert.equal(routeFor('technical_action_plans',{source_route:'#equipe-tecnica?month=2026-11'}),'#equipe-tecnica?month=2026-11&view=planejamento');
+ assert.equal(routeFor('technical_action_plans',{source_route:'#equipe-tecnica?view=evidencias'}),'#equipe-tecnica?view=evidencias');
+ assert.equal(routeFor('workshop_sessions',{}),'#oficinas');
+});

@@ -127,7 +127,7 @@ function insight(ind,gap,projected,forecastRows){
   if(/PARCERIAS|ACOES/.test(code))return `Há lacuna de ${fmt(g)} ${ind.unit||'registro(s)'}. Planeje uma ação de articulação/parceria diretamente vinculada à meta e defina a evidência de formalização.`;
   return `A projeção ainda está ${unitText(ind,g)} abaixo da referência. Planeje uma ação diretamente vinculada à Etapa ${ind.goal_stage}, com responsável, data, quantidade prevista e evidência.`;
 }
-function planRoute(ind,m){const c=ind.code||'';if(/PVIDA|PTRAMPO/.test(c))return `equipe-tecnica?month=${m}`;if(/CFDH/.test(c))return `cfdh?month=${m}`;if(/OFICINAS|CURSO/.test(c))return `oficinas?month=${m}`;if(/EMPRESTIMOS/.test(c))return `controlador-acesso?month=${m}`;if(/PARCERIAS|REDE|ESCOLA/.test(c))return `dashboard?month=${m}`;return null}
+function planRoute(ind,m){const c=ind.code||'';if(/PVIDA|PTRAMPO/.test(c))return `equipe-tecnica?view=planejamento&month=${m}`;if(/CFDH/.test(c))return `cfdh?month=${m}`;if(/OFICINAS|CURSO/.test(c))return `oficinas?month=${m}`;if(/EMPRESTIMOS/.test(c))return `controlador-acesso?month=${m}`;if(/PARCERIAS|REDE|ESCOLA/.test(c))return `dashboard?month=${m}`;return null}
 
 async function profile(){if(me)return me;const c=client();if(!c)return null;const {data:{user}}=await c.auth.getUser();if(!user)return null;const q=await c.from('profiles').select('id,display_name,role,team,active').eq('id',user.id).maybeSingle();if(q.error)throw q.error;me=q.data||null;return me}
 async function load(m){

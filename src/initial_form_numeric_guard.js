@@ -107,4 +107,4 @@ boot().catch(error=>console.error('Falha ao ativar normalização do Formulário
 
 // Classificações e fluxos da Meta 4.3 precisam acompanhar formulários abertos em qualquer área.
 // O carregamento é assíncrono para não bloquear o bootstrap principal.
-import('./meta4_3_ui.js?v=20261030-tecnica-abas1').catch(error=>console.warn('Meta 4.3 UI indisponível:',error));
+import('./meta4_3_ui.js?v=20261030-tecnica-abas2').catch(error=>console.warn('Meta 4.3 UI indisponível:',error));

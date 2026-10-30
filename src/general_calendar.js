@@ -114,9 +114,17 @@ function locationFor(row){
 }
 function statusFor(row){return String(first(row,['status','execution_status','state'])||'planejado');}
 function routeFor(source,row){
-  const explicit=first(row,['route','planning_route','source_route','hash']);if(explicit)return String(explicit).startsWith('#')?String(explicit):`#${explicit}`;
+  const explicit=first(row,['route','planning_route','source_route','hash']);
+  if(explicit){
+    const destination=String(explicit).startsWith('#')?String(explicit):`#${explicit}`;
+    if(source==='technical_action_plans'&&/^#equipe-tecnica(?:\?|$)/.test(destination)){
+      const [path,query='']=destination.split('?'),params=new URLSearchParams(query);
+      if(!params.has('view')){params.set('view','planejamento');return `${path}?${params}`}
+    }
+    return destination;
+  }
   if(source==='workshop_calendar'||source==='workshop_sessions'||source==='workshop_plan_lessons')return '#oficinas';
-  if(source==='technical_action_plans')return '#equipe-tecnica';
+  if(source==='technical_action_plans')return '#equipe-tecnica?view=planejamento';
   if(source==='calendar_events')return '#agenda';
   if(source==='access_resource_bookings')return '#controlador-acesso';
   if(source==='cfdh_actions')return '#cfdh';
