@@ -6,7 +6,7 @@ import { MODULE_ROUTES, routeName, routeShellReady, captureRoute } from './route
 // quando a área correspondente é realmente aberta. Isso evita dezenas de
 // MutationObservers e consultas Supabase fora do menu em uso.
 
-const VERSION='20261029-cfdhclass1';
+const VERSION='20261030-ptrampo1';
 const modulePreloads=new Set();
 const moduleAttempts=new Map();
 const moduleCache=new Map();
@@ -35,7 +35,7 @@ const ROUTE_FEATURES={
   },
   formularios:{critical:['form_access'],deferred:[]},
   oficinas:{
-    critical:['workshop_devices','instructor_management','workshop_collaboration','workshop_live_sync','educator_instructor_plan_sync','workshop_plan_delete','workshop_plan_exports','cfdh_transversal_integration'],
+    critical:['workshop_devices','instructor_management','workshop_collaboration','workshop_live_sync','educator_instructor_plan_sync','workshop_plan_delete','workshop_plan_exports','cfdh_transversal_integration','ptrampo_projects'],
     deferred:['articulation_workspace','articulation_request_context','joint_actions','document_header_standard','evidence_exports','attendance_export_fix']
   },
   oficina:{
@@ -59,7 +59,7 @@ const ROUTE_FEATURES={
     deferred:['articulation_workspace','articulation_request_context','joint_actions','document_header_standard','evidence_exports']
   },
   'equipe-tecnica':{
-    critical:['technical_service_flow','technical_team_enhancements','technical_program_actions','technical_workspace','technical_planning_governance'],
+    critical:['technical_service_flow','technical_team_enhancements','technical_program_actions','technical_workspace','technical_planning_governance','ptrampo_projects'],
     deferred:['articulation_workspace','articulation_request_context','joint_actions','document_header_standard','evidence_exports']
   },
   'controlador-acesso':{

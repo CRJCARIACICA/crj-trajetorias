@@ -65,15 +65,16 @@ async function loadData(){
   const c=await client(),m=month(),start=m+'-01';
   const d=new Date(start+'T00:00:00Z');
   const end=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,1)).toISOString().slice(0,10);
-  const [plansQ,execQ,subQ]=await Promise.all([
+  const [plansQ,execQ,subQ,projectLinksQ]=await Promise.all([
     c.from('technical_action_plans').select('id,title,action_type,action_scope,objective,planned_activities,expected_results,planned_date,start_time,end_time,location_type,location_details,status,methodology_links,created_at,updated_at').gte('plan_month',start).lt('plan_month',end).order('planned_date',{ascending:true,nullsFirst:false}),
     c.from('technical_action_executions').select('*').gte('execution_date',start).lt('execution_date',end).order('execution_date',{ascending:false}),
-    c.from('methodology_form_submissions').select('id,source_id,payload,submitted_at,updated_at').eq('form_slug','lista-presenca-contato').eq('source_type','technical_action').is('deleted_at',null).order('updated_at',{ascending:false})
+    c.from('methodology_form_submissions').select('id,source_id,payload,submitted_at,updated_at').eq('form_slug','lista-presenca-contato').eq('source_type','technical_action').is('deleted_at',null).order('updated_at',{ascending:false}),
+    c.from('ptrampo_project_actions').select('technical_plan_id')
   ]);
-  for(const q of [plansQ,execQ,subQ])if(q.error)throw q.error;
+  for(const q of [plansQ,execQ,subQ,projectLinksQ])if(q.error)throw q.error;
   const plans=plansQ.data||[],ids=new Set(plans.map(x=>x.id));
   return {
-    plans,
+    plans,projectPlanIds:new Set((projectLinksQ.data||[]).map(x=>x.technical_plan_id)),
     executions:(execQ.data||[]).filter(x=>ids.has(x.plan_id)),
     submissions:(subQ.data||[]).filter(x=>ids.has(x.source_id))
   };
@@ -126,12 +127,12 @@ async function renderTab(){
 }
 
 function renderPlanning(root,data){
-  root.innerHTML=`<div class="tw-card" style="margin-top:12px"><h3 style="margin-top:0">Documentos de planejamento</h3><div class="tw-note">O formulário principal de planejamento permanece abaixo. A pré-visualização é gerada durante a elaboração e os documentos salvos podem ser exportados aqui.</div><div class="tw-grid" style="margin-top:10px">${data.plans.map(p=>`<div class="tw-card"><h4>${esc(p.title)}</h4><div class="tw-meta"><span>${esc(String(p.action_type||'ação').toUpperCase())}</span><span>${esc(planMeta(p))}</span><span>${esc(p.status||'')}</span></div><div class="tw-actions"><button class="btn secondary" data-tw-tech-pdf="plan:${p.id}">Baixar PDF</button><button class="btn" data-tw-tech-print="plan:${p.id}">Imprimir</button></div></div>`).join('')||'<div class="empty">Nenhum planejamento técnico neste mês.</div>'}</div></div>`;
+  root.innerHTML=`<div class="tw-card" style="margin-top:12px"><h3 style="margin-top:0">Documentos de planejamento</h3><div class="tw-note">O formulário principal de planejamento permanece abaixo. A pré-visualização é gerada durante a elaboração e os documentos salvos podem ser exportados aqui.</div><div class="tw-grid" style="margin-top:10px">${data.plans.filter(p=>!data.projectPlanIds.has(p.id)).map(p=>`<div class="tw-card"><h4>${esc(p.title)}</h4><div class="tw-meta"><span>${esc(String(p.action_type||'ação').toUpperCase())}</span><span>${esc(planMeta(p))}</span><span>${esc(p.status||'')}</span></div><div class="tw-actions"><button class="btn secondary" data-tw-tech-pdf="plan:${p.id}">Baixar PDF</button><button class="btn" data-tw-tech-print="plan:${p.id}">Imprimir</button></div></div>`).join('')||'<div class="empty">Nenhum planejamento técnico neste mês.</div>'}</div></div>`;
   bindTechnicalDocs(root);
 }
 
 function renderReports(root,data){
-  root.innerHTML=`<div class="tw-card"><h3 style="margin-top:0">Relatórios de execução</h3><div class="tw-note">A presença é coletada exclusivamente pelo link da atividade. O relatório consolida a execução e fecha a evidência institucional.</div><div class="tw-grid" style="margin-top:10px">${data.plans.map(p=>{const ex=data.executions.find(x=>x.plan_id===p.id);return `<div class="tw-card"><h4>${esc(p.title)}</h4><div class="tw-meta"><span>${esc(planMeta(p))}</span><span>${ex?esc(ex.execution_status||'registrada'):'Sem execução registrada'}</span></div>${ex?.execution_description?`<div class="tw-note">${esc(String(ex.execution_description).slice(0,180))}${String(ex.execution_description).length>180?'…':''}</div>`:''}<div class="tw-actions">${canExecute()?`<button class="btn primary" data-tw-open-execution="${p.id}">${ex?'Editar relatório':'Elaborar relatório'}</button>`:''}${ex?`<button class="btn secondary" data-tw-tech-pdf="report:${ex.id}">Baixar PDF</button><button class="btn" data-tw-tech-print="report:${ex.id}">Imprimir</button>`:''}</div></div>`}).join('')||'<div class="empty">Nenhum planejamento disponível para relatório.</div>'}</div></div>`;
+  root.innerHTML=`<div class="tw-card"><h3 style="margin-top:0">Relatórios de execução</h3><div class="tw-note">A presença é coletada exclusivamente pelo link da atividade. O relatório consolida a execução e fecha a evidência institucional.</div><div class="tw-grid" style="margin-top:10px">${data.plans.filter(p=>!data.projectPlanIds.has(p.id)).map(p=>{const ex=data.executions.find(x=>x.plan_id===p.id);return `<div class="tw-card"><h4>${esc(p.title)}</h4><div class="tw-meta"><span>${esc(planMeta(p))}</span><span>${ex?esc(ex.execution_status||'registrada'):'Sem execução registrada'}</span></div>${ex?.execution_description?`<div class="tw-note">${esc(String(ex.execution_description).slice(0,180))}${String(ex.execution_description).length>180?'…':''}</div>`:''}<div class="tw-actions">${canExecute()?`<button class="btn primary" data-tw-open-execution="${p.id}">${ex?'Editar relatório':'Elaborar relatório'}</button>`:''}${ex?`<button class="btn secondary" data-tw-tech-pdf="report:${ex.id}">Baixar PDF</button><button class="btn" data-tw-tech-print="report:${ex.id}">Imprimir</button>`:''}</div></div>`}).join('')||'<div class="empty">Nenhum planejamento disponível para relatório.</div>'}</div></div>`;
   root.querySelectorAll('[data-tw-open-execution]').forEach(b=>b.addEventListener('click',()=>openExecution(b.dataset.twOpenExecution)));
   bindTechnicalDocs(root);
 }
