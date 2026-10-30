@@ -1,6 +1,6 @@
 import { apiMode, supabaseClient } from './api.js?v=20261004-2';
 
-const onRoute=()=>String(location.hash||'').split('?')[0]==='#equipe-tecnica';
+const onRoute=()=>String(location.hash||'').split('?')[0]==='#equipe-tecnica'&&new URLSearchParams((location.hash.split('?')[1]||'')).get('view')==='planejamento';
 const client=()=>apiMode()==='live'?supabaseClient():null;
 const esc=(v='')=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const localDate=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());

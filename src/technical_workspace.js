@@ -7,10 +7,11 @@ const esc=(v='')=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','
 const fmtDate=v=>v?new Date(String(v).slice(0,10)+'T12:00:00').toLocaleDateString('pt-BR'):'—';
 const fmtTime=v=>String(v||'').slice(0,5);
 const month=()=>new URLSearchParams(location.hash.split('?')[1]||'').get('month')||new Date().toISOString().slice(0,7);
-const onRoute=()=>location.hash.split('?')[0]==='#equipe-tecnica';
+const onRoute=()=>location.hash.split('?')[0]==='#equipe-tecnica'&&new URLSearchParams(location.hash.split('?')[1]||'').get('view')==='planejamento';
 
 let me=null;
 let activeTab='planning';
+let tabRenderSeq=0;
 let scheduled=false;
 
 async function client(){
@@ -88,9 +89,9 @@ function navHtml(){
 async function ensureWorkspace(){
   if(!onRoute())return;
   const anchor=document.querySelector('#technical-team-enhancement');
-  if(!anchor)return;
+  if(!anchor||anchor.dataset.view!=='planejamento')return;
   if(!me)me=await resolveProfile();
-  if(!canView())return;
+  if(!onRoute()||anchor!==document.querySelector('#technical-team-enhancement')||!canView())return;
   installStyles();
   let nav=document.querySelector('#technical-workspace-nav');
   if(!nav){
@@ -116,14 +117,16 @@ function bindNav(nav){
 
 async function renderTab(){
   const nav=document.querySelector('#technical-workspace-nav');if(!nav)return;
-  const target=activeTab==='planning'?nav.querySelector('#tw-planning-docs'):nav.querySelector('#tw-custom-panel');
+  const view=activeTab,seq=++tabRenderSeq;
+  const target=view==='planning'?nav.querySelector('#tw-planning-docs'):nav.querySelector('#tw-custom-panel');
   target.innerHTML='<div class="tw-loading">Carregando...</div>';
   try{
     const data=await loadData();
-    if(activeTab==='planning')renderPlanning(target,data);
-    else if(activeTab==='report')renderReports(target,data);
+    if(seq!==tabRenderSeq||!onRoute()||activeTab!==view||document.querySelector('#technical-workspace-nav')!==nav)return;
+    if(view==='planning')renderPlanning(target,data);
+    else if(view==='report')renderReports(target,data);
     else renderEvidence(target,data);
-  }catch(err){target.innerHTML=`<div class="notice danger"><b>Não foi possível carregar a área.</b><br>${esc(err.message||String(err))}</div>`}
+  }catch(err){if(seq===tabRenderSeq&&onRoute()&&document.querySelector('#technical-workspace-nav')===nav)target.innerHTML=`<div class="notice danger"><b>Não foi possível carregar a área.</b><br>${esc(err.message||String(err))}</div>`}
 }
 
 function renderPlanning(root,data){
@@ -297,6 +300,6 @@ observer.observe(document.body,{childList:true,subtree:true});
 window.addEventListener('hashchange',()=>{
   document.querySelector('#technical-workspace-nav')?.remove();
   document.querySelector('#technical-workspace-modal')?.remove();
-  activeTab='planning';delete document.body.dataset.twTab;schedule();
+  activeTab='planning';tabRenderSeq++;delete document.body.dataset.twTab;schedule();
 });
 schedule();
