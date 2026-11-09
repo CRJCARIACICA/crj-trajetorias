@@ -170,6 +170,12 @@ window.__crjPlanningPreview=async function(kind,id){
     if(!workshop)throw new Error('Oficina não encontrada.');
     return workshopPlanPreviewHtml(bundle,workshop,new Map(team.map(p=>[p.id,p.display_name])));
   }
+  if(kind==='workshop-report'){
+    const reports=await listWorkshopMonthlyReports(),report=reports.find(r=>r.id===id);
+    if(!report)throw new Error('Relatório não encontrado.');
+    const bundle=await getWorkshopMonthlyReportBundle(report.plan_id);
+    return workshopReportPreviewHtml(bundle,bundle.report||report);
+  }
   if(kind==='cfdh'){
     const [bundle,themes,classification]=await Promise.all([getCfdhPlanBundle(id),listCfdhThemes(),listMethodologyClassificationCatalog()]);
     return cfdhPlanPreviewHtml({...bundle,themes,classification});

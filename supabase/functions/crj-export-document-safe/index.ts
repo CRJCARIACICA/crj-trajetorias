@@ -681,8 +681,8 @@ Deno.serve(async (req) => {
       return jsonError("Documento não identificado para exportação.", 400);
     }
 
-    const isPlanning=Boolean(s(body.plan_id)||s(body.cfdh_plan_id));
-    const bytes = isPlanning ? await makePreviewFile(body.preview_snapshot,format) : format === "pdf" ? await makePdf(spec, header) : await makeDocx(spec, header);
+    const hasPreview=Boolean(s(body.plan_id)||s(body.cfdh_plan_id)||(s(body.report_id)&&body.preview_snapshot));
+    const bytes = hasPreview ? await makePreviewFile(body.preview_snapshot,format) : format === "pdf" ? await makePdf(spec, header) : await makeDocx(spec, header);
     if (!bytes?.length) throw new Error("Documento gerado sem conteúdo.");
     const mime = format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     return new Response(bytes, { status: 200, headers: responseHeaders(mime, `${spec.filename}.${format}`) });

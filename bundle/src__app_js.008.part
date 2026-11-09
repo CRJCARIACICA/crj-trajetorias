@@ -710,7 +710,8 @@ async function bindEducatorPageV2(){
       let draft=bundle.report||workshopReportDraft(bundle);
       const active=document.querySelector('#workshop-monthly-report-form');
       if(active?.dataset.planId===btn.dataset.workshopReportPrint)draft=workshopReportDraft(bundle,active);
-      openPrintableDocument('Relatório · '+(bundle.workshop?.name||'Oficina'),workshopReportPreviewHtml(bundle,draft));
+      if(bundle.report?.id)await window.__crjExportPlanning({report_id:bundle.report.id},'pdf',true);
+      else openPrintableDocument('Relatório · '+(bundle.workshop?.name||'Oficina'),workshopReportPreviewHtml(bundle,draft));
     }catch(err){toast(err.message,'danger')}
   }));
 

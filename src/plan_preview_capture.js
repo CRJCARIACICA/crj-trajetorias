@@ -25,14 +25,15 @@ export function pageCuts(height,pageHeight,rows){
 }
 
 export async function capturePlanPreview(body){
-  const kind=body.plan_id?'workshop':body.cfdh_plan_id?'cfdh':null;
+  const kind=body.plan_id?'workshop':body.cfdh_plan_id?'cfdh':body.report_id?'workshop-report':null;
   if(!kind)return null;
-  const id=body.plan_id||body.cfdh_plan_id;
+  const id=body.plan_id||body.cfdh_plan_id||body.report_id;
   if(!window.__crjPlanningPreview)throw new Error('Atualize a página para carregar o gerador da prévia.');
   const render=await loadRenderer();
-  const selector=kind==='workshop'?'#workshop-plan-form':'#cfdh-plan-editor';
+  const selector=kind==='workshop'?'#workshop-plan-form':kind==='cfdh'?'#cfdh-plan-editor':'#workshop-monthly-report-form';
+  const previewSelector=kind==='workshop'?'[data-workshop-plan-preview] .methodology-paper':kind==='cfdh'?'[data-cfdh-plan-preview] .methodology-paper':'[data-workshop-report-preview] .methodology-paper';
   const form=document.querySelector(selector);
-  const live=form?.dataset.planId===id?form.querySelector(kind==='workshop'?'[data-workshop-plan-preview] .methodology-paper':'[data-cfdh-plan-preview] .methodology-paper'):null;
+  const live=(kind==='workshop-report'?form?.dataset.reportId===id:form?.dataset.planId===id)?form.querySelector(previewSelector):null;
   const html=live?.outerHTML||await window.__crjPlanningPreview(kind,id);
   const host=document.createElement('div');
   Object.assign(host.style,{position:'absolute',left:'-20000px',top:'0',width:'1120px',pointerEvents:'none'});

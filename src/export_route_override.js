@@ -64,7 +64,7 @@ window.fetch = async function crjOfficialDocumentFetch(input, init){
     const raw=init?.body??(input instanceof Request?await input.clone().text():null);
     if(typeof raw==='string'){
       const body=JSON.parse(raw);
-      if(body.plan_id||body.cfdh_plan_id){
+      if(body.plan_id||body.cfdh_plan_id||body.report_id){
         body.preview_snapshot=await capturePlanPreview(body);
         init={...init,body:JSON.stringify(body)};
       }

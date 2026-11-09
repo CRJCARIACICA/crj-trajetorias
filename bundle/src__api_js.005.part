@@ -148,13 +148,40 @@ export async function getWorkshopMonthlyReportBundle(planId){
   }
   return buildWorkshopMonthlyReportBundle({planBundle,workshop:wq.data||{},sessions,attendance,guests,report:rq.data||null,records,team});
 }
+// Preserve explicit links and reconcile legacy sessions only when a match is
+// unique on both sides. A calendar match is stronger than a matching time.
+export function matchWorkshopLessons(lessons,sessions,allLessons=lessons){
+  const matched=new Map(),used=new Set();
+  const inactiveIds=new Set(allLessons.filter(l=>l.included===false).map(l=>l.id));
+  const assignUnique=(predicate)=>{
+    const candidates=new Map();
+    for(const l of lessons){
+      if(matched.has(l.id))continue;
+      const choices=sessions.filter(s=>!used.has(s.id)&&predicate(l,s));
+      candidates.set(l.id,choices);
+    }
+    for(const l of lessons){
+      const choices=candidates.get(l.id)||[];
+      if(choices.length!==1)continue;
+      const s=choices[0];
+      if([...candidates.values()].filter(xs=>xs.some(x=>x.id===s.id)).length!==1)continue;
+      matched.set(l.id,s);used.add(s.id);
+    }
+  };
+  assignUnique((l,s)=>s.plan_lesson_id===l.id);
+  assignUnique((l,s)=>(!s.plan_lesson_id||inactiveIds.has(s.plan_lesson_id))&&Boolean(l.calendar_entry_id)&&s.calendar_entry_id===l.calendar_entry_id);
+  assignUnique((l,s)=>!s.plan_lesson_id&&(!l.calendar_entry_id||!s.calendar_entry_id||l.calendar_entry_id===s.calendar_entry_id)
+    &&Boolean(l.scheduled_date&&l.start_time&&s.start_time)
+    &&l.scheduled_date===s.session_date&&String(l.start_time).slice(0,5)===String(s.start_time).slice(0,5));
+  return matched;
+}
 function buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendance,guests,report,records,team}){
   const plan=planBundle.plan||{},lessons=(planBundle.lessons||[]).filter(x=>x.included!==false);
   const teamMap=new Map((team||[]).map(x=>[x.id,x]));
   const attendanceBySession=new Map(),guestBySession=new Map();
   for(const a of attendance||[]){const arr=attendanceBySession.get(a.session_id)||[];arr.push(a);attendanceBySession.set(a.session_id,arr)}
   for(const g of guests||[]){const arr=guestBySession.get(g.session_id)||[];arr.push(g);guestBySession.set(g.session_id,arr)}
-  const sessionByLesson=new Map((sessions||[]).filter(s=>s.plan_lesson_id).map(s=>[s.plan_lesson_id,s]));
+  const sessionByLesson=matchWorkshopLessons(lessons,sessions||[],planBundle.lessons||[]);
   const lessonExecution=lessons.map(l=>{
     const s=sessionByLesson.get(l.id)||null;
     const nominal=s?(attendanceBySession.get(s.id)||[]):[],visitor=s?(guestBySession.get(s.id)||[]):[];
@@ -188,7 +215,8 @@ function buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendan
   const uniqueYouth=new Set((attendance||[]).map(x=>x.youth_id).filter(Boolean));
   const uniqueGuests=new Set((guests||[]).map(x=>x.provisional_person_id).filter(Boolean));
   const plannedHours=lessons.reduce((n,l)=>n+reportDurationHours(l.start_time,l.end_time),0);
-  const extraSessions=(sessions||[]).filter(s=>!s.plan_lesson_id||!lessons.some(l=>l.id===s.plan_lesson_id));
+  const matchedSessionIds=new Set([...sessionByLesson.values()].map(s=>s.id));
+  const extraSessions=(sessions||[]).filter(s=>!matchedSessionIds.has(s.id));
   const executedHours=(sessions||[]).reduce((n,s)=>n+Number(s.duration_hours||reportDurationHours(s.start_time,s.end_time)),0);
   const complementaryActions=[
     ...extraSessions.map(s=>({
@@ -260,10 +288,26 @@ export async function listGuestParticipations(workshopId=null){
   if(workshopId)q=q.eq('workshop_id',workshopId);
   const {data,error}=await q;if(error)throw error;return data||[];
 }
-export async function listWorkshopSessions(workshopId,limit=30){
-  if(mode==='mock'){const st=mock();return (st.sessions||[]).filter(x=>x.workshop_id===workshopId).sort((a,b)=>String(b.session_date).localeCompare(String(a.session_date))).slice(0,limit);}
-  const {data,error}=await supabase.from('workshop_sessions').select('*').eq('workshop_id',workshopId).order('session_date',{ascending:false}).limit(limit);
-  if(error)throw error;return data||[];
+export async function listWorkshopSessions(workshopId,options=30){
+  const month=typeof options==='object'?options.month:null,limit=typeof options==='number'?options:null;
+  if(month&&!/^\d{4}-\d{2}$/.test(month))throw new Error('Mês inválido.');
+  if(mode==='mock'){
+    const st=mock(),rows=(st.sessions||[]).filter(x=>x.workshop_id===workshopId&&(!month||String(x.session_date).slice(0,7)===month)).sort((a,b)=>String(b.session_date).localeCompare(String(a.session_date)));
+    return limit?rows.slice(0,limit):rows;
+  }
+  let query=supabase.from('workshop_sessions').select('*').eq('workshop_id',workshopId).order('session_date',{ascending:false}).order('start_time',{ascending:false});
+  if(month){const range=reportMonthRange(month);query=query.gte('session_date',range.start).lt('session_date',range.end)}
+  if(limit)query=query.limit(limit);
+  const {data,error}=await query;if(error)throw error;return data||[];
+}
+export async function deleteWorkshopSession(id){
+  if(mode==='mock'){
+    const st=mock(),session=(st.sessions||[]).find(x=>x.id===id);if(!session)throw new Error('Aula não encontrada.');
+    st.sessionTrash||=[];st.sessionTrash.push({session,attendance:(st.attendance||[]).filter(x=>x.session_id===id),guests:(st.guestParticipations||[]).filter(x=>x.session_id===id)});
+    st.sessions=st.sessions.filter(x=>x.id!==id);st.attendance=(st.attendance||[]).filter(x=>x.session_id!==id);st.guestParticipations=(st.guestParticipations||[]).filter(x=>x.session_id!==id);
+    const ce=(st.workshopCalendar||[]).find(x=>x.session_id===id);if(ce){ce.session_id=null;if(ce.status==='realizada')ce.status='planejada'}save(st);return;
+  }
+  const {error}=await supabase.rpc('archive_workshop_session',{p_session_id:id});if(error)throw error;
 }
 export async function listWorkshopAttendance(workshopId){
   if(mode==='mock'){const st=mock();return (st.attendance||[]).filter(x=>x.workshop_id===workshopId);}
