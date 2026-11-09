@@ -2,6 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path');
 const {PGlite}=require('@electric-sql/pglite');
 const migration=fs.readFileSync(path.join(__dirname,'../sql/workshop_calendar_cancellation.sql'),'utf8');
+const recovery=fs.readFileSync(path.join(__dirname,'../sql/workshop_session_recoverable_delete.sql'),'utf8');
 const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 const [calendar,lesson,session,workshop,user,windowId,markerPerson]=[1,2,3,4,5,6,7].map(id);
 async function setup(){
@@ -26,7 +27,10 @@ async function setup(){
  insert into public.workshop_created_attendance_lists values ('${lesson}');
  insert into public.attendance values ('${markerPerson}','${session}');
  set test.uid='${user}';set test.active='yes';set test.role_name='educador';`);
- await db.exec(migration);return db;
+ await db.exec(migration);
+ await db.exec(`alter table public.workshop_sessions add column end_time time,add column location_type text,add column location_other text;
+ alter table public.workshop_calendar alter column id set default gen_random_uuid(),add column end_time time,add column location_type text,add column location_other text,add column source text,add column created_by uuid,add constraint workshop_calendar_unique_slot unique(workshop_id,scheduled_date,start_time);`);
+ await db.exec(recovery);return db;
 }
 test('cancel and reopen preserve data, stop check-in, and resist automatic recancellation',async()=>{
  const db=await setup();try{
@@ -73,5 +77,39 @@ test('unauthorized users cannot reopen a canceled class',async()=>{
   await db.exec('reset role;set role anon');
   await assert.rejects(db.query('select public.reopen_workshop_calendar_entry($1)',[calendar]),/permission denied/i);
   await db.exec('reset role');const {rows:[r]}=await db.query('select status from public.workshop_calendar');assert.equal(r.status,'cancelada');
+ }finally{await db.close()}
+});
+
+test('deleting an actual class cancels it without deleting any data and it can be reopened',async()=>{
+ const db=await setup();try{
+  await db.exec('set role authenticated');
+  await db.query('select public.cancel_workshop_session_for_recovery($1)',[session]);
+  await db.exec('reset role');
+  let {rows:[r]}=await db.query(`select c.status,c.session_id,(select count(*)::int from public.workshop_sessions) sessions,(select count(*)::int from public.attendance) attendance,(select count(*)::int from public.workshop_created_attendance_lists) markers from public.workshop_calendar c`);
+  assert.equal(r.status,'cancelada');assert.equal(r.session_id,session);assert.equal(r.sessions,1);assert.equal(r.attendance,1);assert.equal(r.markers,1);
+  await db.exec('set role authenticated');await db.query('select public.reopen_workshop_calendar_entry($1)',[calendar]);await db.exec('reset role');
+  ({rows:[r]}=await db.query('select status from public.workshop_calendar where id=$1',[calendar]));assert.equal(r.status,'realizada');
+ }finally{await db.close()}
+});
+test('an extra class without a calendar gets a recoverable calendar entry',async()=>{
+ const db=await setup();try{
+  await db.exec('update public.workshop_sessions set calendar_entry_id=null,plan_lesson_id=null;update public.workshop_plan_lessons set calendar_entry_id=null;delete from public.workshop_calendar');
+  await db.exec('set role authenticated');const {rows:[r]}=await db.query('select public.cancel_workshop_session_for_recovery($1) result',[session]);
+  assert.equal(r.result.status,'cancelada');await db.query('select public.reopen_workshop_calendar_entry($1)',[r.result.calendar_id]);await db.exec('reset role');
+  const {rows:[c]}=await db.query('select status,session_id from public.workshop_calendar');assert.equal(c.status,'realizada');assert.equal(c.session_id,session);
+ }finally{await db.close()}
+});
+test('deleting one of multiple classes on the same calendar is blocked atomically',async()=>{
+ const db=await setup();try{
+  await db.query(`insert into public.workshop_sessions(id,workshop_id,session_date,start_time,calendar_entry_id) values ($1,$2,'2026-10-02','19:00',$3)`,[id(9),workshop,calendar]);
+  await db.exec('set role authenticated');await assert.rejects(db.query('select public.cancel_workshop_session_for_recovery($1)',[session]),/outra aula vinculada/i);await db.exec('reset role');
+  const {rows:[r]}=await db.query('select status,(select count(*)::int from public.workshop_sessions) n from public.workshop_calendar');assert.equal(r.status,'realizada');assert.equal(r.n,2);
+ }finally{await db.close()}
+});
+test('only authorized educators may remove a class for recovery',async()=>{
+ const db=await setup();try{
+  await db.exec(`set test.role_name='articulador';set role authenticated`);
+  await assert.rejects(db.query('select public.cancel_workshop_session_for_recovery($1)',[session]),/Sem permissão/i);
+  await db.exec('reset role;set role anon');await assert.rejects(db.query('select public.cancel_workshop_session_for_recovery($1)',[session]),/permission denied/i);
  }finally{await db.close()}
 });

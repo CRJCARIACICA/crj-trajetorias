@@ -378,11 +378,16 @@ export async function listWorkshopSessions(workshopId,options=30){
 export async function deleteWorkshopSession(id){
   if(mode==='mock'){
     const st=mock(),session=(st.sessions||[]).find(x=>x.id===id);if(!session)throw new Error('Aula não encontrada.');
-    st.sessionTrash||=[];st.sessionTrash.push({session,attendance:(st.attendance||[]).filter(x=>x.session_id===id),guests:(st.guestParticipations||[]).filter(x=>x.session_id===id)});
-    st.sessions=st.sessions.filter(x=>x.id!==id);st.attendance=(st.attendance||[]).filter(x=>x.session_id!==id);st.guestParticipations=(st.guestParticipations||[]).filter(x=>x.session_id!==id);
-    const ce=(st.workshopCalendar||[]).find(x=>x.session_id===id);if(ce){ce.session_id=null;if(ce.status==='realizada')ce.status='planejada'}save(st);return;
+    if(!session.session_date||!session.start_time)throw new Error('Informe a data e o horário da aula antes de excluí-la.');
+    const lesson=(st.workshopPlanLessons||[]).find(l=>l.id===session.plan_lesson_id);
+    st.workshopCalendar||=[];
+    let ce=st.workshopCalendar.find(c=>c.id===(session.calendar_entry_id||lesson?.calendar_entry_id))||st.workshopCalendar.find(c=>c.workshop_id===session.workshop_id&&c.scheduled_date===session.session_date&&String(c.start_time||'').slice(0,5)===String(session.start_time).slice(0,5));
+    if(!ce){ce={id:uid('cal'),workshop_id:session.workshop_id,scheduled_date:session.session_date,start_time:session.start_time,end_time:session.end_time,status:'realizada',session_id:id,source:'manual'};st.workshopCalendar.push(ce)}
+    const hasOther=(st.sessions||[]).some(x=>{const l=(st.workshopPlanLessons||[]).find(y=>y.id===x.plan_lesson_id);return x.id!==id&&x.workshop_id===session.workshop_id&&(x.id===ce.session_id||x.calendar_entry_id===ce.id||l?.calendar_entry_id===ce.id||(!x.calendar_entry_id&&!x.plan_lesson_id&&x.session_date===ce.scheduled_date&&String(x.start_time||'').slice(0,5)===String(ce.start_time||'').slice(0,5)))});
+    if(hasOther)throw new Error('Há outra aula vinculada ao mesmo horário. Confira o calendário antes de excluir esta aula.');
+    save(st);return updateWorkshopCalendarEntry(ce.id,{status:'cancelada',session_id:id});
   }
-  const {error}=await supabase.rpc('archive_workshop_session',{p_session_id:id});if(error)throw error;
+  const {data,error}=await supabase.rpc('cancel_workshop_session_for_recovery',{p_session_id:id});if(error)throw error;return data;
 }
 export async function listWorkshopAttendance(workshopId){
   if(mode==='mock'){const st=mock();return (st.attendance||[]).filter(x=>x.workshop_id===workshopId);}

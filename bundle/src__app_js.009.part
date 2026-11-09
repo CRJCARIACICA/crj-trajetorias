@@ -195,8 +195,8 @@ async function bindWorkshopDetailV2(id){
   document.querySelectorAll('[data-edit-workshop-session]').forEach(b=>b.addEventListener('click',async()=>{const target=sessions.find(s=>s.id===b.dataset.editWorkshopSession);if(target)await editWorkshopSessionV2(target)}));
   document.querySelectorAll('[data-delete-workshop-session]').forEach(b=>b.addEventListener('click',async()=>{
     const target=sessions.find(s=>s.id===b.dataset.deleteWorkshopSession);if(!target)return;
-    if(!confirm('Excluir a aula de '+fmtDate(target.session_date)+'? As presenças e visitas desta aula sairão dos relatórios e ficarão preservadas no histórico de exclusões.'))return;
-    try{await deleteWorkshopSession(target.id);toast('Aula excluída e registros preservados no histórico');nav(`oficina/${id}?month=${encodeURIComponent(month)}`);await render()}catch(err){toast(err.message,'danger')}
+    if(!confirm('Excluir a aula de '+fmtDate(target.session_date)+'? Ela será marcada como cancelada, deixará de contar nos relatórios e poderá ser reaberta no calendário com suas presenças preservadas.'))return;
+    try{await deleteWorkshopSession(target.id);toast('Aula cancelada; reabra no calendário se precisar');nav(`oficina/${id}?month=${encodeURIComponent(month)}`);await render()}catch(err){toast(err.message,'danger')}
   }));
   document.querySelectorAll('[data-follow-planned-lesson]').forEach(b=>b.addEventListener('click',async()=>{const lesson=plannedLessons.find(x=>x.id===b.dataset.followPlannedLesson);if(lesson)await openPlannedLessonFollowV2(w,lesson,planBundle?.plan,sessions,planBundle?.lessons||plannedLessons)}));
   document.querySelectorAll('[data-remove-created-list]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('Excluir esta lista? A aula deixará de ser contada por esta lista; arquivos já baixados não serão removidos do seu dispositivo.'))return;try{await archiveWorkshopCreatedList(b.dataset.removeCreatedList);toast('Lista excluída e contagem atualizada');await render()}catch(err){toast(err.message,'danger')}}));
