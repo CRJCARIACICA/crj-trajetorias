@@ -114,9 +114,50 @@ function reportDurationHours(start,end){
   if(a.length<2||b.length<2)return 0;
   return Math.max(0,((b[0]*60+b[1])-(a[0]*60+a[1]))/60);
 }
+export function isWorkshopLessonCancelled(lesson){return lesson?.calendar_status==='cancelada'}
+// Calendar status takes precedence over a list, execution or old lesson link.
+export function filterCancelledWorkshopSessions(sessions,calendar=[],lessons=[]){
+  const byCalendar=new Map((calendar||[]).map(c=>[c.id,c])),byLesson=new Map((lessons||[]).map(l=>[l.id,l]));
+  const canceledSessionIds=new Set((calendar||[]).filter(c=>c.status==='cancelada'&&c.session_id).map(c=>c.session_id));
+  return (sessions||[]).filter(s=>{
+    if(canceledSessionIds.has(s.id))return false;
+    const c=byCalendar.get(s.calendar_entry_id);
+    if(c)return c.status!=='cancelada';
+    const l=byLesson.get(s.plan_lesson_id);
+    const lessonCalendar=byCalendar.get(l?.calendar_entry_id);
+    if(lessonCalendar)return lessonCalendar.status!=='cancelada';
+    if(l?.calendar_status)return !isWorkshopLessonCancelled(l);
+    if(!s.session_date||!s.start_time)return true;
+    const same=(calendar||[]).filter(x=>(!x.workshop_id||!s.workshop_id||x.workshop_id===s.workshop_id)&&x.scheduled_date===s.session_date&&String(x.start_time||'').slice(0,5)===String(s.start_time).slice(0,5));
+    return !(same.length===1&&same[0].status==='cancelada');
+  });
+}
+export async function workshopSessionCalendarContext(sessions,planBundle={}){
+  const existingCalendar=planBundle.calendar||[],existingLessons=planBundle.lessons||[];
+  const sessionIds=[...new Set((sessions||[]).map(s=>s.id).filter(Boolean))];
+  const knownLessons=new Set(existingLessons.map(l=>l.id));
+  const missingLessonIds=[...new Set((sessions||[]).map(s=>s.plan_lesson_id).filter(id=>id&&!knownLessons.has(id)))];
+  let extraLessons=[],bySession=[];
+  if(mode==='mock'){
+    const st=mock();extraLessons=(st.workshopPlanLessons||[]).filter(l=>missingLessonIds.includes(l.id));
+    bySession=(st.workshopCalendar||[]).filter(c=>sessionIds.includes(c.session_id));
+  }else{
+    const [l,c]=await Promise.all([
+      missingLessonIds.length?supabase.from('workshop_plan_lessons').select('id,calendar_entry_id,included').in('id',missingLessonIds):Promise.resolve({data:[],error:null}),
+      sessionIds.length?supabase.from('workshop_calendar').select('id,workshop_id,scheduled_date,start_time,end_time,status,session_id').in('session_id',sessionIds):Promise.resolve({data:[],error:null})
+    ]);
+    if(l.error)throw l.error;if(c.error)throw c.error;extraLessons=l.data||[];bySession=c.data||[];
+  }
+  const known=new Set([...existingCalendar,...bySession].map(c=>c.id));
+  const missingCalendarIds=[...new Set([...(sessions||[]).map(s=>s.calendar_entry_id),...extraLessons.map(l=>l.calendar_entry_id)].filter(id=>id&&!known.has(id)))];
+  const extra=await listWorkshopCalendarsByIds(missingCalendarIds);
+  const calendar=[...new Map([...existingCalendar,...bySession,...extra].map(c=>[c.id,c])).values()],calendarMap=new Map(calendar.map(c=>[c.id,c]));
+  const enriched=[...existingLessons,...extraLessons].map(l=>({...l,calendar_status:calendarMap.get(l.calendar_entry_id)?.status||l.calendar_status||null}));
+  return {calendar,lessons:enriched};
+}
 export async function getWorkshopMonthlyReportBundle(planId){
   const planBundle=await getWorkshopMonthlyPlan(planId);
-  const plan=planBundle.plan||{},lessons=(planBundle.lessons||[]).filter(x=>x.included!==false);
+  const plan=planBundle.plan||{},lessons=(planBundle.lessons||[]).filter(x=>x.included!==false&&!isWorkshopLessonCancelled(x));
   const workshopId=plan.workshop_id,month=String(plan.plan_month||'').slice(0,7),range=reportMonthRange(month);
   if(mode==='mock'){
     const st=mock(),workshop=(st.workshops||[]).find(x=>x.id===workshopId)||{};
@@ -126,7 +167,8 @@ export async function getWorkshopMonthlyReportBundle(planId){
     const report=(st.workshopMonthlyReports||[]).find(x=>x.plan_id===planId)||null;
     const records=(st.educatorRecords||[]).filter(x=>x.educator_user_id===plan.educator_user_id&&String(x.record_date||'').slice(0,7)===month);
     const team=st.team||[],createdLists=(st.workshopCreatedLists||[]).filter(x=>lessons.some(l=>l.id===x.lesson_id));
-    return buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendance,guests,report,records,team,createdLists});
+    const context=await workshopSessionCalendarContext(sessions,planBundle);
+    return buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendance,guests,report,records,team,createdLists,context});
   }
   const [wq,sq,rq,records,team]=await Promise.all([
     listWorkshops(month).then(rows=>({data:rows.find(w=>w.id===workshopId)||null})),
@@ -146,8 +188,8 @@ export async function getWorkshopMonthlyReportBundle(planId){
     if(aq.error)throw aq.error;if(gq.error)throw gq.error;
     attendance=aq.data||[];guests=gq.data||[];
   }
-  const createdLists=await listWorkshopCreatedLists(lessons.map(l=>l.id));
-  return buildWorkshopMonthlyReportBundle({planBundle,workshop:wq.data||{},sessions,attendance,guests,report:rq.data||null,records,team,createdLists});
+  const [createdLists,context]=await Promise.all([listWorkshopCreatedLists(lessons.map(l=>l.id)),workshopSessionCalendarContext(sessions,planBundle)]);
+  return buildWorkshopMonthlyReportBundle({planBundle,workshop:wq.data||{},sessions,attendance,guests,report:rq.data||null,records,team,createdLists,context});
 }
 // Preserve explicit links and reconcile legacy sessions only when a match is
 // unique on both sides. A calendar match is stronger than a matching time.
@@ -176,8 +218,17 @@ export function matchWorkshopLessons(lessons,sessions,allLessons=lessons){
     &&l.scheduled_date===s.session_date&&String(l.start_time).slice(0,5)===String(s.start_time).slice(0,5));
   return matched;
 }
-function buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendance,guests,report,records,team,createdLists=[]}){
-  const plan=planBundle.plan||{},lessons=(planBundle.lessons||[]).filter(x=>x.included!==false);
+function buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendance,guests,report,records,team,createdLists=[],context=null}){
+  const plan=planBundle.plan||{},calendarStatus=new Map((context?.calendar||planBundle.calendar||[]).map(c=>[c.id,c.status]));
+  const allLessons=(planBundle.lessons||[]).map(l=>({...l,calendar_status:calendarStatus.get(l.calendar_entry_id)||l.calendar_status||null}));
+  const visibleLessons=allLessons.filter(x=>x.included!==false||isWorkshopLessonCancelled(x));
+  const lessons=visibleLessons.filter(x=>!isWorkshopLessonCancelled(x));
+  const canceledLessons=visibleLessons.filter(isWorkshopLessonCancelled);
+  const ctx=context||{calendar:planBundle.calendar||[],lessons:allLessons};
+  sessions=filterCancelledWorkshopSessions(sessions||[],ctx.calendar,ctx.lessons);
+  const allowedSessionIds=new Set(sessions.map(x=>x.id));
+  attendance=(attendance||[]).filter(x=>allowedSessionIds.has(x.session_id));
+  guests=(guests||[]).filter(x=>allowedSessionIds.has(x.session_id));
   const teamMap=new Map((team||[]).map(x=>[x.id,x]));
   const listByLesson=new Map((createdLists||[]).map(x=>[x.lesson_id,x]));
   const attendanceBySession=new Map(),guestBySession=new Map();
@@ -198,8 +249,9 @@ function buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendan
     groups.get(lesson.id).push(candidate);assigned.add(candidate.id);
   }
   const uniqueBy=(rows,key)=>[...new Map(rows.map(x=>[x[key]||x.id,x])).values()];
-  const lessonExecution=lessons.map(l=>{
-    const s=sessionByLesson.get(l.id)||null, linked=groups.get(l.id)||[],list=listByLesson.get(l.id)||null;
+  const lessonExecution=visibleLessons.map(l=>{
+    const canceled=isWorkshopLessonCancelled(l);
+    const s=canceled?null:(sessionByLesson.get(l.id)||null), linked=canceled?[]:(groups.get(l.id)||[]),list=canceled?null:(listByLesson.get(l.id)||null);
     const nominal=uniqueBy(linked.flatMap(x=>attendanceBySession.get(x.id)||[]),'youth_id');
     const visitor=uniqueBy(linked.flatMap(x=>guestBySession.get(x.id)||[]),'provisional_person_id');
     return {
@@ -214,6 +266,7 @@ function buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendan
       planned_resources:l.resources||'',
       planned_cfdh:l.cfdh_transversal||'',
       executed:Boolean(s||list),
+      cancelled:canceled,
       session_id:s?.id||null,
       list_created_at:list?.created_at||null,
       execution_source:s?'aula_registrada':list?'lista_criada':null,
@@ -221,7 +274,7 @@ function buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendan
       actual_start:s?.start_time||(list?l.start_time:null),
       actual_end:s?.end_time||(list?l.end_time:null),
       actual_hours:s?Number(s.duration_hours||reportDurationHours(s.start_time,s.end_time)):0,
-      actual_content:s?.content||(list?'Lista de presença criada':'') ,
+      actual_content:canceled?'Cancelada':(s?.content||(list?'Lista de presença criada':'')),
       actual_notes:s?.notes||'',
       cfdh_minutes:Number(s?.cfdh_minutes||0),
       educator_user_id:s?.educator_user_id||null,
@@ -257,9 +310,10 @@ function buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendan
     plan,lessons,workshop,report,lesson_execution:lessonExecution,complementary_actions:complementaryActions,
     metrics:{
       planned_lessons:lessons.length,
+      cancelled_lessons:canceledLessons.length,
       executed_lessons:lessonExecution.filter(x=>x.executed).length+extraSessions.length,
       executed_planned_lessons:lessonExecution.filter(x=>x.executed).length,
-      pending_lessons:lessonExecution.filter(x=>!x.executed).length,
+      pending_lessons:lessonExecution.filter(x=>!x.cancelled&&!x.executed).length,
       extra_sessions:extraSessions.length,
       planned_hours:Number(plannedHours.toFixed(2)),
       executed_hours:Number(executedHours.toFixed(2)),

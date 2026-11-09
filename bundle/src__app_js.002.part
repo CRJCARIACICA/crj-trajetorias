@@ -280,7 +280,8 @@ function workshopCalendarGrid(entries,month){
         const loc=workshopLocationLabel({location_type:e.location_type||w.location_type,location_other:e.location_other||w.location_other});
         const cls=e.status==='realizada'?'done':e.status==='cancelada'?'cancelled':'planned';
         return '<div class="calendar-event '+cls+'"><b>'+esc(String(e.start_time||'').slice(0,5))+' '+esc(w.name||'Oficina')+'</b><span>'+esc(loc)+'</span><small>'+esc(e.status||'planejada')+'</small><div class="calendar-event-actions">'+
-          (e.status==='planejada'?'<button class="btn ghost" data-calendar-session="'+e.id+'" data-workshop="'+e.workshop_id+'">Registrar aula</button><button class="btn ghost danger" data-calendar-cancel="'+e.id+'">Cancelar</button>':'')+
+          (e.status==='planejada'?'<button class="btn ghost" data-calendar-session="'+e.id+'" data-workshop="'+e.workshop_id+'">Registrar aula</button>':'')+
+          (e.status==='cancelada'?'<button class="btn secondary" data-calendar-reopen="'+e.id+'">Reabrir aula</button>':'<button class="btn ghost danger" data-calendar-cancel="'+e.id+'">Cancelar</button>')+
         '</div></div>';
       }).join('')+'</div>');
   }
@@ -306,17 +307,17 @@ function workshopInstructorEvidencePreviewHtml(i,month){
 }
 
 function workshopLessonDurationHours(l){
-  if(!l?.start_time||!l?.end_time)return 0;
+  if(isWorkshopLessonCancelled(l)||!l?.start_time||!l?.end_time)return 0;
   const a=String(l.start_time).slice(0,5).split(':').map(Number),b=String(l.end_time).slice(0,5).split(':').map(Number);
   return Math.max(0,((b[0]*60+b[1])-(a[0]*60+a[1]))/60);
 }
 function workshopPlanPreviewHtml(bundle,workshop,teamMap){
-  const plan=bundle?.plan||{},lessons=(bundle?.lessons||[]).filter(x=>x.included!==false);
+  const plan=bundle?.plan||{},lessons=(bundle?.lessons||[]).filter(x=>x.included!==false||isWorkshopLessonCancelled(x));
   const month=String(plan.plan_month||'').slice(0,7).split('-').reverse().join('/');
   const instructor=teamMap?.get(plan.instructor_user_id)||'Não definido';
   const educator=teamMap?.get(plan.educator_user_id)||'Não definido';
   const mainRows=lessons.map(l=>'<tr>'+
-      '<td>'+esc(l.theme||('Aula '+l.lesson_number))+'</td>'+
+      '<td>'+esc(l.theme||('Aula '+(l.lesson_number||'')))+(isWorkshopLessonCancelled(l)?'<br><b>Cancelada</b>':'')+'</td>'+
       '<td>'+esc(l.objective||'')+'</td>'+
       '<td>'+esc(l.proposed_activities||'')+'</td>'+
       '<td>'+esc(l.resources||'')+'</td>'+
@@ -324,7 +325,7 @@ function workshopPlanPreviewHtml(bundle,workshop,teamMap){
     '</tr>').join('');
   const extraRows=lessons.map(l=>{
     const loc=workshopLocationLabel({location_type:l.location_type,location_other:l.location_other});
-    return '<tr><td>Aula '+Number(l.lesson_number||0)+'</td><td>'+esc(fmtDate(l.scheduled_date))+'</td><td>'+esc(String(l.start_time||'').slice(0,5))+'–'+esc(String(l.end_time||'').slice(0,5))+'</td><td>'+esc(loc)+'</td><td>'+esc(l.cfdh_transversal||'')+'</td></tr>';
+    return '<tr><td>Aula '+esc(l.lesson_number||'')+(isWorkshopLessonCancelled(l)?'<br><b>Cancelada</b>':'')+'</td><td>'+esc(fmtDate(l.scheduled_date))+'</td><td>'+esc(String(l.start_time||'').slice(0,5))+'–'+esc(String(l.end_time||'').slice(0,5))+'</td><td>'+esc(loc)+'</td><td>'+esc(l.cfdh_transversal||'')+'</td></tr>';
   }).join('');
   return '<div class="methodology-paper methodology-paper-landscape workshop-plan-paper">'+
     '<div class="methodology-annex-title">CRJ CARIACICA · PLANEJAMENTO MENSAL DE OFICINA</div>'+
@@ -337,7 +338,7 @@ function workshopPlanPreviewHtml(bundle,workshop,teamMap){
     '<div class="methodology-section-title">CAMPOS ADICIONAIS DO REGISTRO</div>'+
     '<table class="methodology-record-table workshop-plan-extra-table"><thead><tr><th>Aula</th><th>Data</th><th>Horário</th><th>Local</th><th>CFDH transversal</th></tr></thead><tbody>'+(extraRows||'<tr><td colspan="5">Sem campos adicionais.</td></tr>')+'</tbody></table>'+
     '<table class="methodology-record-table"><thead><tr><th>Resultados esperados</th><th>Recursos gerais</th><th>Observações</th></tr></thead><tbody><tr><td>'+esc(plan.expected_results||'')+'</td><td>'+esc(plan.general_resources||'')+'</td><td>'+esc(plan.observations||'')+'</td></tr></tbody></table>'+
-    '<div class="methodology-system-note">Os campos pedagógicos principais permanecem em colunas próprias. Data, horário, local e CFDH transversal são campos adicionais independentes e não alteram a estrutura principal.</div>'+
+    '<div class="methodology-system-note">Aulas canceladas no calendário são identificadas e excluídas das quantidades e da carga horária. É possível reabri-las no calendário de oficinas.</div>'+
   '</div>';
 }
 function nextWorkshopPlanMonth(value){
@@ -351,9 +352,11 @@ function nextWorkshopPlanButton(workshopId,month){
   return '<button type="button" class="btn secondary" data-workshop-plan-next="'+esc(workshopId)+'" data-plan-month="'+next+'">Gerar planejamento do mês seguinte · '+next.split('-').reverse().join('/')+'</button>';
 }
 function workshopPlanEditorHtml(bundle,workshop,teamMap){
-  const plan=bundle.plan,lessons=(bundle.lessons||[]).filter(x=>x.included!==false);
+  const plan=bundle.plan,lessons=(bundle.lessons||[]).filter(x=>x.included!==false||isWorkshopLessonCancelled(x));
+  const activeCount=lessons.filter(l=>!isWorkshopLessonCancelled(l)).length;
   const lessonCards=lessons.map(l=>{
     const loc=workshopLocationLabel({location_type:l.location_type,location_other:l.location_other});
+    if(isWorkshopLessonCancelled(l))return '<div class="card workshop-plan-lesson"><div class="actions"><span class="pill warn">Cancelada</span></div><h4>Aula '+esc(l.lesson_number||'')+' · '+esc(fmtDate(l.scheduled_date))+'</h4><p>'+esc(String(l.start_time||'').slice(0,5))+'–'+esc(String(l.end_time||'').slice(0,5))+' · '+esc(loc)+'</p><p>Não contabilizada. Os dados permanecem preservados para reabertura.</p><button type="button" class="btn" data-nav="oficinas?view=calendario&month='+esc(String(l.scheduled_date||'').slice(0,7))+'">Abrir calendário</button></div>';
     return '<div class="card workshop-plan-lesson" data-plan-lesson="'+l.id+'">'+
       '<div class="page-head compact"><div><span class="pill info">Aula '+l.lesson_number+'</span><h4>'+esc(fmtDate(l.scheduled_date))+' · '+esc(String(l.start_time||'').slice(0,5))+'–'+esc(String(l.end_time||'').slice(0,5))+'</h4><p>'+esc(loc)+' · '+workshopLessonDurationHours(l).toLocaleString('pt-BR')+'h</p></div></div>'+
       '<div class="field"><label>Tema</label><input class="input" name="theme" value="'+esc(l.theme||('Aula '+l.lesson_number))+'"></div>'+
@@ -363,7 +366,7 @@ function workshopPlanEditorHtml(bundle,workshop,teamMap){
       '<div class="field"><label>Observações da aula planejada</label><textarea name="observations">'+esc(l.observations||'')+'</textarea></div>'+
     '</div>';
   }).join('');
-  return '<div class="page-head"><div><h2>Planejamento · '+esc(workshop.name)+'</h2><p>'+esc(String(plan.plan_month||'').slice(0,7).split('-').reverse().join('/'))+' · '+lessons.length+' aula(s) prevista(s) a partir do calendário.</p></div><div class="actions">'+nextWorkshopPlanButton(workshop.id,plan.plan_month)+'<button class="btn primary" data-edu-workshop-plan-pdf="'+plan.id+'">PDF</button><button class="btn secondary" data-edu-workshop-plan-docx="'+plan.id+'">DOCX</button><button class="btn" data-edu-workshop-plan-print="'+plan.id+'">Imprimir</button><button class="btn secondary" data-sync-workshop-plan="'+plan.id+'" data-workshop="'+workshop.id+'">Sincronizar com calendário</button><button class="btn" data-nav="oficinas?view=planejamento&month='+esc(String(plan.plan_month||'').slice(0,7))+'">Voltar</button></div></div>'+
+  return '<div class="page-head"><div><h2>Planejamento · '+esc(workshop.name)+'</h2><p>'+esc(String(plan.plan_month||'').slice(0,7).split('-').reverse().join('/'))+' · '+activeCount+' aula(s) prevista(s) · '+(lessons.length-activeCount)+' cancelada(s) no calendário.</p></div><div class="actions">'+nextWorkshopPlanButton(workshop.id,plan.plan_month)+'<button class="btn primary" data-edu-workshop-plan-pdf="'+plan.id+'">PDF</button><button class="btn secondary" data-edu-workshop-plan-docx="'+plan.id+'">DOCX</button><button class="btn" data-edu-workshop-plan-print="'+plan.id+'">Imprimir</button><button class="btn secondary" data-sync-workshop-plan="'+plan.id+'" data-workshop="'+workshop.id+'">Sincronizar com calendário</button><button class="btn" data-nav="oficinas?view=planejamento&month='+esc(String(plan.plan_month||'').slice(0,7))+'">Voltar</button></div></div>'+
     '<form id="workshop-plan-form" data-plan-id="'+plan.id+'" data-workshop-id="'+workshop.id+'">'+
       '<div class="methodology-form-workspace preview-open" data-workshop-plan-workspace>'+
         '<div class="methodology-form-editor stack">'+
@@ -420,7 +423,7 @@ async function pageWorkshops(){
     const [ws,entries]=await Promise.all([listWorkshops(),listWorkshopCalendar(start,end)]);
     return '<div class="page-head"><div><h2>Oficinas e presenças</h2><p>Calendário planejado das oficinas, separado das aulas efetivamente executadas.</p></div><div class="actions"><button class="btn primary" data-new-calendar-entry>+ Adicionar data</button></div></div>'+
       workshopTabs(view)+
-      '<div class="toolbar"><label class="field month-filter"><span>Mês</span><input class="input" type="month" data-workshop-month value="'+esc(month)+'"></label><span class="muted">'+entries.length+' atividade(s) planejada(s) no mês</span></div>'+
+      '<div class="toolbar"><label class="field month-filter"><span>Mês</span><input class="input" type="month" data-workshop-month value="'+esc(month)+'"></label><span class="muted">'+entries.filter(e=>e.status!=='cancelada').length+' atividade(s) planejada(s) · '+entries.filter(e=>e.status==='cancelada').length+' cancelada(s) no mês</span></div>'+
       '<div class="card workshop-calendar-card">'+workshopCalendarGrid(entries,month)+'</div>'+
       '<div class="card" style="margin-top:16px"><h3>Regras fixas cadastradas</h3>'+ws.filter(w=>w.schedule_mode==='semanal_fixa').map(w=>'<div class="agenda-row"><div><b>'+esc(w.name)+'</b><span>'+esc(workshopScheduleLabel(w))+' · '+esc(workshopPeriodLabel(w))+' · '+esc(String(w.start_time||'').slice(0,5))+(w.end_time?'–'+esc(String(w.end_time).slice(0,5)):'')+'</span></div><button class="btn" data-generate-workshop-calendar="'+w.id+'">Gerar / atualizar calendário</button></div>').join('')||'<div class="empty">Nenhuma oficina com semana fixa.</div>'+'</div>';
   }

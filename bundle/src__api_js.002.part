@@ -219,8 +219,31 @@ export async function createWorkshopCalendarEntry(row){
 export async function updateWorkshopCalendarEntry(id,patch){
   const payload={updated_at:now()};
   for(const k of ['scheduled_date','start_time','end_time','location_type','location_other','status','notes','session_id'])if(patch[k]!==undefined)payload[k]=patch[k]||null;
-  if(mode==='mock'){const s=mock(),r=(s.workshopCalendar||[]).find(x=>x.id===id);if(!r)throw new Error('Data não encontrada');Object.assign(r,payload);save(s);return r;}
+  if(mode==='mock'){
+    const s=mock(),r=(s.workshopCalendar||[]).find(x=>x.id===id);if(!r)throw new Error('Data não encontrada');
+    const before=r.status;Object.assign(r,payload);
+    if(before!==r.status&&(before==='cancelada'||r.status==='cancelada')){
+      r.monthly_cancelled=false;r.manually_reopened=r.status!=='cancelada';
+      for(const l of s.workshopPlanLessons||[])if(l.calendar_entry_id===id){
+        if(r.status==='cancelada'){l.included_before_cancellation=l.included_before_cancellation??l.included;l.included=false}
+        else{l.included=l.included_before_cancellation??true;l.included_before_cancellation=null}
+      }
+      if(r.status==='cancelada')for(const w of s.workshopCheckinWindows||[])if((s.sessions||[]).some(x=>x.id===w.session_id&&(x.calendar_entry_id===id||x.id===r.session_id)))w.active=false;
+    }
+    save(s);return r;
+  }
   const {data,error}=await supabase.from('workshop_calendar').update(payload).eq('id',id).select('*').single();if(error)throw error;return data;
+}
+export async function reopenWorkshopCalendarEntry(id){
+  if(mode==='mock'){
+    const s=mock(),entry=(s.workshopCalendar||[]).find(x=>x.id===id);if(!entry)throw new Error('Aula não encontrada no calendário.');
+    if(entry.status!=='cancelada')throw new Error('Esta aula não está cancelada.');
+    const lessonIds=new Set((s.workshopPlanLessons||[]).filter(x=>x.calendar_entry_id===id).map(x=>x.id));
+    const sameSlot=(s.sessions||[]).filter(x=>x.workshop_id===entry.workshop_id&&x.session_date===entry.scheduled_date&&String(x.start_time||'').slice(0,5)===String(entry.start_time||'').slice(0,5));
+    const exists=(s.sessions||[]).some(x=>x.id===entry.session_id||x.calendar_entry_id===id||lessonIds.has(x.plan_lesson_id))||(sameSlot.length===1&&!sameSlot[0].calendar_entry_id&&!sameSlot[0].plan_lesson_id);
+    return updateWorkshopCalendarEntry(id,{status:exists?'realizada':'planejada'});
+  }
+  const {data,error}=await supabase.rpc('reopen_workshop_calendar_entry',{p_calendar_id:id});if(error)throw error;return data;
 }
 export async function generateWorkshopFixedCalendar(workshop,horizonDays=90,month=null){
   if(mode!=='mock'){const ref=workshopReferenceMonth(month||workshop?.reference_month);const {error}=await supabase.rpc('refresh_workshop_month',{p_id:workshop.id,p_month:ref});if(error)throw error;const [y,m]=ref.split('-').map(Number);return listWorkshopCalendar(ref,new Date(Date.UTC(y,m,1)).toISOString().slice(0,10),workshop.id);}
@@ -291,7 +314,8 @@ export async function listWorkshopInstructorDashboard(month=monthKey()){
   if(mode==='mock'){
     const s=mock(),profiles=(s.team||[]),workshops=s.workshops||[],sessions=(s.sessions||[]).filter(x=>x.session_date>=start&&x.session_date<end);
     const attendance=s.attendance||[],guests=s.guestParticipations||[],records=s.workshopInstructorRecords||[],edu=s.educatorRecords||[];
-    return buildInstructorDashboard(profiles,workshops,sessions,attendance,guests,records,edu);
+    const context=await workshopSessionCalendarContext(sessions,{calendar:s.workshopCalendar||[],lessons:s.workshopPlanLessons||[]});
+    return buildInstructorDashboard(profiles,workshops,filterCancelledWorkshopSessions(sessions,context.calendar,context.lessons),attendance,guests,records,edu);
   }
   const [profilesQ,workshopsQ,sessionsQ,attendanceQ,guestsQ,recordsQ,eduQ]=await Promise.all([
     supabase.from('profiles').select('id,display_name,role,active').eq('active',true).order('display_name'),
@@ -303,7 +327,9 @@ export async function listWorkshopInstructorDashboard(month=monthKey()){
     supabase.from('educator_records').select('workshop_id,record_date,record_type,title,description').eq('record_type','acompanhamento_oficina').gte('record_date',start).lt('record_date',end)
   ]);
   for(const q of [profilesQ,workshopsQ,sessionsQ,attendanceQ,guestsQ,recordsQ,eduQ])if(q.error)throw q.error;
-  return buildInstructorDashboard(profilesQ.data||[],workshopsQ.data||[],sessionsQ.data||[],attendanceQ.data||[],guestsQ.data||[],recordsQ.data||[],eduQ.data||[]);
+  const [calendar,context]=await Promise.all([listWorkshopCalendar(start,end),workshopSessionCalendarContext(sessionsQ.data||[])]);
+  const calendarMap=new Map([...calendar,...context.calendar].map(x=>[x.id,x]));
+  return buildInstructorDashboard(profilesQ.data||[],workshopsQ.data||[],filterCancelledWorkshopSessions(sessionsQ.data||[],[...calendarMap.values()],context.lessons),attendanceQ.data||[],guestsQ.data||[],recordsQ.data||[],eduQ.data||[]);
 }
 function buildInstructorDashboard(profiles,workshops,sessions,attendance,guests,records,educatorRecords){
   const assignedIds=new Set(workshops.map(w=>w.oficineiro_user_id).filter(Boolean));
@@ -387,17 +413,43 @@ export async function listWorkshopMonthlyPlans(month=monthKey(),workshopId=null)
   if(workshopId)q=q.eq('workshop_id',workshopId);
   const out=await q;if(out.error)throw out.error;return out.data||[];
 }
+export async function listWorkshopCalendarsByIds(ids){
+  ids=[...new Set((ids||[]).filter(Boolean))];if(!ids.length)return [];
+  if(mode==='mock'){const s=mock();return (s.workshopCalendar||[]).filter(x=>ids.includes(x.id))}
+  const {data,error}=await supabase.from('workshop_calendar').select('id,workshop_id,scheduled_date,start_time,end_time,location_type,location_other,status,monthly_cancelled,session_id').in('id',ids);
+  if(error)throw error;return data||[];
+}
+export function mergeWorkshopPlanCalendar(plan,lessons,calendar){
+  const all=calendar||[],map=new Map(all.map(x=>[x.id,x])),linked=new Set((lessons||[]).map(x=>x.calendar_entry_id).filter(Boolean));
+  const rows=(lessons||[]).map(l=>({...l,calendar_status:map.get(l.calendar_entry_id)?.status||null}));
+  const month=String(plan.plan_month||'').slice(0,7);
+  for(const c of all){
+    if(c.status!=='cancelada'||linked.has(c.id)||String(c.scheduled_date||'').slice(0,7)!==month)continue;
+    rows.push({id:'cancelled-calendar:'+c.id,plan_id:plan.id,calendar_entry_id:c.id,lesson_number:null,scheduled_date:c.scheduled_date,start_time:c.start_time,end_time:c.end_time,location_type:c.location_type,location_other:c.location_other,theme:'Aula cancelada',included:false,calendar_status:'cancelada',synthetic_calendar_lesson:true});
+  }
+  rows.sort((a,b)=>String(a.scheduled_date||'').localeCompare(String(b.scheduled_date||''))||String(a.start_time||'').localeCompare(String(b.start_time||''))||String(a.id).localeCompare(String(b.id)));
+  return {plan,lessons:rows,calendar:all};
+}
 export async function getWorkshopMonthlyPlan(planId){
   if(mode==='mock'){
     const s=mock(),plan=(s.workshopMonthlyPlans||[]).find(x=>x.id===planId);
     if(!plan)throw new Error('Planejamento não encontrado.');
-    const lessons=(s.workshopPlanLessons||[]).filter(x=>x.plan_id===planId).sort((a,b)=>a.lesson_number-b.lesson_number);
-    return {plan,lessons};
+    const lessons=(s.workshopPlanLessons||[]).filter(x=>x.plan_id===planId);
+    const refs=new Set(lessons.map(x=>x.calendar_entry_id).filter(Boolean)),month=String(plan.plan_month||'').slice(0,7);
+    const calendar=(s.workshopCalendar||[]).filter(x=>x.workshop_id===plan.workshop_id&&(String(x.scheduled_date||'').slice(0,7)===month||refs.has(x.id)));
+    return mergeWorkshopPlanCalendar(plan,lessons,calendar);
   }
-  const p=await supabase.from('workshop_monthly_plans').select('*').eq('id',planId).single();
-  const l=await supabase.from('workshop_plan_lessons').select('*').eq('plan_id',planId).order('lesson_number');
+  const [p,l]=await Promise.all([
+    supabase.from('workshop_monthly_plans').select('*').eq('id',planId).single(),
+    supabase.from('workshop_plan_lessons').select('*').eq('plan_id',planId).order('lesson_number')
+  ]);
   if(p.error)throw p.error;if(l.error)throw l.error;
-  return {plan:p.data,lessons:l.data||[]};
+  const month=String(p.data.plan_month||'').slice(0,7),[year,m]=month.split('-').map(Number);
+  const start=month+'-01',end=new Date(Date.UTC(year,m,1)).toISOString().slice(0,10);
+  const calendar=await listWorkshopCalendar(start,end,p.data.workshop_id),known=new Set(calendar.map(x=>x.id));
+  const missing=(l.data||[]).map(x=>x.calendar_entry_id).filter(id=>id&&!known.has(id));
+  if(missing.length)calendar.push(...await listWorkshopCalendarsByIds(missing));
+  return mergeWorkshopPlanCalendar(p.data,l.data||[],calendar);
 }
 export async function syncWorkshopMonthlyPlan(workshopId,month=monthKey()){
   const key=String(month).slice(0,7),planMonth=key+'-01';
@@ -413,7 +465,7 @@ export async function syncWorkshopMonthlyPlan(workshopId,month=monthKey()){
     const entries=(s.workshopCalendar||[]).filter(x=>x.workshop_id===workshopId&&x.scheduled_date>=start&&x.scheduled_date<end&&x.status!=='cancelada').sort((a,b)=>String(a.scheduled_date+a.start_time).localeCompare(String(b.scheduled_date+b.start_time)));
     for(const x of s.workshopPlanLessons.filter(x=>x.plan_id===plan.id))x.included=false;
     entries.forEach((e,i)=>{let x=s.workshopPlanLessons.find(z=>z.plan_id===plan.id&&z.calendar_entry_id===e.id);if(!x){x={id:uid('wlesson'),plan_id:plan.id,calendar_entry_id:e.id,theme:'Aula '+(i+1)};s.workshopPlanLessons.push(x)}else if(/^Aula\s+\d+$/i.test(String(x.theme||'')))x.theme='Aula '+(i+1);Object.assign(x,{lesson_number:i+1,scheduled_date:e.scheduled_date,start_time:e.start_time,end_time:e.end_time,location_type:e.location_type||w.location_type||null,location_other:e.location_other||w.location_other||null,included:true,updated_at:now()})});
-    save(s);return {plan,lessons:s.workshopPlanLessons.filter(x=>x.plan_id===plan.id&&x.included).sort((a,b)=>a.lesson_number-b.lesson_number)};
+    save(s);return getWorkshopMonthlyPlan(plan.id);
   }
   const {error}=await supabase.rpc('refresh_workshop_month',{p_id:workshopId,p_month:planMonth});if(error)throw error;
   const plan=await supabase.from('workshop_monthly_plans').select('id').eq('workshop_id',workshopId).eq('plan_month',planMonth).maybeSingle();if(plan.error)throw plan.error;if(!plan.data)throw new Error('Oficina fora desta competência. Inclua-a antes de gerar o planejamento.');return getWorkshopMonthlyPlan(plan.data.id);
@@ -516,7 +568,7 @@ async function resolveWorkshopLessonForSession(row){
   const plans=await listWorkshopMonthlyPlans(month,row.workshop_id);
   if(plans.length!==1)return null;
   const bundle=await getWorkshopMonthlyPlan(plans[0].id),all=bundle.lessons||[];
-  const lessons=all.filter(l=>l.included!==false);
+  const lessons=all.filter(l=>l.included!==false&&!isWorkshopLessonCancelled(l));
   const probe={...row,id:'__new_workshop_session__',plan_lesson_id:null};
   return [...matchWorkshopLessons(lessons,[probe],all).keys()][0]||null;
 }
@@ -578,4 +630,4 @@ function indicatorWindow(month,periodicity='mensal'){
   return {start:start.toISOString().slice(0,10),end:end.toISOString().slice(0,10),months:n};
 }
 export async function listIndicatorCatalog(){
- 
+

@@ -322,7 +322,7 @@ async function workshopReportSpec(client, id) {
     sections: [
       { rows: [
         ["Oficina", workshopQ.data?.name || ""], ["Mês", s(planQ.data.plan_month).slice(0, 7)], ["Situação", report.execution_status || ""],
-        ["Aulas previstas", metrics.planned_lessons ?? ""], ["Aulas executadas", metrics.executed_lessons ?? ""],
+        ["Aulas previstas", metrics.planned_lessons ?? ""], ["Aulas canceladas", metrics.cancelled_lessons ?? 0], ["Aulas executadas", metrics.executed_lessons ?? ""],
         ["CH prevista", metrics.planned_hours ?? ""], ["CH executada", metrics.executed_hours ?? ""],
         ["Participações", metrics.participation_records ?? ""], ["Participantes únicos", metrics.unique_participants ?? ""],
         ["Síntese do que foi executado", report.actual_description || ""], ["Metodologia aplicada", report.methodology_applied || ""],
@@ -331,7 +331,7 @@ async function workshopReportSpec(client, id) {
       ] },
       { title: "Planejado x executado", table: {
         heads: ["Aula", "Planejado", "Executado", "Participantes", "CFDH"],
-        rows: array(snapshot.lesson_execution).map(l => [`Aula ${l.lesson_number || ""}`, l.planned_theme || "", l.actual_content || "Não executada", l.participant_count ?? 0, `${l.cfdh_minutes || 0} min`])
+        rows: array(snapshot.lesson_execution).map(l => [`Aula ${l.lesson_number || ""}`, l.planned_theme || "", l.cancelled ? "Cancelada" : (l.actual_content || "Não executada"), l.cancelled ? "—" : (l.participant_count ?? 0), l.cancelled ? "—" : `${l.cfdh_minutes || 0} min`])
       } }
     ]
   };

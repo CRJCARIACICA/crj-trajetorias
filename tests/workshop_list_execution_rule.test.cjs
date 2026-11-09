@@ -9,6 +9,7 @@ function setup(lessons,plans=[{id:'plan'}]){
  const ctx=vm.createContext({Map,Set,Date,Number,String,Boolean,Math,mode:'mock',
   listWorkshopMonthlyPlans:async()=>{queries++;return plans},getWorkshopMonthlyPlan:async()=>({lessons}),
   durationHours:(a,b)=>(Number(b.slice(0,2))-Number(a.slice(0,2))),
+  isWorkshopLessonCancelled:l=>l?.calendar_status==='cancelada',
   mock:()=>st,save:()=>{},uid:()=>`id${st.sessions.length}`,now:()=>'',
  });
  vm.runInContext(matcher+'\n'+create,ctx);
