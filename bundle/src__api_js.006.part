@@ -76,7 +76,7 @@ export async function generateWorkshopAttendanceSubmission(sessionId){
     end_time:String(s.end_time||'').slice(0,5),
     participants
   };
-  return await saveFormSubmission('lista-presenca-contato',null,payload);
+  return await saveFormSubmission('lista-presenca-contato',null,payload,{workshopSessionId:sessionId});
 }
 
 

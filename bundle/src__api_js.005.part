@@ -125,8 +125,8 @@ export async function getWorkshopMonthlyReportBundle(planId){
     const guests=(st.guestParticipations||[]).filter(x=>sessions.some(s=>s.id===x.session_id));
     const report=(st.workshopMonthlyReports||[]).find(x=>x.plan_id===planId)||null;
     const records=(st.educatorRecords||[]).filter(x=>x.educator_user_id===plan.educator_user_id&&String(x.record_date||'').slice(0,7)===month);
-    const team=st.team||[];
-    return buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendance,guests,report,records,team});
+    const team=st.team||[],createdLists=(st.workshopCreatedLists||[]).filter(x=>lessons.some(l=>l.id===x.lesson_id));
+    return buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendance,guests,report,records,team,createdLists});
   }
   const [wq,sq,rq,records,team]=await Promise.all([
     listWorkshops(month).then(rows=>({data:rows.find(w=>w.id===workshopId)||null})),
@@ -146,7 +146,8 @@ export async function getWorkshopMonthlyReportBundle(planId){
     if(aq.error)throw aq.error;if(gq.error)throw gq.error;
     attendance=aq.data||[];guests=gq.data||[];
   }
-  return buildWorkshopMonthlyReportBundle({planBundle,workshop:wq.data||{},sessions,attendance,guests,report:rq.data||null,records,team});
+  const createdLists=await listWorkshopCreatedLists(lessons.map(l=>l.id));
+  return buildWorkshopMonthlyReportBundle({planBundle,workshop:wq.data||{},sessions,attendance,guests,report:rq.data||null,records,team,createdLists});
 }
 // Preserve explicit links and reconcile legacy sessions only when a match is
 // unique on both sides. A calendar match is stronger than a matching time.
@@ -175,16 +176,32 @@ export function matchWorkshopLessons(lessons,sessions,allLessons=lessons){
     &&l.scheduled_date===s.session_date&&String(l.start_time).slice(0,5)===String(s.start_time).slice(0,5));
   return matched;
 }
-function buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendance,guests,report,records,team}){
+function buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendance,guests,report,records,team,createdLists=[]}){
   const plan=planBundle.plan||{},lessons=(planBundle.lessons||[]).filter(x=>x.included!==false);
   const teamMap=new Map((team||[]).map(x=>[x.id,x]));
+  const listByLesson=new Map((createdLists||[]).map(x=>[x.lesson_id,x]));
   const attendanceBySession=new Map(),guestBySession=new Map();
   for(const a of attendance||[]){const arr=attendanceBySession.get(a.session_id)||[];arr.push(a);attendanceBySession.set(a.session_id,arr)}
   for(const g of guests||[]){const arr=guestBySession.get(g.session_id)||[];arr.push(g);guestBySession.set(g.session_id,arr)}
   const sessionByLesson=matchWorkshopLessons(lessons,sessions||[],planBundle.lessons||[]);
+  const groups=new Map([...sessionByLesson].map(([lessonId,session])=>[lessonId,[session]]));
+  const assigned=new Set([...sessionByLesson.values()].map(s=>s.id));
+  // A detached session in the exact same slot as one uniquely planned class is
+  // the same class for reporting. Preserve all records, but count it once.
+  for(const candidate of sessions||[]){
+    if(assigned.has(candidate.id)||candidate.plan_lesson_id||!candidate.session_date||!candidate.start_time||!candidate.end_time)continue;
+    const possible=lessons.filter(l=>l.scheduled_date===candidate.session_date&&String(l.start_time||'').slice(0,5)===String(candidate.start_time).slice(0,5));
+    if(possible.length!==1)continue;
+    const lesson=possible[0],primary=sessionByLesson.get(lesson.id);
+    if(!primary||String(primary.session_date)!==String(candidate.session_date)||String(primary.start_time||'').slice(0,5)!==String(candidate.start_time).slice(0,5)||String(primary.end_time||'').slice(0,5)!==String(candidate.end_time).slice(0,5))continue;
+    if(candidate.calendar_entry_id&&candidate.calendar_entry_id!==primary.calendar_entry_id)continue;
+    groups.get(lesson.id).push(candidate);assigned.add(candidate.id);
+  }
+  const uniqueBy=(rows,key)=>[...new Map(rows.map(x=>[x[key]||x.id,x])).values()];
   const lessonExecution=lessons.map(l=>{
-    const s=sessionByLesson.get(l.id)||null;
-    const nominal=s?(attendanceBySession.get(s.id)||[]):[],visitor=s?(guestBySession.get(s.id)||[]):[];
+    const s=sessionByLesson.get(l.id)||null, linked=groups.get(l.id)||[],list=listByLesson.get(l.id)||null;
+    const nominal=uniqueBy(linked.flatMap(x=>attendanceBySession.get(x.id)||[]),'youth_id');
+    const visitor=uniqueBy(linked.flatMap(x=>guestBySession.get(x.id)||[]),'provisional_person_id');
     return {
       lesson_id:l.id,
       lesson_number:l.lesson_number,
@@ -196,13 +213,15 @@ function buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendan
       planned_activities:l.proposed_activities||'',
       planned_resources:l.resources||'',
       planned_cfdh:l.cfdh_transversal||'',
-      executed:Boolean(s),
+      executed:Boolean(s||list),
       session_id:s?.id||null,
-      actual_date:s?.session_date||null,
-      actual_start:s?.start_time||null,
-      actual_end:s?.end_time||null,
+      list_created_at:list?.created_at||null,
+      execution_source:s?'aula_registrada':list?'lista_criada':null,
+      actual_date:s?.session_date||(list?l.scheduled_date:null),
+      actual_start:s?.start_time||(list?l.start_time:null),
+      actual_end:s?.end_time||(list?l.end_time:null),
       actual_hours:s?Number(s.duration_hours||reportDurationHours(s.start_time,s.end_time)):0,
-      actual_content:s?.content||'',
+      actual_content:s?.content||(list?'Lista de presença criada':'') ,
       actual_notes:s?.notes||'',
       cfdh_minutes:Number(s?.cfdh_minutes||0),
       educator_user_id:s?.educator_user_id||null,
@@ -215,9 +234,10 @@ function buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendan
   const uniqueYouth=new Set((attendance||[]).map(x=>x.youth_id).filter(Boolean));
   const uniqueGuests=new Set((guests||[]).map(x=>x.provisional_person_id).filter(Boolean));
   const plannedHours=lessons.reduce((n,l)=>n+reportDurationHours(l.start_time,l.end_time),0);
-  const matchedSessionIds=new Set([...sessionByLesson.values()].map(s=>s.id));
-  const extraSessions=(sessions||[]).filter(s=>!matchedSessionIds.has(s.id));
-  const executedHours=(sessions||[]).reduce((n,s)=>n+Number(s.duration_hours||reportDurationHours(s.start_time,s.end_time)),0);
+  const extraSessions=(sessions||[]).filter(s=>!assigned.has(s.id));
+  const countedSessions=[...sessionByLesson.values(),...extraSessions];
+  const executedHours=countedSessions.reduce((n,s)=>n+Number(s.duration_hours||reportDurationHours(s.start_time,s.end_time)),0);
+  const participationRecords=lessonExecution.reduce((n,x)=>n+x.participant_count,0)+extraSessions.reduce((n,s)=>n+uniqueBy(attendanceBySession.get(s.id)||[],'youth_id').length+uniqueBy(guestBySession.get(s.id)||[],'provisional_person_id').length,0);
   const complementaryActions=[
     ...extraSessions.map(s=>({
       id:s.id,date:s.session_date,type:'aula_extra',title:'Aula / atividade extra da oficina',
@@ -237,16 +257,17 @@ function buildWorkshopMonthlyReportBundle({planBundle,workshop,sessions,attendan
     plan,lessons,workshop,report,lesson_execution:lessonExecution,complementary_actions:complementaryActions,
     metrics:{
       planned_lessons:lessons.length,
-      executed_lessons:lessonExecution.filter(x=>x.executed).length,
+      executed_lessons:lessonExecution.filter(x=>x.executed).length+extraSessions.length,
+      executed_planned_lessons:lessonExecution.filter(x=>x.executed).length,
       pending_lessons:lessonExecution.filter(x=>!x.executed).length,
       extra_sessions:extraSessions.length,
       planned_hours:Number(plannedHours.toFixed(2)),
       executed_hours:Number(executedHours.toFixed(2)),
-      participation_records:(attendance||[]).length+(guests||[]).length,
+      participation_records:participationRecords,
       unique_participants:uniqueYouth.size+uniqueGuests.size,
       registered_unique_youth:uniqueYouth.size,
       unique_visitors:uniqueGuests.size,
-      cfdh_minutes:lessonExecution.reduce((n,x)=>n+Number(x.cfdh_minutes||0),0)
+      cfdh_minutes:lessonExecution.reduce((n,x)=>n+Number(x.cfdh_minutes||0),0)+extraSessions.reduce((n,s)=>n+Number(s.cfdh_minutes||0),0)
     },
     team:(team||[]).map(x=>({id:x.id,display_name:x.display_name,role:x.role,active:x.active}))
   };

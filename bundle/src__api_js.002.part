@@ -467,8 +467,35 @@ async function downloadCrjDocumentRequest(body,defaultBase){
 export async function downloadWorkshopMonthlyPlan(planId,format='pdf'){
   return downloadCrjDocumentRequest({plan_id:planId,format},'Planejamento_Oficina');
 }
+export async function listWorkshopCreatedLists(lessonIds){
+  const ids=[...new Set((lessonIds||[]).filter(Boolean))];if(!ids.length)return [];
+  if(mode==='mock'){const st=mock();return (st.workshopCreatedLists||[]).filter(x=>ids.includes(x.lesson_id))}
+  const {data,error}=await supabase.from('workshop_created_attendance_lists').select('lesson_id,created_at').in('lesson_id',ids);
+  if(error)throw error;return data||[];
+}
+export async function registerWorkshopCreatedList(lessonId){
+  if(!lessonId)throw new Error('Aula não identificada para registrar a lista.');
+  if(mode==='mock'){
+    const st=mock();st.workshopCreatedLists||=[];
+    if(!st.workshopCreatedLists.some(x=>x.lesson_id===lessonId))st.workshopCreatedLists.push({lesson_id:lessonId,created_at:now()});
+    save(st);return;
+  }
+  const {error}=await supabase.from('workshop_created_attendance_lists').upsert({lesson_id:lessonId},{onConflict:'lesson_id',ignoreDuplicates:true});
+  if(error)throw error;
+}
+export async function archiveWorkshopCreatedList(lessonId){
+  if(mode==='mock'){
+    const st=mock(),list=(st.workshopCreatedLists||[]).find(x=>x.lesson_id===lessonId);
+    if(!list)throw new Error('Lista não encontrada.');
+    st.workshopCreatedListTrash||=[];st.workshopCreatedListTrash.push({...list,deleted_at:now()});
+    st.workshopCreatedLists=st.workshopCreatedLists.filter(x=>x.lesson_id!==lessonId);save(st);return;
+  }
+  const {error}=await supabase.rpc('archive_workshop_created_list',{p_lesson_id:lessonId});if(error)throw error;
+}
 export async function downloadWorkshopPlannedAttendance(planLessonId,format='pdf'){
-  return downloadCrjDocumentRequest({plan_lesson_id:planLessonId,format},'Lista_Presenca_Planejada');
+  const file=await downloadCrjDocumentRequest({plan_lesson_id:planLessonId,format},'Lista_Presenca_Planejada');
+  try{await registerWorkshopCreatedList(planLessonId)}catch(error){throw new Error('A lista foi baixada, mas a aula não pôde ser registrada no relatório: '+(error.message||'falha de conexão.'))}
+  return file;
 }
 
 export async function enrollYouth(workshopId,youthId){
@@ -480,9 +507,23 @@ export async function workshopRoster(workshopId){
   if(mode==='mock'){ const s=mock(); return s.enrollments.filter(e=>e.workshop_id===workshopId&&e.status==='ativo').map(e=>({...e,youth:s.youth.find(y=>y.id===e.youth_id)})); }
   const {data,error}=await supabase.from('workshop_enrollments').select('*, young_people(*)').eq('workshop_id',workshopId).eq('status','ativo'); if(error) throw error; return (data||[]).map(x=>({...x,youth:x.young_people}));
 }
+// When the class/list is opened from the calendar or manually, attach the
+// matching planned lesson on creation. Ambiguous matches remain independent.
+async function resolveWorkshopLessonForSession(row){
+  if(row.plan_lesson_id)return row.plan_lesson_id;
+  const month=String(row.session_date||'').slice(0,7);
+  if(!row.workshop_id||!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))return null;
+  const plans=await listWorkshopMonthlyPlans(month,row.workshop_id);
+  if(plans.length!==1)return null;
+  const bundle=await getWorkshopMonthlyPlan(plans[0].id),all=bundle.lessons||[];
+  const lessons=all.filter(l=>l.included!==false);
+  const probe={...row,id:'__new_workshop_session__',plan_lesson_id:null};
+  return [...matchWorkshopLessons(lessons,[probe],all).keys()][0]||null;
+}
 export async function createWorkshopSession(row){
   const hrs=Number(row.duration_hours||durationHours(row.start_time,row.end_time));
-  const payload={...row,duration_hours:hrs,location_type:row.location_type||null,location_other:row.location_other||null,calendar_entry_id:row.calendar_entry_id||null,plan_lesson_id:row.plan_lesson_id||null,educator_user_id:row.educator_user_id||null};
+  const lessonId=await resolveWorkshopLessonForSession(row);
+  const payload={...row,duration_hours:hrs,location_type:row.location_type||null,location_other:row.location_other||null,calendar_entry_id:row.calendar_entry_id||null,plan_lesson_id:lessonId,educator_user_id:row.educator_user_id||null};
   if(mode==='mock'){ const s=mock(), rec={id:uid('sess'),...payload,created_by:s.currentUser.id}; s.sessions.push(rec); s.indicatorEvents.push({id:uid('met'),indicator_code:'M6.1_OFICINAS_HORAS',event_date:rec.session_date,quantity:hrs,source_type:'workshop_session',source_id:rec.id,source_mode:'identified'}); if(rec.calendar_entry_id){const ce=(s.workshopCalendar||[]).find(x=>x.id===rec.calendar_entry_id);if(ce){ce.status='realizada';ce.session_id=rec.id}} save(s); return rec; }
   const {data,error}=await supabase.from('workshop_sessions').insert(payload).select('*').single(); if(error) throw error;
   if(data.calendar_entry_id){

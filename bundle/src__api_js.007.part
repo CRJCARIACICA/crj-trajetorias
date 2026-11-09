@@ -78,7 +78,7 @@ export async function createWorkshopAttendanceSubmission(sessionId){
     participant_count:Number(sheet.participant_count||participants.length||0),
     participants
   };
-  return await saveFormSubmission('lista-presenca-contato',null,payload);
+  return await saveFormSubmission('lista-presenca-contato',null,payload,{workshopSessionId:sessionId});
 }
 
 
