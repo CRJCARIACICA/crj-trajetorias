@@ -87,8 +87,8 @@ function workshopReportPreviewHtml(bundle,draft=null){
     '<div class="methodology-row methodology-row-tall"><b>Ações realizadas / ajustes durante a execução:</b><div class="methodology-answer">'+esc(r.actions_performed||'')+'</div></div>'+
     '<div class="methodology-row methodology-row-tall"><b>Ações, atividades, passeios ou eventos não previstos / complementação:</b><div class="methodology-answer">'+esc(r.unplanned_actions||'')+'</div></div>'+
     '<div class="methodology-row methodology-row-tall"><b>Retorno, participação e percepção dos jovens:</b><div class="methodology-answer">'+esc(r.youth_feedback||'')+'</div></div>'+
-    pair('Pontos positivos','', 'Pontos positivos observados',r.positive_points)+
-    pair('Dificuldades','', 'Dificuldades encontradas',r.difficulties)+
+    '<div class="methodology-row methodology-row-tall"><b>Pontos positivos:</b><div class="methodology-answer">'+esc(r.positive_points||'')+'</div></div>'+
+    '<div class="methodology-row methodology-row-tall"><b>Dificuldades / pontos negativos:</b><div class="methodology-answer">'+esc(r.difficulties||'')+'</div></div>'+
     '<div class="methodology-row methodology-row-tall"><b>Próximos passos / encaminhamentos:</b><div class="methodology-answer">'+esc(r.next_steps||'')+'</div></div>'+
     '<div class="methodology-row methodology-row-tall"><b>Justificativa para execução parcial, alteração ou não realização:</b><div class="methodology-answer">'+esc(r.justification||'')+'</div></div>'+
     '<div class="methodology-row methodology-row-tall"><b>Evidências / referências:</b><div class="methodology-answer">'+esc(r.evidence_ref||'')+'</div></div>'+
