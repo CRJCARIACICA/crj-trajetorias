@@ -30,6 +30,7 @@ function layout(content){
     ${sidebarLink('oficinas','Oficinas e presenças','oficinas','oficinas')}
     ${sidebarLink('educador','Área do Educador','educador_area','educador')}
     ${sidebarLink('cfdh','CFDH compartilhado','cfdh_shared','cfdh')}
+    ${sidebarLink('avaliacoes','Avaliações','cfdh_shared','forms')}
     ${sidebarLink('equipe-tecnica','Equipe Técnica','technical_area','tecnica')}
     ${sidebarLink('jhonatao','Jhonatão','agenda','jhonatao')}
     ${sidebarLink('agenda',state.agendaUnread?`Agenda (${state.agendaUnread})`:'Agenda','agenda','agenda')}

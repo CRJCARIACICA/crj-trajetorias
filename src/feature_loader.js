@@ -6,7 +6,7 @@ import { MODULE_ROUTES, routeName, routeShellReady, captureRoute } from './route
 // quando a área correspondente é realmente aberta. Isso evita dezenas de
 // MutationObservers e consultas Supabase fora do menu em uso.
 
-const VERSION='20261109-pontos-relatorio';
+const VERSION='20261109-avaliacoes';
 const modulePreloads=new Set();
 const moduleAttempts=new Map();
 const moduleCache=new Map();
@@ -24,6 +24,7 @@ const MANAGEMENT_ROUTES={
 };
 
 const ROUTE_FEATURES={
+  avaliacoes:{critical:['evaluation_workspace'],deferred:[]},
   jovens:{critical:['youth_list_fields'],deferred:[]},
   jovem:{
     critical:['youth_profile_enhancements','youth_trajectory_evidence','youth_trajectory_exports','technical_service_flow'],

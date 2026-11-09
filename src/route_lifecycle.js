@@ -1,5 +1,6 @@
 // Contrato comum entre o roteador principal e as áreas carregadas sob demanda.
 export const MODULE_ROUTES=Object.freeze({
+  avaliacoes:{label:'Avaliações',module:'evaluation_workspace'},
   articulacao:{label:'Área da Articulação',module:'articulation_workspace'},
   'planos-mobilizacao':{label:'Planos de Mobilização',module:'articulation_workspace'},
   'caixa-equipes':{label:'Caixa das Equipes',module:'team_comms'},
