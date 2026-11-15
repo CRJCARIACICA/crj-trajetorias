@@ -128,7 +128,7 @@ function bindSafeEducatorSubmit(){
 }
 
 function refreshInstructorDashboard(){
-  if(!location.hash.startsWith('#oficineiro')||new URLSearchParams(location.hash.split('?')[1]||'').get('view')==='planejamento')return;
+  if(!location.hash.startsWith('#oficineiro')||['planejamento','planejamentos','desempenho'].includes(new URLSearchParams(location.hash.split('?')[1]||'').get('view')))return;
   const now=Date.now();if(now-lastRefresh<1200)return;lastRefresh=now;
   const host=document.querySelector('.content');if(host)delete host.dataset.instructorPortalKey;
   window.dispatchEvent(new HashChangeEvent('hashchange'));
