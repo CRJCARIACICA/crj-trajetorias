@@ -1,10 +1,10 @@
-import { supabaseClient, apiMode } from './api.js?v=20261109-avaliacoes';
+import { supabaseClient, apiMode } from './api.js?v=20261115-substituicao';
 
 // Extensão independente da Área do Educador: não altera a identidade da sessão.
 // A permissão real é validada pelo banco e toda ação permanece auditável.
 const KEY='crj_substituicao_educador_ativa';
 let profile=null, team=[], grants=[], active=null, data=null, month=new Date().toISOString().slice(0,7);
-let loading=false, stamp='', panel=null;
+let loading=false, panel=null;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pt=v=>v?new Date(v).toLocaleString('pt-BR'):'—';
 const today=()=>new Date().toISOString().slice(0,10);
