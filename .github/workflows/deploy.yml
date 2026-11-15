@@ -54,6 +54,7 @@ jobs:
             src/jhonatao_multimodal.js \
             src/jhonatao_live.js \
             src/educator_complementary.js \
+            src/educator_substitution.js \
             src/form_access.js \
             src/initial_form_numeric_guard.js \
             src/meta4_3_ui.js \
@@ -204,6 +205,7 @@ jobs:
             _site/src/feature_loader.js
             _site/src/route_lifecycle.js
             _site/src/educator_instructor_plan_sync.js
+            _site/src/educator_substitution.js
             _site/src/management_workspace.js
             _site/src/meta1_point_completion.js
             _site/src/meta2_flow_bootstrap.js
