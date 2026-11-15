@@ -1,6 +1,7 @@
 import { bindInstructorPlanning, planningEvidenceFooter, planningArchiveHtml, bindPlanningArchive } from './instructor_planning.js?v=20261020-planning1';
 import { captureRoute } from './route_lifecycle.js?v=20261020-navigation1';
 import { apiMode, supabaseClient, listWorkshops } from './api.js?v=20261016-workshop-month1';
+import { mountInstructorPerformance } from './instructor_performance.js?v=20261115-oficineiro-desempenho';
 
 const AVANTE={
   legalName:'Instituto Jurídico para efetivação da cidadania e saúde',
@@ -136,7 +137,7 @@ function dashboardHtml(d){
   const prog=nextPlanningProgress(d),admin=d.admin||{};
   const issueDeadline=deadlineFor(d.current,15),sendDeadline=deadlineFor(d.current,20),paymentDeadline=deadlineFor(d.current,10,1),planningDeadline=planningDeadlineFor(d);
   const issueStatus=statusInfo(admin.invoice_issued_at,issueDeadline,{futureLabel:'Emitir até'}),sendStatus=statusInfo(admin.invoice_sent_at,sendDeadline,{futureLabel:'Enviar à Marcela até'}),payStatus=statusInfo(admin.payment_received_at,paymentDeadline,{futureLabel:'Recebimento previsto'}),planningStatus=prog.complete?{kind:'success',label:'Concluído',detail:`${prog.filled}/${prog.total} campos obrigatórios preenchidos`}:statusInfo(null,planningDeadline,{futureLabel:`Planejamento de ${monthLabel(d.next)} até`});
-  return `<div class="ip-hero"><div><h2>Olá, ${esc((me.display_name||'Oficineiro').split(' ')[0])}</h2><p>Seu espaço reúne somente o que você precisa para executar a oficina, planejar o próximo mês e acompanhar os prazos administrativos.</p></div><div class="ip-actions"><a class="btn" href="#caixa-equipes">Abrir caixa de entrada</a><a class="btn primary" href="#oficineiro?view=planejamento">Preencher planejamento</a></div></div>
+  return `<div class="ip-hero"><div><h2>Olá, ${esc((me.display_name||'Oficineiro').split(' ')[0])}</h2><p>Seu espaço reúne somente o que você precisa para executar a oficina, planejar o próximo mês e acompanhar os prazos administrativos.</p></div><div class="ip-actions"><a class="btn" href="#caixa-equipes">Abrir caixa de entrada</a><a class="btn" href="#oficineiro?view=desempenho">Ver desempenho</a><a class="btn primary" href="#oficineiro?view=planejamento">Preencher planejamento</a></div></div>
   <div class="ip-grid">
     <section class="ip-card full"><h3>Lembretes inteligentes · ${esc(monthLabel(d.current))}</h3>
       ${taskHtml({title:'Emitir nota fiscal',description:`Competência ${shortMonth(d.current)} · confira a previsão de horas abaixo`,status:issueStatus,buttonField:'invoice_issued_at',buttonText:admin.invoice_issued_at?'Desmarcar emissão':'Marcar como emitida',done:!!admin.invoice_issued_at})}
@@ -178,7 +179,7 @@ function bindInvoiceCopy(host,d){
   host.querySelector('[data-ip-copy="hours"]')?.addEventListener('click',async()=>{try{const fresh=await loadPortalData();copyText(calendarHours(fresh).description,'Resumo de horas')}catch(e){toast(e.message,'danger')}});
   host.querySelector('[data-ip-copy="institution"]')?.addEventListener('click',()=>copyText(invoiceInstitutionText(),'Dados da Avante'));
 }
-function invoicePanelActive(){return isInstructor()&&routeName()==='oficineiro'&&!['planejamento','planejamentos'].includes(params().get('view'))}
+function invoicePanelActive(){return isInstructor()&&routeName()==='oficineiro'&&!['planejamento','planejamentos','desempenho'].includes(params().get('view'))}
 function queueInvoiceRefresh(){clearTimeout(invoiceTimer);invoiceTimer=setTimeout(()=>refreshInvoice(),150)}
 async function refreshInvoice(){
   if(!invoicePanelActive()||document.visibilityState==='hidden')return;
@@ -226,10 +227,10 @@ async function renderPortal(force=false){
   if(rendering){renderQueued=true;return}
   const host=document.querySelector('.content');if(!host)return;
   const isCurrent=captureRoute(host);
-  const requestedView=params().get('view'),view=['planejamento','planejamentos'].includes(requestedView)?requestedView:'painel',key=`${view}|${params().get('month')||''}`;
+  const requestedView=params().get('view'),view=['planejamento','planejamentos','desempenho'].includes(requestedView)?requestedView:'painel',key=`${view}|${params().get('month')||''}`;
   if(!force&&host.dataset.instructorPortalKey===key&&host.querySelector('[data-instructor-portal-page]'))return;
   rendering=true;host.dataset.instructorPortalKey=key;host.innerHTML='<div class="card"><div class="empty">Carregando seu espaço…</div></div>';
-  try{const d=await loadPortalData();if(!isCurrent())return;if(view==='planejamentos')d.evidenceArchive=await planningArchiveHtml(me,params().get('month')||'');if(!isCurrent())return;const body=view==='planejamento'?planningHtml(d):view==='planejamentos'?d.evidenceArchive.html:dashboardHtml(d);host.innerHTML=pageShell(body,view);host.dataset.instructorPortalKey=key;await bindPortal(host,d)}
+  try{if(view==='desempenho'){host.innerHTML=pageShell('<div data-ip-performance-root></div>',view);host.dataset.instructorPortalKey=key;await mountInstructorPerformance(host.querySelector('[data-ip-performance-root]'),me);return;}const d=await loadPortalData();if(!isCurrent())return;if(view==='planejamentos')d.evidenceArchive=await planningArchiveHtml(me,params().get('month')||'');if(!isCurrent())return;const body=view==='planejamento'?planningHtml(d):view==='planejamentos'?d.evidenceArchive.html:dashboardHtml(d);host.innerHTML=pageShell(body,view);host.dataset.instructorPortalKey=key;await bindPortal(host,d)}
   catch(err){if(!isCurrent())return;host.innerHTML=`<div class="notice danger"><b>Não foi possível carregar a área do oficineiro.</b><br>${esc(err.message||String(err))}<div class="ip-actions"><button class="btn primary" type="button" data-ip-retry>Tentar novamente</button></div></div>`;host.querySelector('[data-ip-retry]')?.addEventListener('click',()=>renderPortal(true))}
   finally{rendering=false;if(renderQueued||(!isCurrent()&&routeName()==='oficineiro')){renderQueued=false;schedule(false)}}
 }
@@ -237,14 +238,14 @@ function patchNav(){
   if(!isInstructor())return;
   const nav=document.querySelector('.sidebar .nav');if(!nav)return;
   const r=routeName(),view=params().get('view')||'painel';
-  if(nav.dataset.instructorPortal!=='2'){
-    nav.dataset.instructorPortal='2';
-    nav.innerHTML=`<span class="ip-nav-note">ACESSO DO OFICINEIRO</span><a href="#oficineiro" data-ip-nav="painel"><span>◫</span><span>Meu painel</span></a><a href="#oficineiro?view=planejamento" data-ip-nav="planejamento"><span>◇</span><span>Preencher planejamento</span></a><a href="#oficineiro?view=planejamentos" data-ip-nav="planejamentos"><span>▤</span><span>Planejamentos</span></a><a href="#caixa-equipes" data-ip-nav="inbox"><span>✉</span><span>Caixa de entrada</span></a><div class="sep"></div><a href="#" data-ip-logout><span>↪</span><span>Sair</span></a>`;
+  if(nav.dataset.instructorPortal!=='3'){
+    nav.dataset.instructorPortal='3';
+    nav.innerHTML=`<span class="ip-nav-note">ACESSO DO OFICINEIRO</span><a href="#oficineiro" data-ip-nav="painel"><span>◫</span><span>Meu painel</span></a><a href="#oficineiro?view=planejamento" data-ip-nav="planejamento"><span>◇</span><span>Preencher planejamento</span></a><a href="#oficineiro?view=planejamentos" data-ip-nav="planejamentos"><span>▤</span><span>Planejamentos</span></a><a href="#oficineiro?view=desempenho" data-ip-nav="desempenho"><span>▥</span><span>Desempenho e jovens</span></a><a href="#caixa-equipes" data-ip-nav="inbox"><span>✉</span><span>Caixa de entrada</span></a><div class="sep"></div><a href="#" data-ip-logout><span>↪</span><span>Sair</span></a>`;
     nav.querySelector('[data-ip-logout]')?.addEventListener('click',async e=>{e.preventDefault();try{await client().auth.signOut()}finally{location.hash='';location.reload()}});
   }
   nav.querySelectorAll('a[data-ip-nav]').forEach(a=>a.classList.remove('active'));
   if(r==='caixa-equipes')nav.querySelector('[data-ip-nav="inbox"]')?.classList.add('active');
-  else nav.querySelector(`[data-ip-nav="${['planejamento','planejamentos'].includes(view)?view:'painel'}"]`)?.classList.add('active');
+  else nav.querySelector(`[data-ip-nav="${['planejamento','planejamentos','desempenho'].includes(view)?view:'painel'}"]`)?.classList.add('active');
 }
 async function createThread(kind,form,bg){
   const fd=new FormData(form),team=String(fd.get('team')||''),user=String(fd.get('user')||'');
