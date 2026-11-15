@@ -48,11 +48,11 @@ const ROUTE_FEATURES={
     deferred:['articulation_workspace','articulation_request_context','joint_actions','document_header_standard','evidence_exports','attendance_export_fix']
   },
   educador:{
-    critical:['educator_complementary','workshop_collaboration','workshop_live_sync','educator_instructor_plan_sync','workshop_plan_delete','workshop_plan_exports','cfdh_transversal_integration'],
+    critical:['educator_substitution','educator_complementary','workshop_collaboration','workshop_live_sync','educator_instructor_plan_sync','workshop_plan_delete','workshop_plan_exports','cfdh_transversal_integration'],
     deferred:['articulation_workspace','articulation_request_context','joint_actions','document_header_standard','evidence_exports']
   },
   'planejamento-educador':{
-    critical:['educator_complementary','workshop_collaboration','workshop_live_sync','educator_instructor_plan_sync','workshop_plan_delete','workshop_plan_exports','cfdh_transversal_integration'],
+    critical:['educator_substitution','educator_complementary','workshop_collaboration','workshop_live_sync','educator_instructor_plan_sync','workshop_plan_delete','workshop_plan_exports','cfdh_transversal_integration'],
     deferred:['articulation_workspace','articulation_request_context','joint_actions','document_header_standard','evidence_exports']
   },
   cfdh:{
@@ -88,7 +88,7 @@ const ROUTE_FEATURES={
     deferred:['joint_actions','document_header_standard']
   },
   administrativo:{critical:['management_workspace'],deferred:['document_header_standard','evidence_exports']},
-  'coordenacao-geral':{critical:['management_workspace'],deferred:['document_header_standard','evidence_exports']},
+  'coordenacao-geral':{critical:['management_workspace','educator_substitution'],deferred:['document_header_standard','evidence_exports']},
   'coordenacao-articulacao':{critical:['management_workspace'],deferred:['document_header_standard','evidence_exports']},
   metas:{critical:['goals_workspace','meta1_point_completion'],deferred:[]},
   equipe:{critical:['instructor_management'],deferred:[]},
