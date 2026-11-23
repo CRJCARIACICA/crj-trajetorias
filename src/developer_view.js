@@ -52,14 +52,31 @@ async function resetRole(){
   clearPreview();
 }
 
-function openModal(){
+async function permanentDelegation(){
+  const {data,error}=await client().from('educator_substitutions').select('id')
+    .eq('substitute_id',profile.id).eq('ends_at','infinity').eq('status','autorizada').maybeSingle();
+  if(error)throw error;
+  return data;
+}
+
+async function openModal(){
   if(!profile?.developer_preview_enabled||!developerState?.is_developer)return;
   document.querySelector('#developer-view-modal')?.remove();
   const current=currentScope(),currentRole=developerState?.active_role||'';
   const bg=document.createElement('div');bg.id='developer-view-modal';bg.className='dev-view-modal-bg';
   const options=ROLE_OPTIONS.map(o=>`<button type="button" class="dev-view-option ${current===o.scope&&currentRole===o.role?'selected':''}" data-dev-role="${o.role}" data-dev-scope="${o.scope}"><b>${esc(o.label)}</b><small>${esc(o.detail)}</small></button>`).join('');
   bg.innerHTML=`<div class="dev-view-modal"><div style="display:flex;justify-content:space-between;gap:12px;align-items:start"><div><h3>Função de desenvolvimento</h3><p class="muted" style="margin:0">Exclusivo do Wemerson. Escolha a função efetiva usada para testar o sistema.</p></div><button class="btn ghost" type="button" data-dev-close>✕</button></div><div class="notice warn" style="margin-top:14px"><b>Alterações reais estão habilitadas.</b><br>Enquanto uma função de desenvolvimento estiver ativa, criar, editar, excluir, aprovar, registrar presenças e demais ações gravam no banco normalmente. A identidade que executa a ação continua sendo a conta do Wemerson.</div><div class="dev-view-options"><button type="button" class="dev-view-option ${!current&&!developerState?.active_role?'selected':''}" data-dev-normal><b>Normal · Educador(a) Social</b><small>Restaura a função normal e encerra o modo de desenvolvimento.</small></button>${options}</div></div>`;
-  document.body.appendChild(bg)
+  document.body.appendChild(bg);
+  try{
+    const grant=await permanentDelegation();
+    if(grant&&bg.isConnected){
+      const button=document.createElement('button');
+      button.type='button';button.className='dev-view-option';button.dataset.devDelegation=grant.id;
+      button.innerHTML='<b>Isabella Souza do Vale</b><small>Acesso permanente aos registros da educadora.</small>';
+      bg.querySelector('.dev-view-options').prepend(button);
+    }
+  }catch(err){toast(err.message||String(err))}
+
 }
 
 function installButton(){
@@ -68,7 +85,7 @@ function installButton(){
   if(!b){b=document.createElement('button');b.type='button';b.dataset.developerViewButton='1';footer.appendChild(b)}
   b.className='dev-view-button'+(active()?' active':'');
   const role=developerState?.active_role?roleLabel(developerState.active_role):'Educador(a) Social';
-  b.innerHTML=active()?`◉ Desenvolvimento · ${esc(role)}<br><small style="font-weight:600;opacity:.88">Gravação habilitada · clique para trocar</small>`:`◉ Função de desenvolvimento<br><small style="font-weight:600;opacity:.8">Trocar função para testar o app</small>`;
+  b.innerHTML=active()?`◉ Desenvolvimento · ${esc(role)}<br><small style="font-weight:600;opacity:.88">Gravação habilitada · clique para trocar</small>`:`◉ Trocar de acesso<br><small style="font-weight:600;opacity:.8">Trocar função para testar o app</small>`;
 }
 function installBanner(){
   if(!active()){document.querySelector('[data-dev-banner]')?.remove();return}
@@ -82,10 +99,22 @@ function installBanner(){
 async function handleClick(e){
   const t=e.target.closest?.('button,[role="button"],[data-action],a');if(!t)return;
   if(t.matches('[data-developer-view-button],[data-dev-change]')){e.preventDefault();e.stopImmediatePropagation();openModal();return}
+  if(t.matches('[data-dev-delegation]')){
+    e.preventDefault();e.stopImmediatePropagation();
+    t.disabled=true;
+    try{
+      if(!['educador','coordenacao_geral'].includes(profile.role))await applyRole('coordenacao','coordenacao_geral');
+      sessionStorage.setItem('crj_substituicao_educador_ativa',t.dataset.devDelegation);
+      document.querySelector('#developer-view-modal')?.remove();
+      location.hash=profile.role==='coordenacao_geral'?'#coordenacao-geral':'#educador';
+      reloadToCurrent();
+    }catch(err){t.disabled=false;toast(err.message||String(err))}
+    return;
+  }
   if(t.matches('[data-dev-close]')){e.preventDefault();document.querySelector('#developer-view-modal')?.remove();return}
   if(t.matches('[data-dev-normal],[data-dev-exit]')){
     e.preventDefault();e.stopImmediatePropagation();
-    try{t.disabled=true;await resetRole();reloadToCurrent()}catch(err){t.disabled=false;toast(err?.message||String(err))}
+    try{t.disabled=true;await resetRole();sessionStorage.removeItem('crj_substituicao_educador_ativa');reloadToCurrent()}catch(err){t.disabled=false;toast(err?.message||String(err))}
     return;
   }
   if(t.matches('[data-dev-role][data-dev-scope]')){
@@ -93,6 +122,7 @@ async function handleClick(e){
     try{
       document.querySelectorAll('#developer-view-modal button').forEach(b=>b.disabled=true);
       await applyRole(t.dataset.devScope,t.dataset.devRole);
+      sessionStorage.removeItem('crj_substituicao_educador_ativa');
       reloadToCurrent();
     }catch(err){document.querySelectorAll('#developer-view-modal button').forEach(b=>b.disabled=false);toast(err?.message||String(err))}
     return;

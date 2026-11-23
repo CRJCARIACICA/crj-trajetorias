@@ -14,7 +14,7 @@ const notify=(msg,isError=false)=>{const p=panel?.querySelector('[data-es-messag
 const label=id=>team.find(x=>x.id===id)?.display_name||'Educador não identificado';
 const card=(title,body)=>'<section class="card" style="margin-top:12px"><h3>'+esc(title)+'</h3>'+body+'</section>';
 const badge=status=>({solicitada:'Aguardando autorização',autorizada:'Autorizada',recusada:'Recusada',revogada:'Revogada'})[status]||status;
-function valid(g){return g.status==='autorizada'&&g.authorized_by&&Date.now()>=Date.parse(g.starts_at)&&Date.now()<Date.parse(g.ends_at)}
+function valid(g){return g&&g.status==='autorizada'&&g.authorized_by&&Date.now()>=Date.parse(g.starts_at)&&(g.ends_at==='infinity'||Date.now()<Date.parse(g.ends_at))}
 function editorDefs(type){
  const defs={
   educator_plans:[['activity_title','Atividade'],['description_objective','Descrição e objetivo','textarea'],['planned_actions','Ações planejadas','textarea'],['expected_results','Resultados esperados','textarea'],['resources','Recursos necessários','textarea'],['status','Situação','plan_status']],
@@ -55,24 +55,36 @@ function openEditor(type,row={},mode='edit',plan=null){
   }catch(err){alert('Não foi possível salvar: '+(err.message||err))}
  };
 }
+async function fetchAll(build){
+ const rows=[];
+ const pageSize=100;
+ for(let offset=0;;offset+=pageSize){
+  const {data,error}=await build().order('id').range(offset,offset+pageSize-1);
+  if(error)throw error;
+  rows.push(...data);
+  if(data.length<pageSize)return rows;
+ }
+}
 async function loadWork(){
  const c=supabaseClient(),target=active.educator_id,after=month+'-01',before=nextMonth(month)+'-01';
  const queries=await Promise.all([
-   c.from('educator_plans').select('*').eq('educator_user_id',target).order('created_at',{ascending:false}).limit(100),
-   c.from('educator_records').select('*').eq('educator_user_id',target).gte('record_date',after).lt('record_date',before).order('record_date',{ascending:false}).limit(100),
+   fetchAll(()=>c.from('educator_plans').select('*').eq('educator_user_id',target)).then(data=>({data})),
+   fetchAll(()=>c.from('educator_records').select('*').eq('educator_user_id',target).gte('record_date',after).lt('record_date',before)).then(data=>({data})),
    c.from('workshop_monthly_plans').select('*').eq('educator_user_id',target).gte('plan_month',after).lt('plan_month',before).limit(100),
+   active.ends_at==='infinity'?fetchAll(()=>c.from('workshops').select('id,name,active').or('educator_user_id.eq.'+target+',created_by.eq.'+target)).then(data=>({data})):Promise.resolve({data:[]}),
+   active.ends_at==='infinity'?fetchAll(()=>c.from('workshop_sessions').select('id,workshop_id,session_date,content,notes').or('educator_user_id.eq.'+target+',created_by.eq.'+target).gte('session_date',after).lt('session_date',before)).then(data=>({data})):Promise.resolve({data:[]}),
    c.from('educator_substitution_audit').select('table_name,action,changed_fields,occurred_at').eq('substitution_id',active.id).order('occurred_at',{ascending:false}).limit(15)
  ]);
  for(const q of queries)if(q.error)throw q.error;
  const plans=(queries[0].data||[]).filter(p=>String(p.planned_start||p.created_at||'').slice(0,7)===month||String(p.planned_end||'').slice(0,7)===month);
- const records=queries[1].data||[],monthly=queries[2].data||[],audit=queries[3].data||[];
+ const records=queries[1].data||[],monthly=queries[2].data||[],workshops=queries[3].data||[],sessions=queries[4].data||[],audit=queries[5].data||[];
  const [reports,monthlyReports,lessons]=await Promise.all([
   plans.length?c.from('educator_reports').select('*').in('plan_id',plans.map(p=>p.id)):Promise.resolve({data:[]}),
   monthly.length?c.from('workshop_monthly_reports').select('*').in('plan_id',monthly.map(p=>p.id)):Promise.resolve({data:[]}),
   monthly.length?c.from('workshop_plan_lessons').select('id,plan_id,scheduled_date,theme,observations,cfdh_transversal').in('plan_id',monthly.map(p=>p.id)).limit(200):Promise.resolve({data:[]})
  ]);
  for(const q of [reports,monthlyReports,lessons])if(q.error)throw q.error;
- data={plans,records,monthly,reports:reports.data||[],monthlyReports:monthlyReports.data||[],lessons:lessons.data||[],audit};
+ data={plans,records,monthly,workshops,sessions,reports:reports.data||[],monthlyReports:monthlyReports.data||[],lessons:lessons.data||[],audit};
 }
 function workRows(type,rows,fn){
  return rows.map(row=>'<div class="agenda-row"><div><b>'+esc(fn(row))+'</b><span>'+esc(row.status||row.execution_status||row.record_date||row.scheduled_date||'')+'</span></div><button type="button" class="btn secondary" data-es-edit="'+esc(type)+'" data-es-id="'+esc(row.id)+'">Editar</button></div>').join('')||'<p class="muted">Nenhum registro encontrado neste mês.</p>';
@@ -87,20 +99,24 @@ function workHtml(){
   const report=d.monthlyReports.find(r=>r.plan_id===p.id);
   return '<div class="agenda-row"><div><b>'+esc('Oficina · '+p.plan_month)+'</b><span>'+esc(p.status||'rascunho')+'</span></div><div class="actions"><button class="btn secondary" data-es-edit="workshop_monthly_plans" data-es-id="'+p.id+'">Planejamento</button>'+(report?'<button class="btn secondary" data-es-edit="workshop_monthly_reports" data-es-id="'+report.id+'">Relatório</button>':'<button class="btn secondary" data-es-new="workshop_monthly_reports" data-es-plan="'+p.id+'">Registrar execução</button>')+(p.status!=='finalizado'?'<button class="btn primary" data-es-finish="workshop_monthly_plans" data-es-id="'+p.id+'">Finalizar plano</button>':'')+'</div></div>';
  }).join('');
- return '<div class="notice info"><b>Substituição em andamento:</b> você está trabalhando nos documentos de '+esc(label(active.educator_id))+'. A conta e a assinatura digital continuam sendo suas; a titularidade permanece do educador substituído.</div>'+
+ return '<div class="notice info"><b>'+(active.ends_at==='infinity'?'Acesso delegado permanente:':'Substituição em andamento:')+'</b> você está trabalhando nos documentos de '+esc(label(active.educator_id))+'. A conta e a assinatura digital continuam sendo suas; a titularidade permanece do educador substituído.</div>'+
  '<div class="field" style="max-width:240px"><label>Mês de trabalho</label><input class="input" type="month" data-es-month value="'+esc(month)+'"></div>'+
  card('Planejamentos do educador',plans||'<p class="muted">Sem planejamentos no mês.</p>')+
  card('Registros de contribuição',workRows('educator_records',d.records,r=>r.title||r.description||r.record_type))+
  card('Planejamentos mensais de oficinas',monthly||'<p class="muted">Sem planejamentos mensais de oficinas.</p>')+
  card('Aulas vinculadas aos planejamentos',workRows('workshop_plan_lessons',d.lessons,r=>(r.scheduled_date||'')+' · '+(r.theme||'Aula')))+
+ (active.ends_at==='infinity'?card('Oficinas e aulas registradas',
+  d.workshops.map(w=>'<p><strong>'+esc(w.name)+'</strong>'+(w.active?'':' · Inativa')+'</p>').join('')+
+  d.sessions.map(a=>'<p><strong>'+esc(a.session_date)+'</strong> · '+esc(d.workshops.find(w=>w.id===a.workshop_id)?.name||'Aula')+'<br>'+esc(a.content||'')+'<br>'+esc(a.notes||'')+'</p>').join('')+
+  (!d.workshops.length&&!d.sessions.length?'<p class="muted">Nenhuma oficina ou aula encontrada.</p>':'')):'')+
  card('Auditoria da substituição',d.audit.map(r=>'<p style="margin:5px 0"><small>'+esc(pt(r.occurred_at))+' · '+esc(r.table_name)+' · '+esc(r.action)+' · '+esc((r.changed_fields||[]).join(', '))+'</small></p>').join('')||'<p class="muted">Nenhuma alteração nesta substituição.</p>');
 }
 function grantHtml(g){
  const approved=valid(g);
- return '<div class="agenda-row"><div><b>'+esc(label(g.educator_id))+' → '+esc(label(g.substitute_id))+'</b><span>'+esc(badge(g.status))+' · '+esc(pt(g.starts_at))+' até '+esc(pt(g.ends_at))+'</span><small>'+esc(g.reason||'')+'</small></div><div class="actions">'+
+ return '<div class="agenda-row"><div><b>'+esc(label(g.educator_id))+' → '+esc(label(g.substitute_id))+'</b><span>'+esc(badge(g.status))+' · '+(g.ends_at==='infinity'?'Acesso permanente':esc(pt(g.starts_at))+' até '+esc(pt(g.ends_at)))+'</span><small>'+esc(g.reason||'')+'</small></div><div class="actions">'+
  (profile.role==='coordenacao_geral'&&g.status==='solicitada'?'<button class="btn primary" data-es-decide="autorizada" data-es-id="'+g.id+'">Autorizar</button><button class="btn secondary" data-es-decide="recusada" data-es-id="'+g.id+'">Recusar</button>':'')+
  (profile.role==='coordenacao_geral'&&g.status==='autorizada'?'<button class="btn secondary" data-es-decide="revogada" data-es-id="'+g.id+'">Revogar</button>':'')+
- (profile.role==='educador'&&approved?'<button class="btn '+(active?.id===g.id?'secondary':'primary')+'" data-es-enter="'+g.id+'">'+(active?.id===g.id?'Sair da substituição':'Assumir temporariamente')+'</button>':'')+
+ (g.substitute_id===profile.id&&approved?'<button class="btn '+(active?.id===g.id?'secondary':'primary')+'" data-es-enter="'+g.id+'">'+(active?.id===g.id?'Sair da substituição':(g.ends_at==='infinity'?'Abrir registros':'Assumir temporariamente'))+'</button>':'')+
  '</div></div>';
 }
 function renderPanel(){
@@ -161,16 +177,17 @@ async function refresh(){
   const me=await c.from('profiles').select('id,display_name,role,active').eq('id',user.id).single();
   if(me.error)throw me.error;
   profile=me.data;
-  if(!profile.active||!['educador','coordenacao_geral'].includes(profile.role)){panel.remove();panel=null;return}
+  if(!profile.active){panel.remove();panel=null;return}
   const [members,requests]=await Promise.all([
    c.from('profiles').select('id,display_name,role,active').eq('role','educador').eq('active',true),
-   c.from('educator_substitutions').select('*').order('created_at',{ascending:false}).limit(100)
+   c.from('educator_substitutions').select('*').order('ends_at',{ascending:false}).order('created_at',{ascending:false}).limit(100)
   ]);
   if(members.error)throw members.error;if(requests.error)throw requests.error;
   team=members.data||[];grants=requests.data||[];
   const id=sessionStorage.getItem(KEY);
   active=grants.find(g=>g.id===id&&g.substitute_id===profile.id&&valid(g))||null;
   if(!active)sessionStorage.removeItem(KEY);
+  if(!active&&!['educador','coordenacao_geral'].includes(profile.role)){panel.remove();panel=null;return}
   data=null;
   if(active)await loadWork();
   renderPanel();
