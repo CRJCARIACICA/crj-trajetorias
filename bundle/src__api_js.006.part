@@ -37,6 +37,25 @@ export async function addWorkshopAttendanceParticipant({session_id,workshop_id,y
   if(error)throw error;return data;
 }
 
+export async function markWorkshopAttendanceQuick(sessionId, youthIds){
+  if(mode==='mock'){
+    const st=mock(),session=(st.sessions||[]).find(item=>item.id===sessionId);
+    if(!session)throw new Error('Aula não encontrada');
+    const selected=[...new Set(youthIds)];
+    if(!selected.length)throw new Error('Selecione ao menos um jovem inscrito');
+    if(selected.some(id=>!(st.enrollments||[]).some(e=>e.youth_id===id&&e.workshop_id===session.workshop_id&&e.status==='ativo')))throw new Error('Há jovens sem inscrição ativa nesta oficina. Atualize a lista.');
+    st.attendance||=[];let marked=0;
+    for(const youthId of selected){
+      const existing=st.attendance.find(a=>a.session_id===sessionId&&a.youth_id===youthId);
+      if(existing){if(!existing.present){existing.present=true;marked++}}
+      else{st.attendance.push({id:uid('pre'),session_id:sessionId,workshop_id:session.workshop_id,youth_id:youthId,date:session.session_date,attendance_date:session.session_date,present:true,created_by:st.currentUser.id});marked++}
+    }
+    save(st);return marked;
+  }
+  const {data,error}=await supabase.rpc('mark_workshop_attendance_quick',{p_session_id:sessionId,p_youth_ids:youthIds});
+  if(error)throw error;return data;
+}
+
 export async function generateWorkshopAttendanceSubmission(sessionId){
   if(mode==='mock')throw new Error('Geração automática da lista requer banco conectado.');
   const {data:s,error:se}=await supabase.from('workshop_sessions').select('*').eq('id',sessionId).single();if(se)throw se;
